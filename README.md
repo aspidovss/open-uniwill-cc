@@ -1,6 +1,26 @@
-# open-uniwill-cc
+<p align="center">
+  <img src="uwccd/web/icon.svg" width="112" height="112" alt="open-uniwill-cc">
+</p>
 
-**English** · [Русский](README.ru.md)
+<h1 align="center">open-uniwill-cc</h1>
+
+<p align="center"><b>Open Control Center for Uniwill-based laptops — modes, fans, power, lighting, liquid cooling. No tracking.</b></p>
+
+<p align="center"><b>English</b> · <a href="README.ru.md">Русский</a> · <a href="docs/STRUCTURE.md">Project structure</a></p>
+
+<p align="center">
+  <a href="https://github.com/aspidovss/open-uniwill-cc/releases/latest"><img src="https://img.shields.io/badge/Download-latest%20release-e8613c?logo=github&logoColor=white" alt="Download"></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/aspidovss/open-uniwill-cc/releases/latest"><img src="https://img.shields.io/github/v/release/aspidovss/open-uniwill-cc?label=release&color=2ea44f" alt="release"></a>
+  <a href="https://github.com/aspidovss/open-uniwill-cc/releases"><img src="https://img.shields.io/github/downloads/aspidovss/open-uniwill-cc/total?label=downloads&color=2ea44f" alt="downloads"></a>
+  <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078d4" alt="Windows 10 | 11">
+  <img src="https://img.shields.io/badge/Linux-DKMS-f0b400?logo=linux&logoColor=white" alt="Linux">
+  <img src="https://img.shields.io/badge/Python-3.9+-3776ab?logo=python&logoColor=white" alt="Python 3.9+">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-4c1" alt="license MIT"></a>
+  <img src="https://img.shields.io/badge/telemetry-none-4c1" alt="telemetry none">
+</p>
 
 An open replacement for the **Uniwill "Control Center"** (5.52.x) of Uniwill-based gaming laptops, for
 **Linux** and **Windows**: performance modes, fan curves, CPU/GPU power limits, RGB keyboard, battery care,
@@ -19,6 +39,8 @@ hardware switches — plus Bluetooth control of the **XMG Oasis** liquid cooler 
   <img src="docs/screenshots/modes.png" width="49%" alt="Modes and power limits">
   <img src="docs/screenshots/fans.png" width="49%" alt="Fan curves">
   <img src="docs/screenshots/liquid.png" width="49%" alt="Liquid cooler">
+  <img src="docs/screenshots/light.png" width="49%" alt="Keyboard lighting">
+  <img src="docs/screenshots/battery.png" width="49%" alt="Battery care">
   <img src="docs/screenshots/info-windows.png" width="49%" alt="System information on Windows">
 </p>
 
@@ -156,6 +178,8 @@ uwccctl restart                  restart the service (administrator / root)
   See [SECURITY.md](SECURITY.md).
 
 ## Troubleshooting, building, debugging
+
+[docs/STRUCTURE.md](docs/STRUCTURE.md) — how the project is organised: service, clients, every module.
 
 [docs/BUILD.md](docs/BUILD.md) — building the Linux and Windows packages, running without hardware (`--mock`),
 debug logging, where the logs are, what to attach to a bug report.

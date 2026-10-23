@@ -1,6 +1,26 @@
-# open-uniwill-cc
+<p align="center">
+  <img src="uwccd/web/icon.svg" width="112" height="112" alt="open-uniwill-cc">
+</p>
 
-[English](README.md) · **Русский**
+<h1 align="center">open-uniwill-cc</h1>
+
+<p align="center"><b>Открытый Control Center для ноутбуков на Uniwill — режимы, вентиляторы, мощность, подсветка, СЖО. Без слежки.</b></p>
+
+<p align="center"><a href="README.md">English</a> · <b>Русский</b> · <a href="docs/STRUCTURE.ru.md">Структура проекта</a></p>
+
+<p align="center">
+  <a href="https://github.com/aspidovss/open-uniwill-cc/releases/latest"><img src="https://img.shields.io/badge/%D0%A1%D0%BA%D0%B0%D1%87%D0%B0%D1%82%D1%8C-%D0%BF%D0%BE%D1%81%D0%BB%D0%B5%D0%B4%D0%BD%D0%B8%D0%B9%20%D1%80%D0%B5%D0%BB%D0%B8%D0%B7-e8613c?logo=github&logoColor=white" alt="Скачать"></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/aspidovss/open-uniwill-cc/releases/latest"><img src="https://img.shields.io/github/v/release/aspidovss/open-uniwill-cc?label=release&color=2ea44f" alt="release"></a>
+  <a href="https://github.com/aspidovss/open-uniwill-cc/releases"><img src="https://img.shields.io/github/downloads/aspidovss/open-uniwill-cc/total?label=downloads&color=2ea44f" alt="downloads"></a>
+  <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078d4" alt="Windows 10 | 11">
+  <img src="https://img.shields.io/badge/Linux-DKMS-f0b400?logo=linux&logoColor=white" alt="Linux">
+  <img src="https://img.shields.io/badge/Python-3.9+-3776ab?logo=python&logoColor=white" alt="Python 3.9+">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-4c1" alt="license MIT"></a>
+  <img src="https://img.shields.io/badge/telemetry-none-4c1" alt="telemetry none">
+</p>
 
 Открытая замена **Uniwill «Control Center»** (5.52.x) для игровых ноутбуков на платформах Uniwill —
 под **Linux** и **Windows**: режимы производительности, кривые вентиляторов, лимиты мощности CPU/GPU,
@@ -17,9 +37,11 @@ RGB-подсветка клавиатуры, защита батареи, апп
 > (см. «Проверено на»). Прежде чем полагаться на неё, просмотрите код.
 
 <p align="center">
-  <img src="docs/screenshots/modes.png" width="49%" alt="Режимы и лимиты мощности">
-  <img src="docs/screenshots/fans.png" width="49%" alt="Кривые вентиляторов">
-  <img src="docs/screenshots/liquid.png" width="49%" alt="Жидкостное охлаждение">
+  <img src="docs/screenshots/ru/modes.png" width="49%" alt="Режимы и лимиты мощности">
+  <img src="docs/screenshots/ru/fans.png" width="49%" alt="Кривые вентиляторов">
+  <img src="docs/screenshots/ru/liquid.png" width="49%" alt="Жидкостное охлаждение">
+  <img src="docs/screenshots/ru/light.png" width="49%" alt="Подсветка клавиатуры">
+  <img src="docs/screenshots/ru/battery.png" width="49%" alt="Защита аккумулятора">
   <img src="docs/screenshots/info-windows.png" width="49%" alt="Информация о системе в Windows">
 </p>
 
@@ -158,6 +180,8 @@ uwccctl restart                  перезапустить службу (адм
   См. [SECURITY.md](SECURITY.md).
 
 ## Диагностика, сборка, отладка
+
+[docs/STRUCTURE.ru.md](docs/STRUCTURE.ru.md) — как устроен проект: служба, клиенты, назначение каждого модуля.
 
 [docs/BUILD.md](docs/BUILD.md) — сборка пакетов для Linux и Windows, запуск без железа (`--mock`), отладочный журнал,
 где лежат логи, что приложить к отчёту об ошибке.

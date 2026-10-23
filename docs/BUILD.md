@@ -4,6 +4,8 @@
 
 ## Repository layout
 
+In detail, module by module: [STRUCTURE.md](STRUCTURE.md).
+
 | Path | What |
 |---|---|
 | `uwccd/` | the service (Python, shared by Linux and Windows) and the web UI (`uwccd/web`) |
@@ -127,6 +129,8 @@ sudo uwccctl ec-direct dump 0x700     256 EC bytes without the service (Linux: r
 [English](#building-and-debugging) · **Русский**
 
 ## Структура репозитория
+
+Подробно, по модулям: [STRUCTURE.ru.md](STRUCTURE.ru.md).
 
 | Путь | Что |
 |---|---|
