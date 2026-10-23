@@ -1,0 +1,6 @@
+#!/bin/sh
+# pre: put the Bluetooth liquid cooler to sleep; post: re-apply EC settings (GCUService.Resume)
+case "$1" in
+  pre)  /usr/local/bin/uwccctl lc suspend >/dev/null 2>&1 || true ;;
+  post) /usr/local/bin/uwccctl resume >/dev/null 2>&1 || true ;;
+esac

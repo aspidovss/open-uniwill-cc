@@ -1,0 +1,256 @@
+#!/usr/bin/env python3
+"""Command line control for the Control Center service.
+
+  uwccctl status                 current mode, fans, settings, liquid cooler
+  uwccctl mode office|gaming|turbo|custom
+  uwccctl profile <N>            profile of the current mode (0..2; RamFan1p5 platforms: 0..1, custom slots 0..4)
+  uwccctl boost on|off           FanBoost
+  uwccctl kb off|on|effect N     keyboard backlight
+  uwccctl debug on|off           verbose service log (for bug reports)
+  uwccctl lang en|ru             interface language (UI, notifications, this tool)
+  uwccctl lc status              liquid cooler (Bluetooth)
+  uwccctl lc scan                find coolers nearby
+  uwccctl lc connect ADDR        connect and remember (reconnects automatically)
+  uwccctl lc disconnect [--forget]
+  uwccctl lc mode auto|ec|low|medium|high|off
+  uwccctl lc manual FAN% PUMP_V  e.g. uwccctl lc manual 60 8   (pump 7/8/11/12 V, 0 = off)
+  uwccctl lc rgb RRGGBB [static|breathe|rainbow|breathe_rainbow|spiral|rotating_rainbow|color_wave]
+  uwccctl lc rgb off
+  uwccctl lc prime [stop]        coolant filling cycle (~68 s)
+  uwccctl lc suspend             put the cooler to sleep (used by the system-sleep hook)
+  uwccctl ec read ADDR           read an EC register through the service (hex address)
+  uwccctl nvram                  dump UniWillVariable fields
+  uwccctl resume                 re-apply settings (used by the system-sleep hook)
+  uwccctl ec-direct read ADDR    read EC without the service (root, for debugging)
+  uwccctl release                give fan control back to the EC, clear AP flags (root, used by uninstall)
+"""
+import json
+import locale
+import os
+import sys
+import urllib.error
+import urllib.request
+
+PORT = int(os.environ.get("UWCC_PORT", "47321"))
+IS_WIN = sys.platform == "win32"
+TOKEN_FILE = (os.path.join(os.environ.get("ProgramData", r"C:\ProgramData"), "UWCC", "run", "token") if IS_WIN
+              else "/run/uwcc/token")
+MODES = {"office": 0, "gaming": 1, "turbo": 2, "custom": 3}
+
+TEXT = {
+    "en": {
+        "no_access": "No access to the service: log out and in again after installation (group uwcc) or run: sudo uwccctl ...",
+        "not_running": "The service is not running: sudo systemctl start uwccd  (log: journalctl -u uwccd -b)",
+        "no_access_win": "No access to the service token (C:\\ProgramData\\UWCC\\run\\token). Reinstall Control Center.",
+        "not_running_win": "The service is not running: sc start uwccd  (log: C:\\ProgramData\\UWCC\\log\\uwccd.log)",
+        "error": "error",
+        "project": "Project:", "mode": "Mode:", "table": "table", "fans": "Fans:", "cpu": "CPU", "gpu": "GPU",
+        "temp": "Temperature:", "battery": "Battery:", "bat_line": "protection mode {}, limit {}–{}%, {} cycles",
+        "settings": "Settings:", "modes": {0: "Office", 1: "Gaming", 2: "Turbo", 3: "Custom"}, "rpm": "rpm",
+        "lc": "Liquid cooler:", "lc_na": "unavailable (install python3-bleak)", "lc_none": "not connected",
+        "lc_off": "disconnected", "lc_saved": "remembered: {}", "lc_fan": "fan", "lc_pump": "pump",
+        "lc_pump_off": "pump off", "lc_flow": "flow", "lc_mode": "mode", "lc_found": "Found:", "lc_nothing":
+        "No cooler found. Is it powered on and is Bluetooth enabled?",
+        "flow": {"ok": "OK", "fault": "NO FLOW", "starting": "starting", "unknown": "unknown", "idle": "—", "priming": "filling"},
+        "lang_set": "Language: English",
+    },
+    "ru": {
+        "no_access": "Нет доступа к службе: войдите в сеанс заново после установки (группа uwcc) или выполните: sudo uwccctl ...",
+        "not_running": "Служба не запущена: sudo systemctl start uwccd  (журнал: journalctl -u uwccd -b)",
+        "no_access_win": "Нет доступа к ключу службы (C:\\ProgramData\\UWCC\\run\\token). Переустановите Control Center.",
+        "not_running_win": "Служба не запущена: sc start uwccd  (журнал: C:\\ProgramData\\UWCC\\log\\uwccd.log)",
+        "error": "ошибка",
+        "project": "Проект:", "mode": "Режим:", "table": "таблица", "fans": "Вентиляторы:", "cpu": "ЦП", "gpu": "ГП",
+        "temp": "Температура:", "battery": "Батарея:", "bat_line": "режим защиты {}, предел {}–{}%, циклов {}",
+        "settings": "Настройки:", "modes": {0: "Офисный", 1: "Игровой", 2: "Турбо", 3: "Пользовательский"}, "rpm": "об/мин",
+        "lc": "Водяное охлаждение:", "lc_na": "недоступно (установите python3-bleak)", "lc_none": "не подключено",
+        "lc_off": "отключено", "lc_saved": "запомнено: {}", "lc_fan": "вентилятор", "lc_pump": "помпа",
+        "lc_pump_off": "помпа выкл", "lc_flow": "поток", "lc_mode": "режим", "lc_found": "Найдено:", "lc_nothing":
+        "Система охлаждения не найдена. Она включена и Bluetooth активен?",
+        "flow": {"ok": "норма", "fault": "НЕТ ПОТОКА", "starting": "запуск", "unknown": "неизвестно", "idle": "—", "priming": "заполнение"},
+        "lang_set": "Язык: русский",
+    },
+}
+LANG = "en"
+
+
+def T(k):
+    return TEXT[LANG].get(k, TEXT["en"].get(k, k))
+
+
+def guess_lang():
+    loc = os.environ.get("LC_ALL") or os.environ.get("LC_MESSAGES") or os.environ.get("LANG") or (locale.getlocale()[0] or "")
+    return "ru" if loc.lower().startswith("ru") else "en"
+
+
+def tok():
+    global LANG
+    try:
+        with open(TOKEN_FILE) as f:
+            return f.read().strip()
+    except PermissionError:
+        LANG = guess_lang()
+        sys.exit(T("no_access_win" if IS_WIN else "no_access"))
+    except FileNotFoundError:
+        LANG = guess_lang()
+        sys.exit(T("not_running_win" if IS_WIN else "not_running"))
+
+
+def call(path, body=None, method=None, timeout=30):
+    req = urllib.request.Request(f"http://127.0.0.1:{PORT}/api/{path}", method=method or ("POST" if body is not None else "GET"),
+                                 data=json.dumps(body).encode() if body is not None else None,
+                                 headers={"X-UWCC-Token": tok(), "Content-Type": "application/json"})
+    try:
+        return json.load(urllib.request.urlopen(req, timeout=timeout))
+    except urllib.error.HTTPError as e:
+        sys.exit(f"{T('error')}: {json.load(e).get('error', e)}")
+    except urllib.error.URLError:
+        sys.exit(T("not_running_win" if IS_WIN else "not_running"))
+
+
+def _pkg():
+    try:
+        import uwccd  # noqa: F401  # pyflakes: ignore  (bundled in the Windows build)
+    except ImportError:
+        sys.path.insert(0, "/opt/uwcc")
+
+
+def direct_ec():
+    _pkg()
+    from uwccd.ec import open_ec
+    return open_ec()
+
+
+def lc_line(lc):
+    if not lc["available"]:
+        return T("lc_na")
+    if not lc["connected"]:
+        saved = lc["config"].get("name") or lc["config"].get("address")
+        return T("lc_none") + (", " + T("lc_saved").format(saved) if saved else "") + \
+            (f" ({lc['error']})" if lc.get("error") else "")
+    pump = f"{T('lc_pump')} {lc['pump']} V" if lc["pump"] else T("lc_pump_off")
+    return (f"{lc['name']} fw {lc['fw'] or '?'} · {T('lc_mode')} {lc['config']['mode']} · "
+            f"{T('lc_fan')} {lc['fan']}% · {pump} · {T('lc_flow')}: {T('flow').get(lc['flow'], lc['flow'])}")
+
+
+def cmd_lc(a):
+    op = a[0] if a else "status"
+    if op == "status":
+        print(T("lc"), lc_line(call("state")["liquid"]))
+    elif op == "scan":
+        devs = call("lc/scan", {}, timeout=40)["devices"]
+        if not devs:
+            print(T("lc_nothing"))
+        for d in devs:
+            print(f"  {d['address']}  {d['name']}  RSSI {d['rssi']}")
+    elif op == "connect":
+        call("lc/connect", {"address": a[1]}, timeout=70)
+        print(T("lc"), lc_line(call("state")["liquid"]))
+    elif op == "disconnect":
+        call("lc/disconnect", {"forget": "--forget" in a})
+    elif op == "mode":
+        call("lc/config", {"mode": a[1]})
+    elif op == "manual":
+        call("lc/config", {"mode": "manual", "fan": int(a[1]), "pump": int(a[2])})
+    elif op == "rgb":
+        if a[1] == "off":
+            call("lc/config", {"rgb": {"on": False}})
+        else:
+            h = a[1].lstrip("#")
+            rgb = {"on": True, "color": [int(h[i:i + 2], 16) for i in (0, 2, 4)]}
+            if len(a) > 2:
+                rgb["mode"] = a[2].replace("-", "_")
+            call("lc/config", {"rgb": rgb})
+    elif op == "prime":
+        call("lc/prime", {"stop": len(a) > 1 and a[1] == "stop"})
+    elif op == "suspend":
+        call("lc/suspend", {})
+    else:
+        sys.exit(__doc__)
+
+
+def main(a):
+    global LANG
+    if not a or a[0] in ("-h", "--help", "help"):
+        print(__doc__)
+        return
+    cmd = a[0]
+    if cmd not in ("ec-direct", "release"):
+        LANG = call("state")["settings"].get("lang", "en") if cmd in ("status", "lc", "lang") else LANG
+    if cmd == "status":
+        s = call("state")
+        m = call("monitor")
+        p = s["power"]
+        print(f"{T('project'):15} {s['platform']['project_name']}  (EC: {s['platform']['ec_backend']})")
+        prof = s["profiles"].get(p.get("current_profile") or "", {})
+        slot = f" «{prof.get('CustomizeName')}»" if p["mode"] == 3 else ""
+        print(f"{T('mode'):15} {T('modes').get(p['mode'])}{slot}  {T('table')} {p['current_table']}  "
+              f"FanBoost={'on' if p['fan_boost'] else 'off'}  [{p.get('manager', 'cml')}]")
+        if p.get("manager") == "std" and prof:
+            c = prof["CPU"]
+            print(f"{'':15} PL1/PL2/PL4 {c['PL1']}/{c['PL2']}/{c['PL4']} W" +
+                  (f", TCC −{c['TccOffset']} °C" if c.get("TccOffsetSwitch") else ""))
+        print(f"{T('fans'):15} {T('cpu')} {m['fans']['cpu_duty']}% {m['fans']['cpu_rpm']} {T('rpm')}" +
+              (f", {T('gpu')} {m['fans']['gpu_duty']}% {m['fans']['gpu_rpm']} {T('rpm')}" if 'gpu_duty' in m['fans'] else ""))
+        print(f"{T('temp'):15} {T('cpu')} {m['cpu']['temp'] if m['cpu']['temp'] is not None else '—'}°C" + (f", {T('gpu')} {m['gpu']['temp']}°C" if m.get('gpu') else ""))
+        b = s["battery"]
+        print(f"{T('battery'):15} " + T("bat_line").format(b['health_mode'], b['limit_down'], b['limit_up'], b['cycle_count']))
+        print(f"{T('lc'):15} {lc_line(s['liquid'])}")
+        print(f"{T('settings'):15} " + ", ".join(f"{k}={v}" for k, v in s["settings"].items()))
+    elif cmd == "lang":
+        if a[1:] and a[1] in ("en", "ru"):
+            call("setting", {"key": "lang", "value": a[1]})
+            LANG = a[1]
+        print(T("lang_set"))
+    elif cmd == "debug":
+        if a[1:] and a[1] in ("on", "off"):
+            call("setting", {"key": "debug", "value": a[1] == "on"})
+        print("debug logging:", "on" if call("state")["settings"].get("debug") else "off")
+    elif cmd == "lc":
+        cmd_lc(a[1:])
+    elif cmd == "mode":
+        call("mode", {"mode": MODES[a[1]]})
+    elif cmd == "profile":
+        mode = call("state")["power"]["mode"]
+        call("profile", {"mode": mode, "index": int(a[1])})
+    elif cmd == "boost":
+        call("fanboost", {"on": a[1] == "on"})
+    elif cmd == "kb":
+        if a[1] in ("on", "off"):
+            call("keyboard/power", {"on": a[1] == "on"})
+        elif a[1] == "effect":
+            call("keyboard/effect", {"effect": int(a[2])})
+    elif cmd == "ec" and a[1] == "read":
+        r = call(f"ec/{int(a[2], 16):x}")
+        print(f"0x{r['addr']:04X} = 0x{r['value']:02X} ({r['value']})")
+    elif cmd == "nvram":
+        print(json.dumps(call("nvram"), indent=1))
+    elif cmd == "resume":
+        call("resume", {})
+    elif cmd == "ec-direct":
+        ec = direct_ec()
+        if a[1] == "read":
+            addr = int(a[2], 16)
+            n = int(a[3]) if len(a) > 3 else 1
+            for i in range(n):
+                print(f"0x{addr + i:04X} = 0x{ec.read(addr + i):02X}")
+        elif a[1] == "dump":
+            base = int(a[2], 16)
+            for row in range(0, 256, 16):
+                print(f"{base + row:04X}: " + " ".join(f"{ec.read(base + row + i):02X}" for i in range(16)))
+    elif cmd == "release":
+        _pkg()
+        from uwccd.nvram import Nvram
+        ec = direct_ec()
+        ec.set_bit(0x7C6, 2, False)   # RAM fan table off
+        ec.set_bit(0x741, 0, False)   # AP not present
+        nv = Nvram()
+        nv.verify(ec.read(0x740))
+        nv.set("ApExistFlag", 0)
+        print("fan control returned to the EC")
+    else:
+        sys.exit(__doc__)
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

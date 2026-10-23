@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Control Center agent
+Comment=On-screen notifications and touchpad switching for Control Center
+Exec=uwcc-agent
+Icon=uwcc
+Terminal=false
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
+X-GNOME-Autostart-Delay=3

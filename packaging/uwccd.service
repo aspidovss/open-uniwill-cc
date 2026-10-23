@@ -1,0 +1,25 @@
+[Unit]
+Description=Control Center service (Uniwill/Tongfang EC: modes, fans, lighting, liquid cooler)
+After=systemd-modules-load.service bluetooth.target
+Wants=systemd-modules-load.service bluetooth.target
+
+[Service]
+Type=simple
+ExecStartPre=-/sbin/modprobe uwcc
+ExecStart=/usr/bin/python3 -m uwccd
+Environment=PYTHONPATH=/opt/uwcc PYTHONDONTWRITEBYTECODE=1
+WorkingDirectory=/opt/uwcc
+Restart=on-failure
+RestartSec=3
+RuntimeDirectory=uwcc
+RuntimeDirectoryMode=0750
+StateDirectory=uwcc
+# hardening (needs raw EC/HID/efivars access, so no ProtectKernel*)
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=full
+ReadWritePaths=-/var/lib/uwcc
+
+[Install]
+WantedBy=multi-user.target

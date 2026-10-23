@@ -1,0 +1,26 @@
+PROPRIETARY - ALL RIGHTS RESERVED
+=================================
+
+The files in this folder are NOT part of open-uniwill-cc and are NOT licensed
+under the MIT license of this repository.
+
+  driver/UWACPIDriver.inf, UWACPIDriver.sys, uwacpidriver.cat
+      ACPI driver for the Uniwill INOU0000 device, taken unmodified from the
+      OEM "Control Center 5.52.49.6" package (ZipFiles/UWACPIDriver.zip).
+
+  UserFanTables/<Project>/M*T*.json
+      Factory fan tables, taken unmodified from the same package.
+
+Copyright (c) Uniwill Technology Inc. and/or the respective laptop
+manufacturer (OEM). All rights reserved by their respective owners.
+
+These files are included unmodified and solely to make open-uniwill-cc
+interoperable with the laptops they were made for (owners of these laptops
+received them with the original Control Center). The authors of
+open-uniwill-cc claim no rights to them and grant no license for them.
+They are provided "as is", without warranty of any kind.
+
+Rights holders: if you want these files removed, please open an issue at
+https://github.com/aspidovss/open-uniwill-cc/issues - they will be removed
+promptly. open-uniwill-cc works without them: the driver is installed by the
+original Control Center, and fan tables are read from the embedded controller.

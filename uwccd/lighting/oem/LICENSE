@@ -1,0 +1,25 @@
+PROPRIETARY - ALL RIGHTS RESERVED
+=================================
+
+wkdcolor.py and apfx.py in this folder are NOT licensed under the MIT license
+of open-uniwill-cc.
+
+They were generated automatically (tools/re/pyport.py, tools/re/apport.py)
+from the logic of GCUService.exe of the OEM "Control Center 5.52.49.6"
+(LightingModel.WKDColor - LED colour correction per LED vendor;
+LM_ITE_RGB.AP_Effect_Task / MyRgbKeyboard.AlphabetEffect - frames of the
+software keyboard effects Neon, Stack, Impact, Alphabet), so that the
+keyboard shows exactly the same colours and frames as with the original
+software.
+
+Copyright (c) Uniwill Technology Inc. and/or the respective laptop
+manufacturer (OEM). All rights reserved by their respective owners.
+
+Included solely for interoperability with the laptops this software supports.
+The authors of open-uniwill-cc claim no rights to the logic of these files and
+grant no license for it. Provided "as is", without warranty of any kind.
+
+Rights holders: to request removal, open an issue at
+https://github.com/aspidovss/open-uniwill-cc/issues. Without this folder the
+hardware keyboard effects keep working; LED colour correction and the four
+software effects are disabled.

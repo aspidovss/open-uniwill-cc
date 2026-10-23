@@ -1,0 +1,39 @@
+name: Bug report / Ошибка
+description: Something does not work / Что-то не работает
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please turn on debug logging first (`uwccctl debug on`), reproduce the problem and attach the log.
+        See [docs/BUILD.md](https://github.com/aspidovss/open-uniwill-cc/blob/main/docs/BUILD.md#debugging).
+        Сначала включите отладочный журнал (`uwccctl debug on`), повторите проблему и приложите журнал.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, what you expected / Что произошло и что ожидалось
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: Laptop model, BIOS / EC / Модель, BIOS / EC
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: OS and version / ОС и версия (Linux — `uname -r`)
+    validations:
+      required: true
+  - type: textarea
+    id: status
+    attributes:
+      label: "`uwccctl status`"
+      render: text
+  - type: textarea
+    id: log
+    attributes:
+      label: Service log / Журнал службы
+      description: "Linux: journalctl -u uwccd -b · Windows: %ProgramData%\\UWCC\\log\\uwccd.log"
+      render: text

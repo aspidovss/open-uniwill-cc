@@ -1,0 +1,194 @@
+#!/usr/bin/env python3
+"""User-session agent: OSD notifications, touchpad on/off, Fn launch key.
+
+Runs from ~/.config/autostart. Listens to the service event stream (SSE).
+"""
+import json
+import os
+import shutil
+import subprocess
+import sys
+import time
+import urllib.request
+
+PORT = int(os.environ.get("UWCC_PORT", "47321"))
+TOKEN_FILE = "/run/uwcc/token"
+TEXT = {
+    "en": {"mode0": "Office mode", "mode1": "Gaming mode", "mode2": "Turbo mode", "mode3": "Custom mode · {}",
+           "hot_cpu": "CPU at {} °C", "hot_gpu": "GPU at {} °C",
+           "hot_body": "It has stayed at or above {} °C for 30 seconds.",
+           "hot_body_boost": "It has stayed at or above {} °C for 30 seconds. If it does not cool down within 30 seconds, Fan Boost turns on.",
+           "hot_boost": "Fan Boost turned on because of overheating", "hot_boost_body": "Turn it off in Control Center when the load is over.",
+           "lc_again": "Liquid cooler connected again",
+           "lc_guard": "The pump was raised to 11 V and the fan to at least 60 % until the laptop mode changes or you pick a setting.",
+           "boost_on": "Fan Boost on", "boost_off": "Fan Boost off",
+           "win_locked": "Windows key locked", "win_unlocked": "Windows key unlocked",
+           "kb_level": "Keyboard backlight: {}", "touch_on": "Touchpad on", "touch_off": "Touchpad off",
+           "reboot": "Restart required", "reboot_body": "The graphics mode change takes effect after a restart",
+           "lc_conn": "Liquid cooler connected", "lc_lost": "Liquid cooler disconnected",
+           "lc_lost_body": "Bluetooth link lost — reconnecting automatically",
+           "lc_flow": "Liquid cooler: no coolant flow!",
+           "lc_flow_body": "The pump is running but the flow sensor reports no circulation. "
+                           "Check the tubes and the coolant level, or run the filling cycle.",
+           "lc_fan_boost": "Cooler fan boost {}", "lc_pump_boost": "Cooler pump boost {}", "on": "on", "off": "off",
+           "lc_primed": "Liquid cooler: filling cycle finished"},
+    "ru": {"mode0": "Офисный режим", "mode1": "Игровой режим", "mode2": "Турборежим", "mode3": "Пользовательский режим · {}",
+           "hot_cpu": "ЦП нагрелся до {} °C", "hot_gpu": "ГП нагрелся до {} °C",
+           "hot_body": "Температура держится на уровне {} °C и выше уже 30 секунд.",
+           "hot_body_boost": "Температура держится на уровне {} °C и выше уже 30 секунд. Если за 30 секунд не остынет, включится турбовентиляция.",
+           "hot_boost": "Турбовентиляция включена из-за перегрева", "hot_boost_body": "Выключите её в Control Center, когда нагрузка закончится.",
+           "lc_again": "Система охлаждения снова подключена",
+           "lc_guard": "Напряжение помпы поднято до 11 В, вентилятор — не меньше 60 %, пока не сменится режим ноутбука или вы не выберете настройку вручную.",
+           "boost_on": "Турбовентиляция включена", "boost_off": "Турбовентиляция выключена",
+           "win_locked": "Клавиша Windows заблокирована", "win_unlocked": "Клавиша Windows разблокирована",
+           "kb_level": "Подсветка клавиатуры: {}", "touch_on": "Сенсорная панель включена",
+           "touch_off": "Сенсорная панель выключена",
+           "reboot": "Требуется перезагрузка", "reboot_body": "Изменение режима видеокарты вступит в силу после перезагрузки",
+           "lc_conn": "Система охлаждения подключена", "lc_lost": "Система охлаждения отключилась",
+           "lc_lost_body": "Связь Bluetooth потеряна — переподключение выполняется автоматически",
+           "lc_flow": "Система охлаждения: нет циркуляции!",
+           "lc_flow_body": "Помпа работает, но датчик потока не видит циркуляции. "
+                           "Проверьте трубки и уровень жидкости или запустите цикл заполнения.",
+           "lc_fan_boost": "Усиление вентилятора СО: {}", "lc_pump_boost": "Усиление помпы СО: {}",
+           "on": "вкл", "off": "выкл", "lc_primed": "Система охлаждения: цикл заполнения завершён"},
+}
+LANG = {"v": "en"}
+
+
+def T(key, *a):
+    s = TEXT.get(LANG["v"], TEXT["en"]).get(key) or TEXT["en"][key]
+    return s.format(*a) if a else s
+
+
+ICONS = {0: "power-profile-power-saver-symbolic", 1: "power-profile-balanced-symbolic", 2: "power-profile-performance-symbolic"}
+_last_id = {"id": None}
+
+
+def notify(title, body="", icon="preferences-system-symbolic", critical=False):
+    if not shutil.which("notify-send"):
+        return
+    if critical:      # stays on screen, does not replace the OSD bubble
+        cmd = ["notify-send", "-a", "Control Center", "-i", icon, "-u", "critical", title]
+        if body:
+            cmd.append(body)
+        subprocess.run(cmd, check=False, timeout=3, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return
+    cmd = ["notify-send", "-a", "Control Center", "-i", icon, "-t", "1500", "-h", "string:x-canonical-private-synchronous:uwcc",
+           "-p", title]
+    if body:
+        cmd.append(body)
+    if _last_id["id"]:
+        cmd[1:1] = ["-r", _last_id["id"]]
+    try:
+        out = subprocess.run(cmd, capture_output=True, text=True, timeout=3).stdout.strip()
+        if out.isdigit():
+            _last_id["id"] = out
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
+def set_touchpad(on):
+    if shutil.which("gsettings"):
+        subprocess.run(["gsettings", "set", "org.gnome.desktop.peripherals.touchpad", "send-events",
+                        "enabled" if on else "disabled"], check=False)
+    if os.environ.get("XDG_SESSION_TYPE") == "x11" and shutil.which("xinput"):
+        out = subprocess.run(["xinput", "list", "--name-only"], capture_output=True, text=True).stdout
+        for name in out.splitlines():
+            if "touchpad" in name.lower():
+                subprocess.run(["xinput", "enable" if on else "disable", name], check=False)
+
+
+def token():
+    with open(TOKEN_FILE) as f:
+        return f.read().strip()
+
+
+def handle(ev, osd_enabled):
+    t, d = ev.get("type"), ev.get("data") or {}
+    if t == "touchpad":
+        set_touchpad(d.get("enabled", True))
+        if osd_enabled:
+            notify(T("touch_on") if d.get("enabled") else T("touch_off"), icon="input-touchpad-symbolic")
+    elif t == "lc":
+        e = d.get("event")
+        if e == "flow_fault":                      # always shown, independent of the OSD switch
+            notify(T("lc_flow"), T("lc_flow_body") + "\n" + T("lc_guard"), icon="dialog-warning", critical=True)
+        elif e == "disconnected" and d.get("unexpected"):
+            notify(T("lc_lost"), T("lc_lost_body"), icon="bluetooth-disconnected-symbolic")
+        elif not osd_enabled:
+            pass
+        elif e == "connected":
+            notify(T("lc_again") if d.get("again") else T("lc_conn"), d.get("name", ""), icon="bluetooth-active-symbolic")
+        elif e == "boost":
+            notify(T("lc_fan_boost" if d.get("which") == "fan" else "lc_pump_boost", T("on" if d.get("on") else "off")),
+                   icon="weather-windy-symbolic")
+        elif e == "prime_done":
+            notify(T("lc_primed"), icon="emblem-ok-symbolic")
+    elif t == "overheat":                          # always shown
+        notify(T("hot_" + d.get("sensor", "cpu"), d.get("temp")),
+               T("hot_body_boost" if d.get("boost") else "hot_body", d.get("limit")), icon="dialog-warning", critical=True)
+    elif t == "overheat_boost":
+        notify(T("hot_boost"), T("hot_boost_body"), icon="weather-windy-symbolic", critical=True)
+    elif not osd_enabled:
+        pass
+    elif t == "mode" and d.get("osd"):
+        m = d.get("mode")
+        title = T("mode3", (d.get("slot") or 0) + 1) if m == 3 else (T(f"mode{m}") if m in (0, 1, 2) else "")
+        notify(title, icon=ICONS.get(m, "preferences-system-symbolic"))
+    elif t == "fanboost" and d.get("osd"):
+        notify(T("boost_on" if d.get("on") else "boost_off"), icon="weather-windy-symbolic")
+    elif t == "setting" and d.get("osd"):
+        if "winkey_lock" in d:
+            notify(T("win_locked" if d["winkey_lock"] else "win_unlocked"), icon="input-keyboard-symbolic")
+        if "fn_lock" in d:
+            notify("Fn Lock" if d["fn_lock"] else "Fn UnLock", icon="input-keyboard-symbolic")
+    elif t == "kb_level" and d.get("osd"):
+        notify(T("kb_level", d.get("level", 0)), icon="keyboard-brightness-symbolic")
+    elif t == "reboot_required":
+        notify(T("reboot"), T("reboot_body"))
+    if t == "launch":
+        subprocess.Popen(["uwcc"])
+
+
+def main():
+    osd_enabled = True
+    last_state = 0
+    while True:
+        try:
+            tok = token()
+            if time.time() - last_state > 0:
+                req = urllib.request.Request(f"http://127.0.0.1:{PORT}/api/state", headers={"X-UWCC-Token": tok})
+                st = json.load(urllib.request.urlopen(req, timeout=10))
+                osd_enabled = st["settings"].get("osd", True)
+                LANG["v"] = st["settings"].get("lang", "en")
+                set_touchpad(st["settings"].get("touchpad_enabled", True))
+                last_state = time.time()
+            req = urllib.request.Request(f"http://127.0.0.1:{PORT}/api/events?token={tok}")
+            with urllib.request.urlopen(req, timeout=60) as r:
+                for raw in r:
+                    line = raw.decode(errors="ignore").strip()
+                    if not line.startswith("data:"):
+                        continue
+                    ev = json.loads(line[5:])
+                    if ev.get("type") == "monitor":
+                        continue
+                    if ev.get("type") == "status":
+                        try:
+                            req2 = urllib.request.Request(f"http://127.0.0.1:{PORT}/api/state", headers={"X-UWCC-Token": tok})
+                            st2 = json.load(urllib.request.urlopen(req2, timeout=10))["settings"]
+                            osd_enabled = st2.get("osd", True)
+                            LANG["v"] = st2.get("lang", "en")
+                        except Exception:  # noqa: BLE001
+                            pass
+                        continue
+                    handle(ev, osd_enabled)
+        except PermissionError:
+            print("uwcc-agent: no access to /run/uwcc/token (log in again after installation)", file=sys.stderr)
+            time.sleep(60)
+        except Exception as e:  # noqa: BLE001
+            print("uwcc-agent:", e, file=sys.stderr)
+            time.sleep(3)
+
+
+if __name__ == "__main__":
+    main()

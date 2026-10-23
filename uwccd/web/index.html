@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Control Center</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="app">
+  <aside class="nav">
+    <div class="brand">
+      <img src="icon.svg" alt="" width="28" height="28">
+      <div><b>Control Center</b><small id="brand-sub">Linux</small></div>
+    </div>
+    <nav id="nav">
+      <div class="nav-group" data-i>System</div>
+      <a data-page="monitor" class="active"><i class="ico ico-monitor"></i><span data-i>Monitor</span></a>
+      <a data-page="info"><i class="ico ico-info"></i><span data-i>Information</span></a>
+      <div class="nav-group" data-i>Performance</div>
+      <a data-page="modes"><i class="ico ico-mode"></i><span data-i>Mode selection</span></a>
+      <a data-page="fans"><i class="ico ico-fan"></i><span data-i>Fan settings</span></a>
+      <a data-page="liquid"><i class="ico ico-water"></i><span data-i>Liquid cooling</span></a>
+      <div class="nav-group" data-i>Lighting</div>
+      <a data-page="light"><i class="ico ico-light"></i><span data-i>Keyboard backlight</span></a>
+      <div class="nav-group" data-i>Power</div>
+      <a data-page="battery"><i class="ico ico-battery"></i><span data-i>Battery</span></a>
+      <div class="nav-group" data-i>Settings</div>
+      <a data-page="switches"><i class="ico ico-switch"></i><span data-i>Switches</span></a>
+      <a data-page="auto"><i class="ico ico-auto"></i><span data-i>Automation</span></a>
+      <a data-page="binding"><i class="ico ico-bind"></i><span data-i>App binding</span></a>
+    </nav>
+    <div class="nav-foot">
+      <div class="modepill" id="modepill">—</div>
+      <div class="lc-pill hidden" id="lc-pill"></div>
+      <div class="row between">
+        <div class="conn" id="conn"><span class="dot"></span><span>Connecting…</span></div>
+        <div class="seg lang" id="lang-seg"><button data-lang="en">EN</button><button data-lang="ru">RU</button></div>
+      </div>
+    </div>
+  </aside>
+
+  <main id="main">
+    <!-- MONITOR -->
+    <section class="page active" id="page-monitor">
+      <header class="ph"><h1 data-i>System monitor</h1><p data-i>Temperatures, fans and load in real time</p></header>
+      <div class="grid g4" id="gauges"></div>
+      <div class="grid g2">
+        <div class="card">
+          <h3 data-i>Fans</h3>
+          <div id="fan-bars"></div>
+        </div>
+        <div class="card">
+          <h3 data-i>Temperature history</h3>
+          <svg id="temp-chart" viewBox="0 0 400 140" preserveAspectRatio="none" class="chart"></svg>
+          <div class="legend"><span class="lg cpu" data-i>CPU</span><span class="lg gpu" data-i>GPU</span></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="row between wrap"><h3 data-i>Last hour</h3><div class="seg" id="hist-seg"></div></div>
+        <svg id="hist-chart" viewBox="0 0 800 180" preserveAspectRatio="none" class="chart hist"></svg>
+        <div class="legend" id="hist-legend"></div>
+      </div>
+      <div class="grid g3">
+        <div class="card stat" id="st-mem"></div>
+        <div class="card stat" id="st-net"></div>
+        <div class="card stat" id="st-bat"></div>
+      </div>
+    </section>
+
+    <!-- INFO -->
+    <section class="page" id="page-info">
+      <header class="ph"><h1 data-i>System information</h1><p data-i>Device details and service status</p></header>
+      <div class="grid g2">
+        <div class="card"><h3 data-i>Device</h3><dl class="kv" id="info-dev"></dl></div>
+        <div class="card"><h3 data-i>Control Center service</h3><dl class="kv" id="info-svc"></dl></div>
+      </div>
+      <div class="card"><h3 data-i>Drives</h3><div id="info-disks"></div></div>
+      <div class="card hidden" id="gpu-card">
+        <div class="row between"><h3 data-i>Discrete GPU</h3><button class="btn ghost" id="gpu-refresh" data-i>Refresh</button></div>
+        <p class="muted tiny" data-i>Programs that keep the NVIDIA GPU open. While any are listed the GPU cannot sleep, which costs battery. Reading this list does not wake the GPU.</p>
+        <div id="gpu-users"></div>
+      </div>
+      <div class="card warn hidden" id="info-warn"></div>
+    </section>
+
+    <!-- MODES -->
+    <section class="page" id="page-modes">
+      <header class="ph"><h1 data-i>Mode selection</h1><p data-i>Power and fan operating mode. The Fn + mode key cycles through them.</p></header>
+      <div class="modes" id="mode-cards"></div>
+      <div class="card">
+        <div class="row between">
+          <div><h3 data-i>Mode profile</h3><p class="muted" id="profile-hint"></p></div>
+          <div class="seg" id="profile-seg"></div>
+        </div>
+        <div class="grid g4 small" id="profile-info"></div>
+      </div>
+      <div class="card hidden" id="profile-editor">
+        <div class="row between wrap"><h3 id="pe-title"></h3>
+          <div class="row"><button class="btn ghost" id="pe-reset" data-i>Reset slot to factory</button><button class="btn" id="pe-apply" data-i>Apply</button></div></div>
+        <p class="muted tiny" id="pe-note"></p>
+        <div id="pe-rows"></div>
+      </div>
+      <div class="card row between">
+        <div><h3 data-i>Fan Boost</h3><p class="muted" data-i>Fans run at maximum speed</p></div>
+        <label class="sw"><input type="checkbox" id="fanboost"><span></span></label>
+      </div>
+      <div class="row end"><button class="btn ghost" id="btn-restore" data-i>Restore default settings</button></div>
+    </section>
+
+    <!-- FANS -->
+    <section class="page" id="page-fans">
+      <header class="ph"><h1 data-i>Fan settings</h1><p data-i>Fan curves for every profile. Changes apply immediately if the profile is active.</p></header>
+      <div class="card">
+        <div class="row between wrap">
+          <div class="seg" id="table-seg"></div>
+          <div class="seg" id="fan-kind-seg"><button data-k="CPU" class="on" data-i>CPU</button><button data-k="GPU" data-i>GPU</button></div>
+        </div>
+        <div class="row wrap" style="margin-top:12px"><span class="muted" style="margin:0" data-i>Presets:</span>
+          <div class="seg" id="fan-presets"><button data-p="factory" data-i>Factory</button><button data-p="quiet" data-i>Quiet</button><button data-p="max" data-i>Maximum</button></div>
+          <span class="muted tiny" style="margin:0" data-i>A preset only changes the editor; press Save to write it.</span></div>
+        <svg id="curve" viewBox="0 0 640 300" class="curve"></svg>
+        <p class="muted tiny" data-i>Drag the points: horizontally — the temperature at which a level starts, vertically — fan speed. Set the release temperature in the table.</p>
+        <div class="table-wrap"><table class="pts" id="pts"></table></div>
+        <div class="row between wrap">
+          <label class="chk"><input type="checkbox" id="respective"> <span data-i>Enable fan control center (separate CPU/GPU control)</span></label>
+          <div class="row">
+            <button class="btn ghost" id="btn-table-restore" data-i>Default</button>
+            <button class="btn" id="btn-table-save" data-i>Save</button>
+          </div>
+        </div>
+      </div>
+      <div class="card" id="pl-card">
+        <h3 data-i>Processor power for the profile</h3>
+        <p class="muted" data-i>PL1 — sustained power, PL2 — short-term power (W). Values for AC and battery.</p>
+        <div class="grid g4" id="pl-edit"></div>
+        <div class="row end"><button class="btn" id="btn-pl-save" data-i>Apply</button></div>
+      </div>
+    </section>
+
+    <!-- LIQUID COOLING -->
+    <section class="page" id="page-liquid">
+      <header class="ph"><h1 data-i>Liquid cooling</h1><p data-i>XMG Oasis and compatible Bluetooth coolers (LCT21001 Mk1 / LCT22002 Mk2)</p></header>
+      <div class="card warn hidden" id="lc-na">
+        <h3 data-i>Liquid cooling is unavailable</h3>
+        <p class="muted" data-i>The Bluetooth library is not installed. Run: sudo apt install python3-bleak bluez — then restart the service: sudo systemctl restart uwccd</p>
+      </div>
+      <div id="lc-ui">
+        <div class="card">
+          <div class="row between wrap">
+            <div class="row">
+              <div class="lc-state" id="lc-state"><span class="dot"></span></div>
+              <div><h3 id="lc-title">—</h3><p class="muted tiny" id="lc-sub"></p></div>
+            </div>
+            <div class="row wrap">
+              <button class="btn ghost" id="lc-scan" data-i>Search</button>
+              <button class="btn ghost hidden" id="lc-disc" data-i>Disconnect</button>
+              <button class="btn ghost hidden" id="lc-forget" data-i>Forget</button>
+            </div>
+          </div>
+          <div id="lc-found"></div>
+          <p class="muted tiny hidden" id="lc-hint" data-i>Turn the cooler on and wait until its light blinks, then press Search. The laptop's Bluetooth must be enabled.</p>
+        </div>
+
+        <div id="lc-live" class="grid g4"></div>
+
+        <div class="card">
+          <h3 data-i>Cooling mode</h3>
+          <div class="choices lc-modes" id="lc-modes"></div>
+          <div id="lc-manual" class="hidden">
+            <label class="slider"><span data-i>Fan speed</span> <input type="range" min="0" max="100" step="5" id="lc-fan"><output></output></label>
+            <label class="slider"><span data-i>Pump voltage</span>
+              <select id="lc-pump"><option value="7">7 V</option><option value="8">8 V</option><option value="11">11 V</option><option value="12">12 V</option><option value="0" data-i>Off</option></select>
+            </label>
+            <p class="muted tiny" data-i>The OEM software never uses 12 V; prefer 7–11 V for continuous operation.</p>
+          </div>
+        </div>
+
+        <div class="card" id="lc-tiers-card">
+          <div class="row between"><h3 data-i>Automatic mode: temperature tiers</h3>
+            <div class="row"><button class="btn ghost" id="lc-tiers-reset" data-i>Default</button><button class="btn" id="lc-tiers-save" data-i>Save</button></div></div>
+          <p class="muted tiny" data-i>Uses the hotter of CPU and GPU. Switching to a lower tier waits for the temperature to drop 3 °C below the threshold.</p>
+          <div class="table-wrap"><table class="pts" id="lc-tiers"></table></div>
+        </div>
+
+        <div class="card">
+          <div class="row between"><h3 data-i>Cooler lighting</h3><label class="sw"><input type="checkbox" id="lc-rgb-on"><span></span></label></div>
+          <div class="effects" id="lc-fx"></div>
+          <div class="row wrap" style="margin-top:12px">
+            <div class="swatches" id="lc-swatches" style="margin:0"></div>
+            <input type="color" id="lc-color" value="#008000"><span class="muted" style="margin:0" data-i>custom colour</span>
+          </div>
+          <p class="muted tiny" style="margin:10px 0 0" data-i>² — Mk2 (LCT22002) only</p>
+        </div>
+
+        <div class="grid g2">
+          <div class="card">
+            <h3 data-i>Coolant filling</h3>
+            <p class="muted" data-i>After refilling, run the cycle to push air out of the loop: the pump is pulsed 8 times (about 70 seconds), then your settings are restored.</p>
+            <div class="row between"><div class="bar" style="flex:1;margin:0"><div class="track"><div class="fill" id="lc-prime-bar" style="width:0"></div></div></div>
+              <button class="btn" id="lc-prime" data-i>Start</button></div>
+          </div>
+          <div class="card">
+            <h3 data-i>Options</h3>
+            <label class="chk"><input type="checkbox" id="lc-notify"> <span data-i>Warn when there is no coolant flow</span></label>
+            <label class="chk"><input type="checkbox" id="lc-guard"> <span data-i>Flow guard: with no flow raise the pump to 11 V and the fan to 60 %</span></label>
+            <label class="chk"><input type="checkbox" id="lc-bfan"> <span data-i>Fan boost (at least 60 %)</span></label>
+            <label class="chk"><input type="checkbox" id="lc-bpump"> <span data-i>Pump boost (at least 8 V)</span></label>
+            <p class="muted tiny" style="margin-top:8px" data-i>Firmware updates (DFU) are not performed by Control Center.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- LIGHT -->
+    <section class="page" id="page-light">
+      <header class="ph"><h1 data-i>Keyboard backlight</h1><p id="light-sub"></p></header>
+      <div class="card row between">
+        <div><h3 data-i>Keyboard backlight</h3><p class="muted" data-i>Turn the keyboard backlight on or off</p></div>
+        <label class="sw"><input type="checkbox" id="kb-power"><span></span></label>
+      </div>
+      <div id="rgb-ui">
+        <div class="card">
+          <h3 data-i>Lighting effects</h3>
+          <div class="effects" id="effects"></div>
+        </div>
+        <div class="grid g2">
+          <div class="card">
+            <h3 data-i>Effect settings</h3>
+            <label class="slider"><span data-i>Brightness</span> <input type="range" min="0" max="4" step="1" id="kb-light"><output></output></label>
+            <label class="slider"><span data-i>Speed</span> <input type="range" min="0" max="4" step="1" id="kb-speed"><output></output></label>
+            <label class="slider"><span data-i>Direction</span>
+              <select id="kb-dir"><option value="0" data-i>Right</option><option value="1" data-i>Left</option><option value="2" data-i>Up</option><option value="3" data-i>Down</option></select>
+            </label>
+            <label class="slider hidden" id="alphabet-row"><span data-i>Text</span> <input type="text" id="kb-alpha" maxlength="40" value="HELLO" placeholder="A–Z"></label>
+          </div>
+          <div class="card">
+            <h3 data-i>Colour</h3>
+            <div class="swatches" id="swatches"></div>
+            <label class="chk"><input type="checkbox" id="kb-multi"> <span data-i>Multicolour (all palette colours in turn)</span></label>
+            <div class="row"><input type="color" id="kb-custom" value="#32dbbe"><span class="muted" data-i>custom colour</span></div>
+          </div>
+        </div>
+        <div class="card" id="usermode-card">
+          <div class="row between wrap"><h3 data-i>User mode — colour of every key</h3>
+            <div class="row"><input type="color" id="brush" value="#32dbbe"><button class="btn ghost" id="um-fill" data-i>Fill all</button><button class="btn ghost" id="um-clear" data-i>Clear</button><button class="btn" id="um-apply" data-i>Apply</button></div></div>
+          <div class="kbgrid" id="kbgrid"></div>
+          <p class="muted tiny" data-i>The 6×21 grid matches the LED matrix of the ITE controller. Click or drag to paint.</p>
+        </div>
+      </div>
+      <div id="single-ui" class="card hidden">
+        <h3 data-i>Backlight brightness</h3>
+        <label class="slider"><span data-i>Level</span> <input type="range" min="0" max="4" step="1" id="kb-level"><output></output></label>
+      </div>
+      <div id="none-ui" class="card hidden"><p data-i>No controllable keyboard backlight found.</p></div>
+    </section>
+
+    <!-- BATTERY -->
+    <section class="page" id="page-battery">
+      <header class="ph"><h1 data-i>Battery</h1><p data-i>Battery status and wear protection mode</p></header>
+      <div class="grid g4" id="bat-stats"></div>
+      <div class="card">
+        <h3 data-i>Battery protection mode</h3>
+        <p class="muted" data-i>Choose another mode to protect the battery from a high charge level when the laptop is always plugged in.</p>
+        <div class="choices" id="bat-modes"></div>
+      </div>
+      <div class="card">
+        <h3 data-i>Custom charge limit</h3>
+        <label class="slider"><span data-i>Charge up to</span> <input type="range" min="50" max="100" step="1" id="lim-up"><output></output></label>
+        <label class="slider"><span data-i>Start charging below</span> <input type="range" min="40" max="95" step="1" id="lim-down"><output></output></label>
+        <div class="row end"><button class="btn" id="btn-lim" data-i>Apply</button></div>
+      </div>
+      <div class="card row between hidden" id="typec-card">
+        <div><h3 data-i>Type-C charging priority</h3><p class="muted" data-i>When Type-C is connected, power is taken from it only</p></div>
+        <label class="sw"><input type="checkbox" id="typec"><span></span></label>
+      </div>
+    </section>
+
+    <!-- SWITCHES -->
+    <section class="page" id="page-switches">
+      <header class="ph"><h1 data-i>Switches</h1><p data-i>Keyboard, touchpad and system functions</p></header>
+      <div class="list" id="switch-list"></div>
+    </section>
+
+    <!-- AUTOMATION -->
+    <section class="page" id="page-auto">
+      <header class="ph"><h1 data-i>Automation</h1><p data-i>What Control Center does by itself when the power source changes or the laptop overheats</p></header>
+      <div class="card">
+        <h3 data-i>Power source</h3>
+        <label class="slider wide"><span data-i>When the charger is plugged in</span><select id="au-ac"></select></label>
+        <label class="slider wide"><span data-i>When the charger is unplugged</span><select id="au-bat"></select></label>
+        <p class="muted tiny" data-i>The mode changes once, at the moment the power source changes; while a bound program runs it is not changed.</p>
+        <label class="chk"><input type="checkbox" id="au-kb"> <span data-i>Turn the keyboard backlight off on battery (back on when plugged in)</span></label>
+        <label class="chk"><input type="checkbox" id="au-ppd"> <span data-i>Follow the mode with the system power profile (power-profiles-daemon): Turbo — performance, battery — power saver</span></label>
+      </div>
+      <div class="card">
+        <h3 data-i>Overheating</h3>
+        <label class="chk"><input type="checkbox" id="au-alerts"> <span data-i>Notify when the CPU or GPU stays at the limit for more than 30 seconds (at most once in 10 minutes)</span></label>
+        <div class="row wrap" style="margin:10px 0">
+          <label class="row"><span data-i>CPU limit</span> <input type="number" id="au-cpu" min="60" max="105"> °C</label>
+          <label class="row"><span data-i>GPU limit</span> <input type="number" id="au-gpu" min="60" max="105"> °C</label>
+        </div>
+        <label class="chk"><input type="checkbox" id="au-boost"> <span data-i>Turn Fan Boost on if it is still at the limit 30 seconds after the notice</span></label>
+        <p class="muted tiny" style="margin-top:8px" data-i>Control Center only turns Fan Boost on; turn it off yourself when the load is over.</p>
+      </div>
+    </section>
+
+    <!-- BINDING -->
+    <section class="page" id="page-binding">
+      <header class="ph"><h1 data-i>App binding</h1><p data-i>Switch to a mode automatically while a program is running (by process name)</p></header>
+      <div class="card">
+        <table class="bind" id="bind-table"></table>
+        <div class="row">
+          <input type="text" id="bind-proc" data-i-ph="process name, e.g. steam" maxlength="64">
+          <select id="bind-mode"><option value="1" data-i>Gaming</option><option value="0" data-i>Office</option><option value="2" data-i>Turbo</option></select>
+          <button class="btn" id="bind-add" data-i>Add</button>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+<div id="toast"></div>
+<div id="osd"></div>
+<script src="i18n.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

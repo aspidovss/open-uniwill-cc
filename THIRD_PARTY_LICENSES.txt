@@ -1,0 +1,34 @@
+Third-party software
+====================
+
+open-uniwill-cc itself is MIT-licensed (see LICENSE for the exceptions kernel/
+and proprietary parts). The Windows build bundles the Python runtime and the
+libraries below; on Linux they are installed from the distribution.
+
+Python 3                    PSF License Agreement
+  https://docs.python.org/3/license.html
+
+bleak (Bluetooth LE)        MIT License, Copyright (c) Henrik Blidh and contributors
+  https://github.com/hbldh/bleak
+
+pystray (tray icon)         GNU Lesser General Public License v3.0, Copyright (c) Moses Palmér
+  https://github.com/moses-palmer/pystray
+  pystray is used unmodified as a separate Python package inside the bundle
+  (_internal\pystray); you may replace it with your own build. Source:
+  https://pypi.org/project/pystray/  License text: https://www.gnu.org/licenses/lgpl-3.0.txt
+
+Pillow (images)             MIT-CMU (HPND) License, Copyright (c) Jeffrey A. Clark and contributors
+  https://github.com/python-pillow/Pillow
+
+psutil (system info)        BSD 3-Clause License, Copyright (c) Giampaolo Rodola
+  https://github.com/giampaolo/psutil
+
+pywin32 (Windows API)       Python Software Foundation License, Copyright (c) Mark Hammond
+  https://github.com/mhammond/pywin32
+
+PyInstaller (build tool)    GPL-2.0 with the bootloader exception: the produced
+                            executables are not covered by the GPL.
+  https://pyinstaller.org/en/stable/license.html
+
+Inno Setup (installer)      Inno Setup License, Copyright (c) Jordan Russell and Martijn Laan
+  https://jrsoftware.org/files/is/license.txt

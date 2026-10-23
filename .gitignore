@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+.venv*/
+build/
+dist/
+*.spec.bak
+uwccd/data/
+kernel/*.o
+kernel/*.ko
+kernel/*.mod
+kernel/*.mod.c
+kernel/.*.cmd
+kernel/Module.symvers
+kernel/modules.order
+.vscode/
+.idea/

@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Control Center
+Name[ru]=Центр управления
+Comment=Performance modes, fans, keyboard lighting, battery and liquid cooler
+Comment[ru]=Режимы производительности, вентиляторы, подсветка, батарея и водяное охлаждение
+Exec=uwcc
+Icon=uwcc
+Terminal=false
+Categories=Settings;HardwareSettings;System;
+Keywords=fan;turbo;keyboard;rgb;battery;liquid;water;cooler;oasis;вентилятор;подсветка;охлаждение;
+StartupWMClass=uwcc
