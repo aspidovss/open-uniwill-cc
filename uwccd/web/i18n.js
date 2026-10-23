@@ -213,7 +213,7 @@ const RU = {
   "CPU power": "Мощность CPU", "GPU power": "Мощность GPU", "CPU package": "Пакет CPU", "NVIDIA GPU": "Видеокарта NVIDIA",
   "CPU package power is not available on this computer": "Мощность пакета CPU на этом компьютере недоступна",
   "GPU power is not available (no NVIDIA GPU, or it is asleep)": "Мощность GPU недоступна (нет видеокарты NVIDIA или она спит)",
-  "no data": "нет данных", "Laptop light bar": "Подсветка корпуса", "Effect": "Эффект", "Static colour": "Статичный цвет",
+  "no data": "нет данных", "Laptop light bar": "Подсветка корпуса", "Zone": "Зона", "Turn the zone on or off and choose its effect": "Включение зоны и выбор её эффекта", "No light bar found on this laptop.": "Подсветка корпуса на этом ноутбуке не найдена.", "Effect": "Эффект", "Static colour": "Статичный цвет",
   "Breathing, multicolour": "Дыхание, разные цвета", "Colour cycle": "Смена цветов", "Colour breathing": "Цветное дыхание",
   "Colour wave": "Цветная волна", "Rear (hinge)": "Сзади (у шарнира)", "Base": "Корпус", "Logo": "Логотип", "Total power": "Общая мощность", "From battery": "От батареи", "GPU power limit": "Лимит мощности GPU", "avg": "сред.", "max": "макс.",
   "Export…": "Экспорт…", "CSV (all sensors)": "CSV (все датчики)", "CSV for Excel (; and decimal comma)": "CSV для Excel (; и десятичная запятая)",

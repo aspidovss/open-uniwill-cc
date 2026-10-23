@@ -480,8 +480,10 @@ const LB_ZONE_NAME = { hinge: "Rear (hinge)", base: "Base", logo: "Logo" };
 let lbZone = null;
 function renderLightbar() {
   const lb = S.keyboard && S.keyboard.lightbar;
+  $("#nav-lightbar").classList.toggle("hidden", !lb);
   $("#lb-ui").classList.toggle("hidden", !lb);
-  if (!lb) return;
+  $("#lb-none").classList.toggle("hidden", !!lb);
+  if (!lb) { $("#lb-sub").textContent = ""; return; }
   const zones = Object.keys(lb.zones);
   if (!zones.includes(lbZone)) lbZone = zones[0];
   const z = lb.zones[lbZone];

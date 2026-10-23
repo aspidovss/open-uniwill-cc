@@ -24,6 +24,7 @@
       <a data-page="liquid"><i class="ico ico-water"></i><span data-i>Liquid cooling</span></a>
       <div class="nav-group" data-i>Lighting</div>
       <a data-page="light"><i class="ico ico-light"></i><span data-i>Keyboard backlight</span></a>
+      <a data-page="lightbar" id="nav-lightbar" class="hidden"><i class="ico ico-lightbar"></i><span data-i>Laptop light bar</span></a>
       <div class="nav-group" data-i>Power</div>
       <a data-page="battery"><i class="ico ico-battery"></i><span data-i>Battery</span></a>
       <div class="nav-group" data-i>Settings</div>
@@ -261,8 +262,11 @@
         <label class="slider"><span data-i>Level</span> <input type="range" min="0" max="4" step="1" id="kb-level"><output></output></label>
       </div>
       <div id="none-ui" class="card hidden"><p data-i>No controllable keyboard backlight found.</p></div>
-      <div id="lb-ui" class="card hidden">
-        <div class="row between wrap"><div><h3 data-i>Laptop light bar</h3><p class="muted" id="lb-sub"></p></div>
+    </section>
+    <section class="page" id="page-lightbar">
+      <header class="ph"><h1 data-i>Laptop light bar</h1><p id="lb-sub"></p></header>
+      <div id="lb-ui" class="card">
+        <div class="row between wrap"><div><h3 data-i>Zone</h3><p class="muted" data-i>Turn the zone on or off and choose its effect</p></div>
           <div class="row"><div class="seg" id="lb-zones"></div><label class="sw"><input type="checkbox" id="lb-power"><span></span></label></div></div>
         <div class="grid g2">
           <div>
@@ -276,6 +280,7 @@
           </div>
         </div>
       </div>
+      <div id="lb-none" class="card hidden"><p data-i>No light bar found on this laptop.</p></div>
     </section>
 
     <!-- BATTERY -->

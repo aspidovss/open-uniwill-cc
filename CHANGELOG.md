@@ -4,7 +4,7 @@
 
 - **Chassis light bar** (ITE 048D:7000, HIDLightbar4): zones rear/hinge, base, logo as the device reports them;
   static colour, breathing, wave, colour cycle, rainbow, colour breathing / wave; brightness, speed, on/off per zone.
-  Lighting page → *Laptop light bar*, `uwccctl lb`.
+  Own menu item *Lighting → Laptop light bar*, `uwccctl lb`.
 - Keyboard *Single colour* now works on ITE firmware 0x11 (it ignores the 12h picture GCUService sends there).
 - Monitor → Last hour: separate **CPU power** and **GPU power** charts with now / average / max; CPU package power on
   Windows from the Energy Meter counters (Linux: RAPL). Dashed marks for the current limits: PL1 / PL2 (PL4 on Custom-mode
