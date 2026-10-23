@@ -37,9 +37,49 @@ function osd(text) {
   const o = $("#osd"); o.textContent = text; o.classList.add("show");
   clearTimeout(osdTimer); osdTimer = setTimeout(() => o.classList.remove("show"), 1600);
 }
+// The result of an action is shown on the button that started it ("✓ Profile applied" / an error next to it),
+// so it is visible where the user clicked; other actions (switches, menus) use the toast at the top.
+let lastBtn = null, lastBtnAt = 0;
+document.addEventListener("click", e => {
+  const b = e.target.closest && e.target.closest("button.btn");
+  if (b) { lastBtn = b; lastBtnAt = Date.now(); }
+}, true);
+function clearBtnErr(b) { const n = b && b.nextElementSibling; if (n && n.classList.contains("btn-err")) n.remove(); }
+document.addEventListener("input", e => {               // a changed value makes an old error stale
+  const c = e.target.closest && e.target.closest(".card"); if (c) c.querySelectorAll(".btn-err").forEach(x => x.remove());
+}, true);
 async function act(fn, ok) {
-  try { await fn(); if (ok) toast(ok); await refresh(); }
-  catch (e) { toast(e.message.includes("software") ? t("This effect is not available for this keyboard") : t("Error: {0}", errText(e.message)), true); }
+  const btn = Date.now() - lastBtnAt < 300 ? lastBtn : null;
+  lastBtn = null;
+  let label = null;
+  if (btn) {
+    clearBtnErr(btn); clearTimeout(btn._doneTimer);
+    if (btn._label != null) { btn.innerHTML = btn._label; btn.classList.remove("done"); }
+    label = btn._label = btn.innerHTML;
+    btn.style.minWidth = btn.offsetWidth + "px"; btn.disabled = true; btn.classList.add("busy");
+    btn._busyTimer = setTimeout(() => { if (btn.classList.contains("busy")) btn.textContent = t("Working…"); }, 250);
+  }
+  const restore = () => {
+    if (!btn) return;
+    clearTimeout(btn._busyTimer); btn.disabled = false; btn.classList.remove("busy"); btn.innerHTML = label;
+  };
+  try {
+    await fn();
+    restore();
+    if (ok) {
+      if (btn && btn.isConnected) {
+        btn.textContent = "✓ " + (ok.length <= 28 ? ok : t("Done")); btn.classList.add("done");
+        btn._doneTimer = setTimeout(() => { btn.innerHTML = label; btn._label = null; btn.classList.remove("done"); btn.style.minWidth = ""; }, 2500);
+      } else toast(ok);
+    } else if (btn) { btn._label = null; btn.style.minWidth = ""; }
+    await refresh();
+  } catch (e) {
+    restore();
+    if (btn) { btn._label = null; btn.style.minWidth = ""; }
+    const msg = e.message.includes("software") ? t("This effect is not available for this keyboard") : t("Error: {0}", errText(e.message));
+    if (btn && btn.isConnected) btn.after(h("span", { class: "btn-err", role: "alert" }, msg));
+    else toast(msg, true);
+  }
 }
 
 function errText(m) { return t(m); }
@@ -111,7 +151,7 @@ function render() {
   const mode = S.power.mode;
   const pill = $("#modepill"); pill.textContent = MODES[mode] ? t(MODES[mode].name) : "—"; pill.className = "modepill m" + mode;
   $("#brand-sub").textContent = S.platform.project_name;
-  renderModes(); renderFanPage(); renderLiquid(); renderLight(); renderBattery(); renderSwitches(); renderBinding(); renderInfo(); renderAuto();
+  renderModes(); renderFanPage(); renderLiquid(); renderLight(); renderBattery(); renderSwitches(); renderBinding(); renderInfo(); renderAuto(); renderAbout();
   renderHistSeg(); drawHistory();
 }
 
@@ -158,6 +198,7 @@ function onMonitor(m) {
   $("#st-bat").append(h("h3", {}, t("Battery")), h("div", { class: "big" }, b.present ? `${b.percent}%` : t("none")),
     h("div", { class: "sub" }, b.present ? `${batStatus(b.status)}${b.remaining_min ? " · " + t("{0} h {1} min", Math.floor(b.remaining_min / 60), b.remaining_min % 60) : ""}${m.ac ? " · " + t("on AC") : ""}` : ""));
   lastMonitor = m; updateBatStats();
+  if ($("#page-monitor").classList.contains("active")) loadHistory();
 }
 let lastMonitor = null;
 function fmtRate(k) { return k > 1024 ? `${(k / 1024).toFixed(1)} ${t("MB/s")}` : `${k} ${t("KB/s")}`; }
@@ -231,7 +272,8 @@ function renderModes() {
   $("#fanboost").checked = S.power.fan_boost;
 }
 // ---------------------------------------------------------------- profile editor (RamFan1p5 manager)
-let pe = null;
+let pe = null, dbStatus = null;
+(async () => { try { dbStatus = await api("dynamic-boost"); } catch (_) {} })();
 function renderProfileEditor() {
   const name = S.power.current_profile, prof = S.profiles[name], L = S.power.limits || {};
   if (!prof) return;
@@ -262,12 +304,44 @@ function renderProfileEditor() {
     row(t("Slot name"), t("Shown here, on the fan page and in notifications"), inp);
   }
   const W = t("W");
-  let [r, o] = slider("CPU", "PL1", L.pl_min, L.pl1_max, W); row(t("Long-term power limit (PL1)"), t("The power the processor holds under a long load"), r, o);
-  [r, o] = slider("CPU", "PL2", L.pl_min, L.pl2_max, W); row(t("Short-term power limit (PL2)"), t("For short bursts; not lower than PL1"), r, o);
-  [r, o] = slider("CPU", "PL4", L.pl_min, L.pl4_max, W); row(t("Peak power limit (PL4)"), t("The most the processor may draw for an instant; not lower than PL2"), r, o);
-  if (L.tcc_max > 0) {
+  // PL1 <= PL2 <= PL4: raising a lower limit pushes the higher ones up, a higher one cannot go below the lower one
+  const plKeys = ["PL1", "PL2", "PL4"], plMax = { PL1: Math.min(L.pl1_max, L.pl2_max, L.pl4_max), PL2: Math.min(L.pl2_max, L.pl4_max), PL4: L.pl4_max };
+  const plUI = {};
+  const plSync = (changed) => {
+    const i = plKeys.indexOf(changed), c = pe.CPU;
+    for (let j = i + 1; j < 3; j++) c[plKeys[j]] = Math.max(c[plKeys[j]], c[plKeys[j - 1]]);
+    if (i > 0) c[changed] = Math.max(c[changed], c[plKeys[i - 1]]);
+    for (const k of plKeys) { plUI[k][0].value = c[k]; plUI[k][1].textContent = `${c[k]} ${W}`; }
+  };
+  for (const k of plKeys) {
+    plUI[k] = slider("CPU", k, L.pl_min, plMax[k] >= L.pl_min ? plMax[k] : L[k.toLowerCase() + "_max"], W);
+    plUI[k][0].addEventListener("input", () => plSync(k));
+  }
+  pe.CPU.PL2 = Math.max(pe.CPU.PL2, pe.CPU.PL1); pe.CPU.PL4 = Math.max(pe.CPU.PL4, pe.CPU.PL2);
+  plSync("PL1");
+  row(t("Long-term power limit (PL1)"), t("The power the processor holds under a long load"), ...plUI.PL1);
+  row(t("Short-term power limit (PL2)"), t("For short bursts; not lower than PL1"), ...plUI.PL2);
+  row(t("Peak power limit (PL4)"), t("The most the processor may draw for an instant; not lower than PL2"), ...plUI.PL4);
+  let r, o;
+  if (L.tcc_max > 0 && L.tjmax && !S.platform.amd) {
+    // shown as a temperature (like "Temperature Limit" in the original); stored as TCC offset = Tjmax - limit
+    const tj = L.tjmax, lo = tj - L.tcc_max;
+    pe.CPU.TccOffset = Math.min(Math.max(pe.CPU.TccOffset, 0), L.tcc_max);
+    const o2 = h("output", {}, `${tj - pe.CPU.TccOffset} °C`);
+    const r2 = h("input", { type: "range", min: lo, max: tj, step: 1, value: tj - pe.CPU.TccOffset });
+    r2.addEventListener("input", () => { pe.CPU.TccOffset = tj - +r2.value; o2.textContent = `${r2.value} °C`; });
+    row(t("CPU temperature limit"), t("The processor slows down to stay at or below this temperature (maximum {0} °C). Lower = cooler and quieter, less performance.", tj),
+      h("div", { class: "row", style: "flex:1" }, toggle("CPU", "TccOffsetSwitch"), r2), o2);
+  } else if (L.tcc_max > 0) {
     [r, o] = slider("CPU", "TccOffset", 0, L.tcc_max, "°C");
     row(t("Lower the throttle temperature (TCC offset)"), t("The processor starts to cut its clock this many degrees below its maximum"), h("div", { class: "row", style: "flex:1" }, toggle("CPU", "TccOffsetSwitch"), r), o);
+  }
+  if (S.platform.nv_gpu && L.gpu_temp) {
+    const gt = L.gpu_temp;
+    if (pe.GPU.TargetTemperature == null) pe.GPU.TargetTemperature = gt.default;
+    [r, o] = slider("GPU", "TargetTemperature", gt.min, gt.max, "°C");
+    row(t("GPU temperature limit"), t("The graphics card lowers its clock to stay at this temperature (driver default {0} °C)", gt.default),
+      h("div", { class: "row", style: "flex:1" }, toggle("GPU", "TargetTemperatureSwitch"), r), o);
   }
   if (S.platform.nv_gpu && (L.ctgp_support || L.db_support)) {
     if (L.ctgp_support) {
@@ -277,17 +351,25 @@ function renderProfileEditor() {
     if (L.db_support) {
       [r, o] = slider("GPU", "DynamicBoost", 0, L.db_max, W);
       row(t("Dynamic Boost"), t("Lets the graphics card take power from the processor"), h("div", { class: "row", style: "flex:1" }, toggle("GPU", "DynamicBoostSwitch", () => renderProfileEditor()), r), o);
+      if (dbStatus && dbStatus.service && !dbStatus.active) {
+        const msg = dbStatus.present ? t("{0} is not running — Dynamic Boost has no effect until it is started.", dbStatus.service)
+          : t("{0} is not installed — Dynamic Boost has no effect. Install it with the NVIDIA driver.", dbStatus.service);
+        rows.append(h("div", { class: "pe-row" }, h("div", { class: "lbl" }, h("small", { class: "warn-text" }, msg)), h("div", { class: "val" },
+          dbStatus.can_enable ? h("button", { class: "btn ghost", onclick: () => act(async () => { dbStatus = await api("dynamic-boost/enable", {}); renderProfileEditor(); }, t("Started")) }, t("Start")) : h("span")), h("span")));
+      }
     }
   }
 }
 $("#pe-apply").addEventListener("click", () => {
   if (!pe) return;
   const c = pe.CPU;
+  const L = S.power.limits || {};
   if (c.PL2 < c.PL1) c.PL2 = c.PL1;
-  if (c.PL4 < c.PL2) return toast(t("PL4 must not be lower than PL2"), true);
+  if (c.PL4 < c.PL2) c.PL4 = c.PL2;
   const body = { CPU: { PL1: c.PL1, PL2: c.PL2, PL4: c.PL4, TccOffsetSwitch: c.TccOffsetSwitch, TccOffset: c.TccOffset },
     GPU: { ConfigurableTGPSwitch: pe.GPU.ConfigurableTGPSwitch, ConfigurableTGPTarget: pe.GPU.ConfigurableTGPTarget,
       DynamicBoostSwitch: pe.GPU.DynamicBoostSwitch, DynamicBoost: pe.GPU.DynamicBoost } };
+  if (L.gpu_temp && S.platform.nv_gpu) Object.assign(body.GPU, { TargetTemperatureSwitch: pe.GPU.TargetTemperatureSwitch ? 1 : 0, TargetTemperature: pe.GPU.TargetTemperature });
   if (!S.platform.nv_gpu) delete body.GPU;
   if (pe.Name.startsWith("Mode4")) body.CustomizeName = pe.CustomizeName;
   act(async () => { await api("profiles/" + pe.Name, body, "PUT"); pe = null; }, t("Profile applied"));
@@ -448,7 +530,7 @@ function renderLight() {
   const eb = $("#effects"); eb.innerHTML = "";
   for (const [id, name] of Object.entries(k.effects)) {
     const na = (k.unsupported_effects || []).includes(+id);
-    eb.append(h("div", { class: `eff${+id === kbSel.effect ? " on" : ""}${na ? " na" : ""}`, title: na ? (+id === 13 ? t("Music mode needs audio capture — not supported") : t("Light bar only effect")) : "",
+    eb.append(h("div", { class: `eff${+id === kbSel.effect ? " on" : ""}${na ? " na" : ""}`, title: na ? (+id === 13 ? t("Music mode needs audio capture — not supported") : (+id === 14 || +id === 15) ? t("Not supported by this keyboard firmware") : t("Light bar only effect")) : "",
       onclick: () => { if (na) return toast(t("This effect is not available for this keyboard"), true); kbSel.effect = +id; applyKb(); } },
       h("div", { class: "sw8" }), t(EFFECT_NAME[name] || name)));
   }
@@ -589,10 +671,21 @@ function renderSwitches() {
   if (s.bluetooth !== null) item("Bluetooth", "Bluetooth adapter (rfkill).", "bluetooth", s.bluetooth);
   item("On-screen notifications", "Show a notification when the mode changes and hotkeys are pressed.", "osd", s.osd);
   item("Debug logging", "Write detailed messages to the service log (for bug reports).", "debug", s.debug);
+  item("Record sensor history", "Charts on the Monitor page: 15 minutes every 2 s, an hour every 5 s, 24 hours as per-minute averages (kept on disk). Turn off to stop recording.", "history_record", s.history_record);
+  item("Check for updates automatically", "Once a day the service asks GitHub for the latest release of open-uniwill-cc. Nothing else is sent.", "update_check", s.update_check);
+  if (S.keyboard && (S.keyboard.picture_modes_blocked || S.keyboard.picture_modes_override)) {
+    const c = h("input", { type: "checkbox" }); c.checked = !!S.keyboard.picture_modes_override;
+    c.addEventListener("change", () => act(() => api("setting", { key: "kb_picture_modes", value: c.checked })));
+    L.append(h("div", { class: "item" }, h("div", {}, h("h4", {}, t("Per-key and gaming lighting modes")),
+      h("p", {}, t("Hidden because this keyboard firmware ignores them. Turn on to try anyway."))), h("label", { class: "sw" }, c, h("span"))));
+  }
+  if (S.power && S.power.limits && S.power.limits.tjmax && !S.platform.amd)
+    item("Extended CPU temperature limit range", "Allow a CPU temperature limit down to 60 °C in the profiles (default: down to 85 °C).", "tcc_extended", s.tcc_extended);
   const sel = h("select", {}, ...[[0, t("Never")], [10, t("{0} seconds", 10)], [30, t("{0} seconds", 30)], [60, t("1 minute")], [300, t("{0} minutes", 5)], [600, t("{0} minutes", 10)]].map(([v, txt]) => { const o = h("option", { value: v }, txt); if (+s.kb_timeout === v) o.selected = true; return o; }));
   sel.addEventListener("change", () => act(() => api("setting", { key: "kb_timeout", value: +sel.value })));
   L.append(h("div", { class: "item" }, h("div", {}, h("h4", {}, t("Keyboard backlight auto-off")), h("p", {}, t("Turn the backlight off after inactivity and back on when a key is pressed."))), sel));
-  if (S.platform.rgb_lightbar || s.lightbar_on) L.append(h("div", { class: "item" }, h("div", {}, h("h4", {}, t("Light bar")), h("p", {}, t("Click to turn the LED bar on/off."))), h("button", { class: "btn ghost", onclick: () => act(() => api("setting", { key: "lightbar_trigger", value: true })) }, s.lightbar_on ? t("Turn off") : t("Turn on"))));
+  // EC light bar trigger (older models); hidden when the light bar is an ITE device with its own page
+  if ((S.platform.rgb_lightbar || s.lightbar_on) && !(S.keyboard && S.keyboard.lightbar)) L.append(h("div", { class: "item" }, h("div", {}, h("h4", {}, t("Light bar")), h("p", {}, t("Click to turn the LED bar on/off."))), h("button", { class: "btn ghost", onclick: () => act(() => api("setting", { key: "lightbar_trigger", value: true })) }, s.lightbar_on ? t("Turn off") : t("Turn on"))));
 }
 
 // ---------------------------------------------------------------- binding
@@ -784,19 +877,40 @@ const HIST = {
   fans: { name: "Fans", unit: "rpm", max: 0, lines: [["cf", "CPU", "var(--cpu)"], ["gf", "GPU", "var(--gpu)"]] },
   cooler: { name: "Cooler", unit: "%", max: 100, lines: [["lf", "Cooler fan", "var(--acc)"], ["lpx", "Pump (V × 8)", "var(--warn)"]] },
 };
-let histKey = "temp", histData = [], histT = 0;
+const HIST_RANGES = [[60, "1 min"], [300, "5 min"], [900, "15 min"], [3600, "1 hour"], [86400, "24 hours"]];
+let histKey = "temp", histData = [], histT = 0, histNow = Date.now() / 1000, histPin = null, histBase = "", histMax = 1;
+let histRange = 3600;
+try { const r = +localStorage.getItem("uwcc-hist-range"); if (HIST_RANGES.some(x => x[0] === r)) histRange = r; } catch (_) {}
+const histStep = () => histRange <= 900 ? 2 : histRange <= 3600 ? 5 : 60;
+const HIST_W = 800, HIST_H = 180;
 function renderHistSeg() {
   const seg = $("#hist-seg"); seg.innerHTML = "";
   for (const [k, d] of Object.entries(HIST)) seg.append(h("button", { class: k === histKey ? "on" : "", onclick: () => { histKey = k; renderHistSeg(); drawHistory(); } }, t(d.name)));
+  $("#hist-export-btn").title = t("Export");
+  const rs = $("#hist-range"); rs.innerHTML = "";
+  for (const [sec, name] of HIST_RANGES) rs.append(h("button", { class: sec === histRange ? "on" : "", onclick: () => {
+    histRange = sec; try { localStorage.setItem("uwcc-hist-range", sec); } catch (_) {}
+    unpinHistory(false); renderHistSeg(); loadHistory(true);
+  } }, t(name)));
 }
 async function loadHistory(force) {
-  if (!force && Date.now() - histT < 20000) return drawHistory();
-  try { histData = await api("history"); histT = Date.now(); histData.forEach(p => { p.lpx = p.lp != null ? p.lp * 8 : null; }); } catch (_) {}
+  if (histPin) return drawHistory();                       // paused on a point
+  const age = histRange <= 900 ? 1900 : histRange <= 3600 ? 9000 : 55000;
+  if (!force && Date.now() - histT < age) return drawHistory();
+  try {
+    histData = await api("history?range=" + histRange); histT = Date.now(); histNow = Date.now() / 1000;
+    histData.forEach(p => { p.lpx = p.lp != null ? p.lp * 8 : null; });
+  } catch (_) {}
   drawHistory();
 }
+function relLabel(sec) {
+  if (sec <= 0) return t("now");
+  return sec < 60 ? `−${sec} ${t("s")}` : sec < 3600 ? `−${Math.round(sec / 60)} ${t("min")}` : `−${Math.round(sec / 3600)} ${t("h")}`;
+}
+const histX = tt => Math.max(0, (tt - (histNow - histRange)) / histRange * HIST_W);
+const histY = v => HIST_H - Math.min(1, v / histMax) * HIST_H;
 function drawHistory() {
-  const svg = $("#hist-chart"), W = 800, H = 180, d = HIST[histKey];
-  const now = Date.now() / 1000, t0 = now - 3600;
+  const svg = $("#hist-chart"), W = HIST_W, H = HIST_H, d = HIST[histKey];
   let max = d.max;
   const marks = d.marks || [];
   if (histKey === "total") histData.forEach(p => { p.adapter = S && S.platform && S.platform.adapter_watt || null; });
@@ -807,56 +921,149 @@ function drawHistory() {
     for (const p of histData) for (const [k] of marks) if (p[k] > max && p[k] < max * 3) max = p[k];
     max = Math.ceil(max * 1.1 / 10) * 10;
   }
+  histMax = max;
   let g = "";
   for (const f of [0.25, 0.5, 0.75]) { const y = H - f * H; g += `<line x1="0" x2="${W}" y1="${y}" y2="${y}" stroke="#1f2830"/><text x="4" y="${y - 3}" fill="#55636e" font-size="10">${Math.round(max * f)} ${t(d.unit)}</text>`; }
-  for (let m = 0; m <= 60; m += 15) { const x = m === 60 ? W - 4 : (m / 60) * W + 2; g += `<text x="${x}" y="${H - 3}" fill="#55636e" font-size="10" text-anchor="${m === 60 ? "end" : "start"}">${m === 60 ? t("now") : "−" + (60 - m) + " " + t("min")}</text>`; }
+  const nt = { 60: 4, 300: 5, 900: 3, 3600: 4, 86400: 4 }[histRange] || 4;
+  for (let i = 0; i <= nt; i++) {
+    const x = i === nt ? W - 4 : (i / nt) * W + 2;
+    g += `<text x="${x}" y="${H - 3}" fill="#55636e" font-size="10" text-anchor="${i === nt ? "end" : "start"}">${relLabel(Math.round(histRange * (1 - i / nt)))}</text>`;
+  }
+  const gap = histStep() * 4;
   for (const [k, , color] of d.lines) {
     let path = "", pen = false, prevT = null;
     for (const p of histData) {
       const v = p[k];
-      if (v == null || (prevT && p.t - prevT > 20)) pen = false;
+      if (v == null || (prevT && p.t - prevT > gap)) pen = false;
       prevT = p.t;
       if (v == null) continue;
-      const x = Math.max(0, (p.t - t0) / 3600 * W), y = H - Math.min(1, v / max) * H;
-      path += (pen ? " L" : " M") + x.toFixed(1) + "," + y.toFixed(1); pen = true;
+      path += (pen ? " L" : " M") + histX(p.t).toFixed(1) + "," + histY(v).toFixed(1); pen = true;
     }
-    if (path) g += `<path d="${path}" fill="none" stroke="${color}" stroke-width="1.8"/>`;
+    if (path) g += `<path d="${path}" fill="none" stroke="${color}" stroke-width="1.8" vector-effect="non-scaling-stroke"/>`;
   }
   for (const [k, n, color] of marks) {            // limits: dashed step line + label at the latest value
     let path = "", last = null, lastX = 0;
     for (const p of histData) {
       const v = p[k]; if (v == null || v > max) { last = null; continue; }
-      const x = Math.max(0, (p.t - t0) / 3600 * W), y = H - v / max * H;
+      const x = histX(p.t), y = H - v / max * H;
       path += (last == null ? " M" : ` L${x.toFixed(1)},${(H - last / max * H).toFixed(1)} L`) + x.toFixed(1) + "," + y.toFixed(1);
       last = v; lastX = x;
     }
-    if (path) g += `<path d="${path}" fill="none" stroke="${color}" stroke-width="1.2" stroke-dasharray="6 4" opacity=".9"/>` +
+    if (path) g += `<path d="${path}" fill="none" stroke="${color}" stroke-width="1.2" stroke-dasharray="6 4" opacity=".9" vector-effect="non-scaling-stroke"/>` +
       `<text x="${Math.min(lastX, W - 4)}" y="${H - last / max * H - 4}" fill="${color}" font-size="10" text-anchor="end">${t(n)} ${last} ${t("W")}</text>`;
   }
+  const recording = !S || !S.settings || S.settings.history_record !== false;
   const hasData = histData.some(p => d.lines.some(([k]) => p[k] != null));
-  const msg = !histData.length ? t("collecting data…") : !hasData ? t(d.nodata || "no data") : "";
-  svg.innerHTML = msg ? g + `<text x="${W / 2}" y="${H / 2}" fill="#55636e" font-size="13" text-anchor="middle">${msg}</text>` : g;
+  const msg = !histData.length ? (recording ? t("collecting data…") : t("History recording is off (Settings → Switches)")) : !hasData ? t(d.nodata || "no data") : "";
+  histBase = msg ? g + `<text x="${W / 2}" y="${H / 2}" fill="#55636e" font-size="13" text-anchor="middle">${msg}</text>` : g;
+  svg.innerHTML = histBase + histOverlay(histPin, true);
+  histDots(histPin);
+  const notes = [];
+  if (!recording && histData.length) notes.push(t("Recording is off"));
+  if (histRange === 86400) notes.push(t("one point per minute (average)"));
   if (hasData) {                                  // latest / average / max of the visible series
-    const st = d.lines.map(([k, n]) => {
+    for (const [k, n] of d.lines) {
       const v = histData.map(p => p[k]).filter(x => x != null);
-      if (!v.length) return "";
+      const mx = histData.map(p => p[k + "_mx"] ?? p[k]).filter(x => x != null);
+      if (!v.length) continue;
       const avg = v.reduce((a, b) => a + b, 0) / v.length;
-      return `${t(n)}: ${t("now")} ${v[v.length - 1]} · ${t("avg")} ${Math.round(avg * 10) / 10} · ${t("max")} ${Math.max(...v)} ${t(d.unit)}`;
-    }).filter(Boolean);
+      notes.push(`${t(n)}: ${t("now")} ${v[v.length - 1]} · ${t("avg")} ${Math.round(avg * 10) / 10} · ${t("max")} ${Math.max(...mx)} ${t(d.unit)}`);
+    }
     for (const [k, n] of marks) {
       const v = histData.map(p => p[k]).filter(x => x != null);
-      if (v.length) st.push(`${t(n)}: ${v[v.length - 1]} ${t("W")}`);
+      if (v.length) notes.push(`${t(n)}: ${v[v.length - 1]} ${t("W")}`);
     }
-    $("#hist-stats").textContent = st.join("  |  ");
-  } else $("#hist-stats").textContent = "";
+  }
+  $("#hist-stats").textContent = notes.join("  |  ");
   const lg = $("#hist-legend"); lg.innerHTML = "";
   for (const [, n, color] of d.lines) lg.append(h("span", { class: "lg", style: `--c:${color}` }, t(n)));
   for (const [k, n, color] of marks) if (histData.some(p => p[k] != null)) lg.append(h("span", { class: "lg dash", style: `--c:${color}` }, t(n)));
+  renderHistDetail();
 }
+// -- hover / pinned point
+function histNearest(evt) {
+  const svg = $("#hist-chart"), r = svg.getBoundingClientRect();
+  if (!histData.length || !r.width) return null;
+  const tt = histNow - histRange + (evt.clientX - r.left) / r.width * histRange;
+  let best = null;
+  for (const p of histData) if (!best || Math.abs(p.t - tt) < Math.abs(best.t - tt)) best = p;
+  return best && Math.abs(best.t - tt) <= Math.max(histStep() * 3, histRange / 100) ? best : null;
+}
+function histDots(...pts) {                     // HTML dots: the SVG is stretched, circles would be ellipses
+  const box = $("#hist-dots"); box.innerHTML = "";
+  for (const p of pts) if (p) for (const [k, , color] of HIST[histKey].lines) if (p[k] != null)
+    box.append(h("span", { style: `left:${histX(p.t) / HIST_W * 100}%;top:${histY(p[k]) / HIST_H * 100}%;background:${color}` }));
+}
+function histOverlay(p, pinned) {
+  if (!p) return "";
+  const d = HIST[histKey], x = histX(p.t).toFixed(1);
+  let o = `<line x1="${x}" x2="${x}" y1="0" y2="${HIST_H}" stroke="${pinned ? "var(--acc)" : "#8c9aa6"}" stroke-width="1" ${pinned ? "" : 'stroke-dasharray="3 3"'} vector-effect="non-scaling-stroke"/>`;
+  return o;
+}
+const histTime = p => new Date(p.t * 1000).toLocaleTimeString() + (histRange === 86400 ? " · " + new Date(p.t * 1000).toLocaleDateString() : "");
+function histTipText(p) {
+  const d = HIST[histKey], rows = [histTime(p) + ` (${relLabel(Math.round(histNow - p.t))})`];
+  for (const [k, n] of d.lines) if (p[k] != null) rows.push(`${t(n)}: ${p[k]} ${t(d.unit)}` + (p[k + "_mx"] != null ? ` (${t("max")} ${p[k + "_mx"]})` : ""));
+  for (const [k, n] of d.marks || []) if (p[k] != null) rows.push(`${t(n)}: ${p[k]} ${t("W")}`);
+  return rows;
+}
+function unpinHistory(reload = true) {
+  if (!histPin) return;
+  histPin = null; $("#hist-detail").classList.add("hidden");
+  if (reload) loadHistory(true);
+}
+function renderHistDetail() {
+  const box = $("#hist-detail"), p = histPin;
+  if (!p) { box.classList.add("hidden"); return; }
+  const f = (v, u, mx) => v == null ? null : `${v} ${t(u)}` + (mx != null ? ` (${t("max")} ${mx})` : "");
+  const groups = [
+    [t("CPU"), [[t("Temperature"), f(p.ct, "°C", p.ct_mx)], [t("Load"), f(p.cl, "%")], [t("Power draw"), f(p.cp, "W", p.cp_mx)],
+      [t("Power limits"), [p.pl1, p.pl2, p.pl4].some(x => x != null) ? [p.pl1, p.pl2, p.pl4].map(x => x ?? "—").join(" / ") + " " + t("W") : null]]],
+    [t("GPU"), [[t("Temperature"), f(p.gt, "°C", p.gt_mx)], [t("Load"), f(p.gl, "%")], [t("Power draw"), f(p.gp, "W", p.gp_mx)], [t("GPU power limit"), f(p.gpl, "W")]]],
+    [t("Total power"), [[t("CPU + GPU"), f(p.tp, "W", p.tp_mx)], [t("From battery"), f(p.bp, "W")]]],
+    [t("Fans"), [[t("CPU"), f(p.cf, "rpm")], [t("GPU"), f(p.gf, "rpm")], [t("Cooler fan"), f(p.lf, "%")], [t("Pump"), f(p.lp, "V")]]],
+  ];
+  box.innerHTML = "";
+  box.append(h("div", { class: "row between wrap" },
+    h("b", {}, histTime(p) + (histRange === 86400 ? " · " + t("average of the minute") : "")),
+    h("button", { class: "btn ghost", onclick: () => unpinHistory() }, t("Resume"))));
+  const grid = h("div", { class: "hist-detail-grid" });
+  for (const [title, rows] of groups) {
+    const items = rows.filter(r => r[1] != null);
+    if (!items.length) continue;
+    const dl = h("dl", { class: "kv" });
+    for (const [k, v] of items) dl.append(h("dt", {}, k), h("dd", {}, v));
+    grid.append(h("div", {}, h("h4", {}, title), dl));
+  }
+  box.append(grid);
+  box.classList.remove("hidden");
+}
+(() => {
+  const svg = $("#hist-chart"), tip = $("#hist-tip");
+  svg.addEventListener("mousemove", e => {
+    const p = histNearest(e);
+    svg.innerHTML = histBase + histOverlay(histPin, true) + (p && p !== histPin ? histOverlay(p, false) : "");
+    histDots(histPin, p);
+    if (!p) { tip.classList.add("hidden"); return; }
+    tip.innerHTML = ""; histTipText(p).forEach((r, i) => tip.append(i ? h("div", {}, r) : h("b", {}, r)));
+    tip.classList.remove("hidden");
+    const wrap = svg.parentElement.getBoundingClientRect(), x = e.clientX - wrap.left;
+    tip.style.left = Math.min(Math.max(0, x + 12), wrap.width - tip.offsetWidth) + "px";
+    tip.style.top = "8px";
+  });
+  svg.addEventListener("mouseleave", () => { tip.classList.add("hidden"); svg.innerHTML = histBase + histOverlay(histPin, true); histDots(histPin); });
+  svg.addEventListener("click", e => {
+    const p = histNearest(e);
+    if (histPin && (!p || p === histPin)) return unpinHistory();
+    if (!p) return;
+    histPin = p; drawHistory();
+  });
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && histPin) unpinHistory(); });
+})();
 
 function downloadHistory(fmt) {
   // served by uwccd with Content-Disposition: works in Edge (Windows) and in the WebKitGTK window (Linux)
-  const a = h("a", { href: `/api/history/export?format=${fmt}&token=${encodeURIComponent(TOKEN)}`, download: "" });
+  const a = h("a", { href: `/api/history/export?format=${fmt}&range=${histRange}&token=${encodeURIComponent(TOKEN)}`, download: "" });
   document.body.append(a); a.click(); a.remove();
   toast(t("Export started — the file goes to your Downloads folder"));
 }
@@ -870,7 +1077,7 @@ function downloadChartPng() {
     const c = document.createElement("canvas"); c.width = W; c.height = H + 40;
     const x = c.getContext("2d"); x.fillStyle = "#0e1215"; x.fillRect(0, 0, c.width, c.height);
     x.fillStyle = "#c9d3da"; x.font = "16px sans-serif";
-    x.fillText(`${t(d.name)} — ${t("Last hour")} — ${new Date().toLocaleString()}`, 12, 26);
+    x.fillText(`${t(d.name)} — ${t((HIST_RANGES.find(r => r[0] === histRange) || [0, "1 hour"])[1])} — ${new Date().toLocaleString()}`, 12, 26);
     x.drawImage(img, 0, 40, W, H);
     c.toBlob(b => {
       const a = h("a", { href: URL.createObjectURL(b), download: `uwcc-${histKey}-${Date.now()}.png` });
@@ -879,10 +1086,110 @@ function downloadChartPng() {
   };
   img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(xml.replace("<svg", `<svg width="${W}" height="${H}"`));
 }
-$("#hist-export").addEventListener("change", e => {
+$("#hist-export-btn").addEventListener("click", e => { e.stopPropagation(); $("#hist-export-menu").classList.toggle("hidden"); });
+$$("#hist-export-menu button").forEach(b => b.addEventListener("click", () => {
+  $("#hist-export-menu").classList.add("hidden");
+  if (b.dataset.fmt === "png") downloadChartPng(); else downloadHistory(b.dataset.fmt);
+}));
+document.addEventListener("click", () => $("#hist-export-menu").classList.add("hidden"));
+
+// ---------------------------------------------------------------- about / updates
+function renderAbout() {
+  const u = S.update || {};
+  const a = (href, text) => h("a", { href, target: "_blank", rel: "noopener" }, text);
+  const dl = $("#about-kv"); dl.innerHTML = "";
+  const rows = [[t("Program"), "open-uniwill-cc"], [t("Version"), u.current || "—"],
+    [t("Source code"), a(u.repo || "https://github.com/aspidovss/open-uniwill-cc", (u.repo || "").replace("https://", "") || "github.com/aspidovss/open-uniwill-cc")],
+    [t("License"), "MIT (kernel/: GPL-2.0)"], [t("Report a problem"), a((u.repo || "") + "/issues", t("GitHub issues"))]];
+  for (const [k, v] of rows) dl.append(h("dt", {}, k), h("dd", {}, v));
+  let txt;
+  if (u.error) txt = t("Update check failed: {0}", u.error);
+  else if (u.newer) txt = t("Version {0} is available.", u.latest);
+  else if (u.checked) txt = t("You have the latest version (checked {0}).", new Date(u.checked * 1000).toLocaleString());
+  else txt = u.enabled ? t("Updates are checked automatically once a day.") : t("Automatic update check is off (Settings → Switches).");
+  $("#upd-text").innerHTML = "";
+  $("#upd-text").append(txt);
+  if (u.newer) {
+    $("#upd-text").append(" ", a(u.url, t("What's new")));
+    if (!u.can_install) $("#upd-text").append(h("br"), t("Linux: download the archive from the release page and run sudo bash install.sh in it."));
+  }
+  $("#upd-install").classList.toggle("hidden", !(u.newer && u.can_install && u.setup));
+}
+$("#upd-check").addEventListener("click", () => act(async () => { S.update = await api("update/check", {}); renderAbout(); },
+  null));
+$("#upd-install").addEventListener("click", () => act(async () => {
+  if (!confirm(t("Download version {0}, check its checksum and start the installer?", S.update.latest))) return;
+  await api("update/download", {});
+  toast(t("Downloading… the installer starts when it is ready (confirm the Windows prompt)."));
+}));
+
+// ---------------------------------------------------------------- export / import
+function download(url) {
+  const a = h("a", { href: url + (url.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(TOKEN), download: "" });
+  document.body.append(a); a.click(); a.remove();
+  toast(t("Export started — the file goes to your Downloads folder"));
+}
+async function readJsonFiles(input) {
+  const files = [...input.files]; input.value = "";
+  const out = [];
+  for (const f of files) {
+    try { out.push(JSON.parse(await f.text())); } catch (_) { throw new Error(t("{0} is not a JSON file", f.name)); }
+  }
+  return out.length === 1 ? out[0] : { files: out };
+}
+async function doImport(data, sections) {
+  let res;
+  try { res = await api("import", { data, sections }); }
+  catch (e) {
+    if (!String(e.message).includes("project")) throw e;
+    if (!confirm(e.message + "\n\n" + t("Import anyway?"))) return;
+    res = await api("import", { data, sections, force: true });
+  }
+  const parts = [];
+  if (res.tables.length) parts.push(t("fan tables: {0}", res.tables.join(", ")));
+  if (res.profiles.length) parts.push(t("profiles: {0}", res.profiles.length));
+  if (res.settings) parts.push(t("other settings — the service restarts"));
+  toast(parts.length ? t("Imported") + ": " + parts.join("; ") : t("Nothing was imported"), !parts.length);
+  if (res.skipped.length) console.warn("import skipped", res.skipped);
+  edit = null; pe = null;
+  if (res.restart) setTimeout(() => location.reload(), 6000);
+}
+$("#fan-io").addEventListener("change", e => {
   const v = e.target.value; e.target.value = "";
-  if (v === "png") downloadChartPng(); else if (v) downloadHistory(v);
+  if (v === "export-one") download(`/api/export?what=fans&table=${curTable}`);
+  else if (v === "export-all") download("/api/export?what=fans");
+  else if (v === "import") $("#fan-io-file").click();
 });
+$("#fan-io-file").addEventListener("change", e => act(async () => {
+  const data = await readJsonFiles(e.target);
+  // one table: load it into the editor as a preview, Save writes it
+  const tables = data.tables ? Object.values(data.tables) : (Array.isArray(data.CPU) ? [data] : null);
+  if (tables && tables.length === 1 && !data.profiles) {
+    const tb = tables[0];
+    edit = { ...JSON.parse(JSON.stringify(S.tables[curTable])), CPU: tb.CPU, GPU: tb.GPU || S.tables[curTable].GPU };
+    drawCurve(); drawPts();
+    return toast(t("Loaded into the editor for “{0}” — check the curve and press Save", TABLE_LABEL[curTable] || curTable));
+  }
+  if (!confirm(t("Import fan tables from the file? Tables with the same names are replaced."))) return;
+  await doImport(data, ["fans"]);
+}));
+$("#bk-export").addEventListener("click", () => download("/api/export?what=all"));
+$("#bk-import").addEventListener("click", () => $("#bk-file").click());
+function bkSections() { return ["fans", "profiles", "settings"].filter(k => $("#bk-" + k).checked); }
+$("#bk-file").addEventListener("change", e => act(async () => {
+  const data = await readJsonFiles(e.target), sec = bkSections();
+  if (!sec.length) return toast(t("Choose what to import"), true);
+  if (!confirm(t("Replace the current settings with the ones from the file?"))) return;
+  await doImport(data, sec);
+}));
+$("#bk-original").addEventListener("click", () => act(async () => {
+  const sec = bkSections().filter(k => k !== "settings");
+  if (!confirm(t("Import your fan curves and profiles from the original Control Center? The current ones are replaced."))) return;
+  const res = await api("import/original", { sections: sec.length ? sec : ["fans", "profiles"] });
+  toast(t("Imported") + ": " + t("fan tables: {0}", res.tables.length) + "; " + t("profiles: {0}", res.profiles.length));
+  edit = null; pe = null;
+}));
+(async () => { try { const o = await api("import/original"); $("#bk-original").classList.toggle("hidden", !o.available); } catch (_) {} })();
 
 // ---------------------------------------------------------------- automation page
 function renderAuto() {
@@ -924,7 +1231,6 @@ $$("#nav a").forEach(a => a.addEventListener("click", () => {
   if (a.dataset.page === "info") renderGpuUsers();
   if (a.dataset.page === "monitor") loadHistory();
 }));
-setInterval(() => { if ($("#page-monitor").classList.contains("active")) loadHistory(true); }, 30000);
 
 // ---------------------------------------------------------------- live events
 let connState = "wait";

@@ -69,6 +69,13 @@ class Handler(BaseHTTPRequestHandler):
         tok = self.headers.get("X-UWCC-Token") or parse_qs(urlparse(self.path).query).get("token", [None])[0]
         return tok is not None and secrets.compare_digest(tok, self.token)
 
+    @staticmethod
+    def _range(u):
+        """?range= seconds (60, 300, 900, 3600, 86400) or 1m / 5m / 15m / 1h / 24h; default one hour."""
+        v = (parse_qs(u.query).get("range") or ["3600"])[0].lower()
+        v = {"1m": "60", "5m": "300", "15m": "900", "1h": "3600", "24h": "86400"}.get(v, v)
+        return int(v) if v.isdigit() and 0 < int(v) <= 86400 else 3600
+
     def _json(self, code, obj):
         body = json.dumps(obj, ensure_ascii=False, default=str).encode()
         self.send_response(code)
@@ -80,7 +87,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def _body(self):
         n = int(self.headers.get("Content-Length") or 0)
-        if n > 1_000_000:
+        if n > 4_000_000:
             raise ValueError("body too large")
         raw = self.rfile.read(n) if n else b"{}"
         return json.loads(raw or b"{}")
@@ -121,7 +128,7 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == "/api/monitor":
                 return self._json(200, s.sampler.snapshot())
             if u.path == "/api/history":
-                return self._json(200, list(s.sampler.history))
+                return self._json(200, s.sampler.points(self._range(u)))
             if u.path == "/api/lighting/devices":
                 from .lighting import ite
                 kb = s.keyboard
@@ -132,12 +139,39 @@ class Handler(BaseHTTPRequestHandler):
                     "ec": {"caps_78e": f"{s.ec.read(0x78E):02X}", "caps_742": f"{s.ec.read(0x742):02X}",
                            "kb_id_73c": f"{s.ec.read(0x73C):02X}", "status_768": f"{s.ec.read(0x768):02X}",
                            "rgb_lightbar": s.pf.rgb_lightbar}})
+            if u.path == "/api/export":
+                from . import backup
+                q = parse_qs(u.query)
+                what = q.get("what", ["all"])[0]
+                table = q.get("table", [None])[0]
+                if table and table not in s.power.tables.tables:
+                    return self._json(404, {"error": f"no table {table}"})
+                data = json.dumps(backup.export(s, what, table), ensure_ascii=False, indent=1).encode()
+                tag = table or ("fans" if what == "fans" else "backup")
+                name = time.strftime(f"uwcc-{tag}-{s.pf.project_name}-%Y%m%d-%H%M%S.json")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Content-Disposition", f'attachment; filename="{name}"')
+                self.send_header("Content-Length", str(len(data)))
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(data)
+                return None
+            if u.path == "/api/update":
+                return self._json(200, s.updater.status())
+            if u.path == "/api/dynamic-boost":
+                from . import nvpowerd
+                return self._json(200, nvpowerd.status(refresh="refresh" in u.query) if s.pf.nv_gpu and not s.mock
+                                  else {"present": False, "active": False, "can_enable": False, "service": None})
+            if u.path == "/api/import/original":
+                from . import backup
+                return self._json(200, {"available": bool(backup.original_dir()), "dir": backup.original_dir()})
             if u.path == "/api/history/export":
                 from .automation import export_history
                 fmt = parse_qs(u.query).get("format", ["csv"])[0]
                 if fmt not in ("csv", "csv-excel", "json"):
                     return self._json(400, {"error": "format: csv | csv-excel | json"})
-                data, mime, ext = export_history(list(s.sampler.history), fmt)
+                data, mime, ext = export_history(s.sampler.points(self._range(u)), fmt)
                 name = time.strftime(f"uwcc-history-%Y%m%d-%H%M%S.{ext}")
                 self.send_response(200)
                 self.send_header("Content-Type", f"{mime}; charset=utf-8")
@@ -223,6 +257,29 @@ class Handler(BaseHTTPRequestHandler):
                                       speed=int(b.get("speed", 2)), direction=int(b.get("direction", 0)),
                                       colors=b.get("colors"), circular=bool(b.get("circular")), user=b.get("user"),
                                       alphabet=(str(b["alphabet"])[:40] if b.get("alphabet") else None))
+            elif path in ("/api/import", "/api/import/original"):
+                from . import backup
+                if path == "/api/import/original":
+                    data = backup.read_original()
+                    if not data:
+                        return self._json(404, {"error": "the original Control Center was not found"})
+                else:
+                    data = b.get("data")
+                sections = [x for x in (b.get("sections") or ["fans", "profiles"]) if x in ("fans", "profiles", "settings")]
+                res = backup.import_data(s, data, sections, check_project=not b.get("force"))
+                s.emit("status", {})
+                if res["restart"] and not s.mock:
+                    log.info("settings imported — restarting the service")
+                    threading.Timer(1.5, lambda: os._exit(3)).start()   # systemd / SCM restart the service
+                return self._json(200, res)
+            elif path == "/api/update/check":
+                s.updater.check()
+                return self._json(200, s.updater.status())
+            elif path == "/api/update/download":
+                return self._json(200, s.updater.download())
+            elif path == "/api/dynamic-boost/enable":
+                from . import nvpowerd
+                return self._json(200, nvpowerd.enable())
             elif path == "/api/lightbar":
                 s.keyboard.lightbar(str(b.get("zone", "hinge")), power=b.get("power"), effect=b.get("effect"),
                                     light=b.get("light"), speed=b.get("speed"), colors=b.get("colors"))
@@ -304,6 +361,16 @@ class Handler(BaseHTTPRequestHandler):
             s.settings_store.set("kb_timeout", v)
         elif key == "osd":
             s.settings_store.set("osd", bool(value))
+        elif key == "history_record":
+            s.settings_store.set("history_record", bool(value))
+        elif key == "update_check":
+            s.settings_store.set("update_check", bool(value))
+        elif key == "kb_picture_modes":
+            s.settings_store.set("kb_picture_modes", bool(value))
+        elif key == "tcc_extended":
+            s.settings_store.set("tcc_extended", bool(value))
+            if hasattr(s.power, "set_tcc_extended"):
+                s.power.set_tcc_extended(bool(value))
         elif key == "debug":
             from .service import apply_debug
             s.settings_store.set("debug", bool(value))

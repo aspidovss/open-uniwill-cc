@@ -59,16 +59,19 @@
         </div>
       </div>
       <div class="card">
-        <div class="row between wrap"><h3 data-i>Last hour</h3><div class="row wrap"><div class="seg" id="hist-seg"></div>
-          <select id="hist-export" title="Export">
-            <option value="" data-i>Export…</option>
-            <option value="csv" data-i>CSV (all sensors)</option>
-            <option value="csv-excel" data-i>CSV for Excel (; and decimal comma)</option>
-            <option value="json">JSON</option>
-            <option value="png" data-i>PNG (this chart)</option>
-          </select></div></div>
-        <svg id="hist-chart" viewBox="0 0 800 180" preserveAspectRatio="none" class="chart hist"></svg>
+        <div class="hist-head"><h3 data-i>History</h3><div class="seg sm" id="hist-range"></div>
+          <div class="seg sm" id="hist-seg"></div>
+          <div class="menu-wrap"><button class="btn ghost icon-btn" id="hist-export-btn" title="Export">⤓</button>
+            <div class="menu hidden" id="hist-export-menu">
+              <button data-fmt="csv" data-i>CSV (all sensors)</button>
+              <button data-fmt="csv-excel" data-i>CSV for Excel (; and decimal comma)</button>
+              <button data-fmt="json">JSON</button>
+              <button data-fmt="png" data-i>PNG (this chart)</button>
+            </div></div></div>
+        <div class="hist-wrap"><svg id="hist-chart" viewBox="0 0 800 180" preserveAspectRatio="none" class="chart hist"></svg>
+          <div id="hist-dots" class="hist-dots"></div><div id="hist-tip" class="hist-tip hidden"></div></div>
         <div class="row between wrap"><div class="legend" id="hist-legend"></div><div class="muted tiny" id="hist-stats" style="margin:0"></div></div>
+        <div id="hist-detail" class="hist-detail hidden"></div>
       </div>
       <div class="grid g3">
         <div class="card stat" id="st-mem"></div>
@@ -91,6 +94,13 @@
         <div id="gpu-users"></div>
       </div>
       <div class="card warn hidden" id="info-warn"></div>
+      <div class="card" id="about-card">
+        <div class="row between wrap"><h3 data-i>About</h3>
+          <div class="row"><button class="btn ghost" id="upd-check" data-i>Check for updates</button>
+            <button class="btn hidden" id="upd-install" data-i>Download and install</button></div></div>
+        <dl class="kv" id="about-kv"></dl>
+        <p class="muted tiny" id="upd-text"></p>
+      </div>
     </section>
 
     <!-- MODES -->
@@ -133,7 +143,14 @@
         <div class="table-wrap"><table class="pts" id="pts"></table></div>
         <div class="row between wrap">
           <label class="chk"><input type="checkbox" id="respective"> <span data-i>Enable fan control center (separate CPU/GPU control)</span></label>
-          <div class="row">
+          <div class="row wrap">
+            <select id="fan-io" title="Export / import">
+              <option value="" data-i>Export / import…</option>
+              <option value="export-one" data-i>Export this table</option>
+              <option value="export-all" data-i>Export all tables</option>
+              <option value="import" data-i>Import from file…</option>
+            </select>
+            <input type="file" id="fan-io-file" accept=".json,application/json" multiple class="hidden">
             <button class="btn ghost" id="btn-table-restore" data-i>Default</button>
             <button class="btn" id="btn-table-save" data-i>Save</button>
           </div>
@@ -308,6 +325,22 @@
     <section class="page" id="page-switches">
       <header class="ph"><h1 data-i>Switches</h1><p data-i>Keyboard, touchpad and system functions</p></header>
       <div class="list" id="switch-list"></div>
+      <div class="card" id="backup-card">
+        <h3 data-i>Backup and transfer</h3>
+        <p class="muted" data-i>Save all settings to a file, restore them, or move them between Windows and Linux on this laptop.</p>
+        <div class="row wrap">
+          <button class="btn ghost" id="bk-export" data-i>Export all settings</button>
+          <button class="btn ghost" id="bk-import" data-i>Import from file…</button>
+          <button class="btn ghost hidden" id="bk-original" data-i>Import from the original Control Center</button>
+          <input type="file" id="bk-file" accept=".json,application/json" multiple class="hidden">
+        </div>
+        <div class="row wrap" style="margin-top:8px">
+          <label class="chk"><input type="checkbox" id="bk-fans" checked> <span data-i>Fan curves</span></label>
+          <label class="chk"><input type="checkbox" id="bk-profiles" checked> <span data-i>Profiles (power and temperature limits)</span></label>
+          <label class="chk"><input type="checkbox" id="bk-settings" checked> <span data-i>Other settings (lighting, battery, automation, cooler…)</span></label>
+        </div>
+        <p class="muted tiny" data-i>Importing other settings restarts the service for a few seconds.</p>
+      </div>
     </section>
 
     <!-- AUTOMATION -->

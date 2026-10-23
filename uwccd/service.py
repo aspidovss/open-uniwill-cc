@@ -58,6 +58,11 @@ class Service:
         std = (choice == "std") or (choice != "cml" and not self.pf.commercial)
         self.power = (PowerManagerStd if std else PowerManager)(self.ec, self.pf, self.nvram, self.emit)
         log.info("fan manager: %s (%s)", self.power.manager, "forced" if choice in ("std", "cml") else "by project")
+        if std:
+            self.power.tcc_extended = bool(self.settings_store.get("tcc_extended", False))
+            if self.pf.nv_gpu:
+                from .gputemp import GpuTargetTemperature
+                self.power.gputemp = GpuTargetTemperature(mock=mock)
         self.settings = SettingsManager(self.ec, self.pf, self.nvram, self.settings_store, self.emit)
         self.battery = BatteryManager(self.ec, self.pf, self.nvram, self.settings_store)
         self.keyboard = KeyboardManager(self.ec, self.pf, self.settings_store, mock=mock)
@@ -69,6 +74,8 @@ class Service:
         self.liquid = LiquidCooler(self.ec, self.hottest_temp, self.emit, mock=mock,
                                    mode_fn=lambda: self.power.option.get("OperatingMode") if self.fan_control else None)
         self.sampler = Sampler(self)
+        from .updates import Updater
+        self.updater = Updater(self)
         self.rules = PowerSourceRules(self)
         self.threads = []
         self.fan_control = False
@@ -105,6 +112,16 @@ class Service:
                     pass
 
     # -- lifecycle -----------------------------------------------------------------------------
+    def _gpu_temp_probe(self):
+        """Read the GPU temperature-limit range once (on Linux only while the dGPU is awake: nvidia-smi wakes it)."""
+        time.sleep(8)
+        if not IS_WIN and not self.mock:
+            from .monitor import dgpu_state
+            if dgpu_state() not in (None, "active"):
+                return
+        if self.power.gputemp.info():
+            self.emit("status", {})
+
     def start(self):
         self.power.ac_online = self.monitor.ac_online()
         self.fan_control = self.pf.ramfan15 or bool(self.settings_store.get("force_fan_control"))
@@ -116,6 +133,8 @@ class Service:
         self.settings.start()
         self.battery.start()
         self.keyboard.start()
+        if getattr(self.power, "gputemp", None):
+            threading.Thread(target=self._gpu_temp_probe, daemon=True, name="gpu-temp-probe").start()
         if IS_WIN and not self.mock:
             from .win.wmievents import WmiHotkeyEvents
             hk = WmiHotkeyEvents(self.on_wmi_event)
@@ -129,6 +148,8 @@ class Service:
         self.threads.append(AppBinding(lambda: self.settings_store.get("app_binding", []),
                                        self.power.user_set_mode, lambda: self.power.option["OperatingMode"]))
         self.threads.append(self.sampler)
+        if not self.mock:
+            self.threads.append(self.updater)
         for t in self.threads:
             t.start()
         self.liquid.start()
@@ -136,6 +157,7 @@ class Service:
 
     def stop(self):
         self.liquid.stop()
+        self.sampler.save_day()
         for t in self.threads:
             getattr(t, "stop").set()
         if self.fan_control:
@@ -219,6 +241,7 @@ class Service:
                          "fan_control": self.fan_control,
                          "hotkeys": any(t.name == "hotkeys" and getattr(t, "available", False) for t in self.threads),
                          "os": "windows" if IS_WIN else "linux"},
+            "update": self.updater.status(),
             "power": p.status(),
             "profiles": p.profiles,
             "tables": {n: p.tables.tables.get(n) for n in p.TABLE_NAMES},

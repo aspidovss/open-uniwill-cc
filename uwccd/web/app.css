@@ -80,6 +80,7 @@ dl.kv dt{color:var(--muted)}dl.kv dd{margin:0;word-break:break-word}
 .mode.on .badge{display:block}
 .mode .glyph{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;background:var(--bg3);font-size:22px}
 .lg.dash::before{background:repeating-linear-gradient(90deg,var(--c) 0 5px,transparent 5px 8px)!important}
+.warn-text{color:var(--warn,#f5a524)!important}
 .seg{display:inline-flex;background:var(--bg1);border:1px solid var(--line);border-radius:10px;padding:3px;gap:3px;flex-wrap:wrap}
 .seg button{background:none;border:0;padding:7px 14px;border-radius:8px;cursor:pointer;color:var(--muted)}
 .seg button.on{background:var(--bg3);color:#fff;box-shadow:0 0 0 1px var(--acc) inset}
@@ -136,7 +137,7 @@ table.pts td.na{opacity:.35}
 .choice h4{margin:0 0 6px}.choice p{margin:0;color:var(--muted);font-size:12.5px}
 table.bind{width:100%;border-collapse:collapse;margin-bottom:12px}
 table.bind td,table.bind th{padding:8px;border-bottom:1px solid var(--line);text-align:left}
-#toast{position:fixed;right:20px;bottom:20px;display:grid;gap:8px;z-index:50}
+#toast{position:fixed;right:20px;top:20px;display:grid;gap:8px;z-index:50;max-width:min(440px,calc(100vw - 40px))}
 .tst{background:var(--bg3);border:1px solid var(--line);padding:10px 14px;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.4);animation:fade .2s}
 .tst.err{border-color:var(--bad)}
 #osd{position:fixed;left:50%;bottom:70px;transform:translateX(-50%);background:rgba(8,10,12,.92);border:1px solid var(--acc);color:#fff;border-radius:14px;padding:14px 24px;font-size:18px;font-weight:650;opacity:0;transition:opacity .25s;pointer-events:none}
@@ -166,3 +167,22 @@ table.bind td,table.bind th{padding:8px;border-bottom:1px solid var(--line);text
 .gpu-proc code{color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 @media (max-width:1000px){.g4{grid-template-columns:repeat(2,1fr)}.g3,.modes,.choices{grid-template-columns:1fr}.lc-modes,.modes.four{grid-template-columns:repeat(2,1fr)}.pe-row{grid-template-columns:1fr}}
 @media (max-width:760px){#app{grid-template-columns:1fr}.nav{display:none}.g2,.g4{grid-template-columns:1fr}main{padding:16px}}
+#about-card a{color:var(--acc);text-decoration:none}#about-card a:hover{text-decoration:underline}
+#upd-text{margin:14px 0 0}
+.hist-wrap{position:relative}.chart.hist{cursor:crosshair}
+.hist-tip{position:absolute;pointer-events:none;background:#0b0f12f0;border:1px solid #2a3540;border-radius:8px;padding:6px 9px;font-size:12px;line-height:1.45;white-space:nowrap;z-index:5}
+.hist-detail{margin-top:12px;padding:12px 14px;border:1px solid #2a3540;border-radius:10px;background:#0f1418}
+.hist-detail-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px 24px;margin-top:10px}
+.hist-detail-grid h4{margin:0 0 6px;font-size:13px}.hist-detail dl.kv{grid-template-columns:110px 1fr;gap:4px 10px;font-size:12px}
+.hist-dots{position:absolute;inset:0;pointer-events:none}.hist-dots span{position:absolute;width:7px;height:7px;margin:-3.5px 0 0 -3.5px;border-radius:50%;box-shadow:0 0 0 2px #0e1215}
+.chart.hist{display:block}
+.hist-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}.hist-head h3{margin:0 4px 0 0}
+.hist-head #hist-seg{margin-left:auto}
+.seg.sm{padding:2px;gap:2px}.seg.sm button{padding:4px 9px;font-size:12.5px}
+.menu-wrap{position:relative}.icon-btn{padding:5px 11px;font-size:16px;line-height:1}
+.menu{position:absolute;right:0;top:calc(100% + 6px);z-index:20;background:var(--bg2,#151b20);border:1px solid var(--line);border-radius:10px;padding:4px;min-width:250px;box-shadow:0 8px 24px #0008;display:flex;flex-direction:column}
+.menu.hidden{display:none}.menu button{background:none;border:0;color:var(--fg);text-align:left;padding:8px 10px;border-radius:7px;cursor:pointer;font-size:13px}
+.menu button:hover{background:var(--bg3)}
+.menu{min-width:0}.menu button{white-space:nowrap}
+.btn.busy{opacity:.7;cursor:progress}.btn.done{background:var(--acc2);color:#fff;border-color:var(--acc2)}
+.btn-err{color:var(--bad);font-size:12.5px;max-width:420px;align-self:center;margin:0 4px;line-height:1.35}

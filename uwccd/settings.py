@@ -219,6 +219,9 @@ class SettingsManager:
             "kb_timeout": self.st.get("kb_timeout", 0),
             "osd": self.st.get("osd", True),
             "debug": bool(self.st.get("debug", False)),
+            "tcc_extended": bool(self.st.get("tcc_extended", False)),
+            "update_check": bool(self.st.get("update_check", True)),
+            "history_record": bool(self.st.get("history_record", True)),
             "lang": self.st.get("lang", "en"),
             "webcam": self.webcam(),
         }

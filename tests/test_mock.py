@@ -318,6 +318,78 @@ class CustomModeService(MockService):
         self.assertEqual(self.post("lightbar", {"zone": "nope", "power": True})[0], 400)
         self.assertEqual(self.post("lightbar", {"zone": "base", "effect": "disco"})[0], 400)
 
+    def test_temperature_limits(self):
+        lim = self.get("state")["power"]["limits"]
+        self.assertEqual(lim["tcc_max"], max(lim["tcc_fw_max"], 15))
+        self.assertIn("tjmax", lim)
+        body = lambda v: {"CPU": {"TccOffsetSwitch": 1, "TccOffset": v}}            # noqa: E731
+        self.assertEqual(self.post("profiles/Mode4_Profile4", body(15), "PUT")[0], 200)
+        self.assertEqual(self.post("profiles/Mode4_Profile4", body(30), "PUT")[0], 400)
+        self.assertEqual(self.post("setting", {"key": "tcc_extended", "value": True})[0], 200)
+        self.assertEqual(self.get("state")["power"]["limits"]["tcc_max"], 40)
+        self.assertEqual(self.post("profiles/Mode4_Profile4", body(30), "PUT")[0], 200)
+        self.assertEqual(self.post("profiles/Mode4_Profile4", body(41), "PUT")[0], 400)
+        self.post("setting", {"key": "tcc_extended", "value": False})
+        self.assertEqual(self.post("profile-reset/Mode4_Profile4", {})[0], 200)
+        gt = self.get("state")["power"]["limits"].get("gpu_temp")
+        if gt:                                                                        # mock dGPU: 65..87 °C
+            g = lambda v: {"GPU": {"TargetTemperatureSwitch": 1, "TargetTemperature": v}}  # noqa: E731
+            self.assertEqual(self.post("profiles/Mode4_Profile4", g(75), "PUT")[0], 200)
+            self.assertEqual(self.post("profiles/Mode4_Profile4", g(120), "PUT")[0], 400)
+            self.post("profile-reset/Mode4_Profile4", {})
+
+    def test_export_import(self):
+        def raw(path):
+            r = urllib.request.Request(f"http://127.0.0.1:{self.port}/api/{path}", headers={"X-UWCC-Token": TOKEN})
+            return json.load(urllib.request.urlopen(r, timeout=10))
+        one = raw("export?what=fans&table=M4T3")
+        self.assertEqual((one["format"], one["kind"], list(one["tables"])), ("open-uniwill-cc", "fans", ["M4T3"]))
+        full = raw("export?what=all")
+        self.assertIn("Mode4_Profile3", full["profiles"])
+        self.assertIn("settings", full)
+        # change a curve point, import it back
+        t = one["tables"]["M4T3"]
+        t["CPU"][0]["Duty"] = 33
+        code, r = self.post("import", {"data": one, "sections": ["fans"]})
+        self.assertEqual((code, r["tables"]), (200, ["M4T3"]))
+        self.assertEqual(self.get("state")["tables"]["M4T3"]["CPU"][0]["Duty"], 33)
+        # another laptop: refused unless forced
+        other = dict(one, project_id="0x99", project="other")
+        self.assertEqual(self.post("import", {"data": other, "sections": ["fans"]})[0], 400)
+        self.assertEqual(self.post("import", {"data": other, "sections": ["fans"], "force": True})[0], 200)
+        # a profile file of the original Control Center
+        prof = {"Name": "Mode4_Profile3", "CPU": {"PL1": 70, "PL2": 100, "PL4": 150, "TccOffsetSwitch": 1, "TccOffset": 10},
+                "GPU": {}, "FAN": {}, "CustomizeName": "From OEM"}
+        code, r = self.post("import", {"data": {"files": [prof]}, "sections": ["profiles"]})
+        self.assertEqual((code, r["profiles"]), (200, ["Mode4_Profile3"]))
+        p3 = self.get("state")["profiles"]["Mode4_Profile3"]
+        self.assertEqual((p3["CPU"]["PL1"], p3["CPU"]["TccOffset"], p3["CustomizeName"]), (70, 10, "From OEM"))
+        self.assertEqual(self.post("import", {"data": {"hello": 1}})[0], 400)
+        self.post("profile-reset/Mode4_Profile3", {})
+        self.post("table/M4T3/restore", {})
+
+    def test_update_and_dynamic_boost_offline(self):
+        u = self.get("update")
+        self.assertEqual(u["repo"], "https://github.com/aspidovss/open-uniwill-cc")
+        self.assertTrue(u["enabled"])
+        self.assertIsNone(u["checked"])                    # nothing is requested in mock mode
+        self.assertIn("present", self.get("dynamic-boost"))
+        self.assertEqual(self.post("setting", {"key": "update_check", "value": False})[0], 200)
+        self.assertFalse(self.get("update")["enabled"])
+        self.post("setting", {"key": "update_check", "value": True})
+
+    def test_history_ranges(self):
+        from uwccd.automation import average
+        avg = average([{"t": 60, "ct": 50, "pl1": 45}, {"t": 62, "ct": 70, "pl1": 55}])
+        self.assertEqual((avg["ct"], avg["ct_mx"], avg["pl1"], avg["t"]), (60.0, 70, 55, 62))
+        time.sleep(2.5)
+        self.assertIsInstance(self.get("history?range=60"), list)
+        self.assertTrue(self.get("history?range=1m"))                  # fine 2 s buffer is filled at once
+        self.assertIsInstance(self.get("history?range=24h"), list)
+        self.assertEqual(self.post("setting", {"key": "history_record", "value": False})[0], 200)
+        self.assertFalse(self.get("state")["settings"]["history_record"])
+        self.post("setting", {"key": "history_record", "value": True})
+
     def test_history_export(self):
         r = urllib.request.Request(f"http://127.0.0.1:{self.port}/api/history/export?format=csv", headers={"X-UWCC-Token": TOKEN})
         resp = urllib.request.urlopen(r, timeout=10)

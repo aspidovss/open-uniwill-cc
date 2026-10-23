@@ -34,7 +34,7 @@ DEFAULT_PROFILE = {
             "AmdFPPT": 215, "AmdTccTarget": 95, "AmdCoreFreq": 0, "AmdCoreFreqOC": 0,
             "AmdCoreVoltage": 0, "AmdCoreVoltageOC": 0},
     "GPU": {"CoreClockOffset": 0, "CoreClockOffsetOC": 0, "MemoryClockOffset": 0, "MemoryClockOffsetOC": 0,
-            "TargetTemperature": 87, "ConfigurableTGPSwitch": 0, "ConfigurableTGPTarget": 0,
+            "TargetTemperature": 87, "TargetTemperatureSwitch": 0, "ConfigurableTGPSwitch": 0, "ConfigurableTGPTarget": 0,
             "DynamicBoostSwitch": 0, "DynamicBoost": 0, "ConfigurableTGPSwitch_S2": 0,
             "ConfigurableTGPTarget_S2": 0, "DynamicBoostSwitch_S2": 0, "DynamicBoost_S2": 0,
             "DynamicBoostTotalProcessingPowerTarget": 255, "WhisperModeSwitch": 0, "WhisperModeSetting": 0,

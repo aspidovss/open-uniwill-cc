@@ -15,11 +15,13 @@ Windows-only parts of the original are not ported: GPU core/memory clock offsets
 (NVAPI), CPU core voltage offset (Intel OC SDK), WhisperMode (NVAPI), memory overclock (BIOS variable).
 """
 import copy
+import threading
 import logging
 import os
 
 from . import regs as R
 from . import store
+from .monitor import tjmax
 from .fan import (DEFAULT_PROFILE, MODE_NAMES, FanTables, PowerManager, copy_table)
 from .hw import dmi
 
@@ -154,6 +156,21 @@ class PowerManagerStd(PowerManager):
         self.limits = {}
         self.tcc_default = {}
         self.fan_safety = False
+        self.tcc_extended = False      # settings: allow a CPU temperature limit down to TJMAX - TCC_EXTENDED
+        self.gputemp = None            # GpuTargetTemperature (set by the service)
+
+    # The original UI let the per-profile "Temperature Limit" go past the Smart APC TccOffset (5 on MAIBENBEN
+    # project 0x10): its saved profiles hold 10 and 15. So: at least 15 (Tjmax - 15 = 85 °C), 40 when extended.
+    TCC_STANDARD, TCC_EXTENDED = 15, 40
+
+    def set_tcc_extended(self, on):
+        self.tcc_extended = bool(on)
+        if self.limits:
+            self.limits["tcc_max"] = self._tcc_max()
+
+    def _tcc_max(self):
+        fw = self.smapc.get("TccOffset", 0)
+        return max(fw, self.TCC_EXTENDED if self.tcc_extended else self.TCC_STANDARD)
 
     # -- defaults and limits ------------------------------------------------------------------------
     def read_limits(self):
@@ -182,11 +199,12 @@ class PowerManagerStd(PowerManager):
             "source": src,
             "pl_min": 10,
             "pl1_max": sm["PL1"], "pl2_max": sm["PL2"], "pl4_max": sm["PL4"],
-            "tcc_max": sm["TccOffset"],
+            "tcc_fw_max": sm["TccOffset"], "tcc_max": 0, "tjmax": tjmax(),
             "tgp_default": sm["DefaultTGP"], "tgp_max": sm["DefaultTGP"] + sm["ConfigurableTGP"],
             "ctgp_support": sm["ConfigurableTGP"] > 0, "db_max": sm["DynamicBoost"],
             "db_support": sm["DynamicBoost"] > 0,
         }
+        self.limits["tcc_max"] = self._tcc_max()
         log.info("custom-mode limits (%s): %s", src, self.limits)
 
     def _refresh_mode(self, name, cname, pl, table, skip=0):
@@ -329,6 +347,10 @@ class PowerManagerStd(PowerManager):
                 self.set_tcc(cpu["TccOffset"], cpu["TccOffsetSwitch"] == 1)
             if self.pf.nv_gpu:
                 self.apply_gpu_std(p["GPU"])
+                if self.gputemp:
+                    g = p["GPU"]
+                    threading.Thread(target=self.gputemp.apply, daemon=True, name="gpu-temp",
+                                     args=(g.get("TargetTemperatureSwitch") == 1, g.get("TargetTemperature", 87))).start()
             f = p["FAN"]
             self.set_fan_switch_speed(f.get("FanSwitchSpeedEnabled") == 1, f.get("FanSwitchSpeed", 300))
             log.info("profile applied: mode=%s %s table=%s", STD_MODE_NAMES.get(mode), p["Name"], f["TableName"])
@@ -433,6 +455,15 @@ class PowerManagerStd(PowerManager):
             if not lim["tgp_default"] <= v <= max(hi, lim["tgp_default"]):
                 raise ValueError(f"cTGP {lim['tgp_default']}..{hi} W")
             gpu["ConfigurableTGPTarget"] = v
+        if "TargetTemperatureSwitch" in g:
+            gpu["TargetTemperatureSwitch"] = 1 if g["TargetTemperatureSwitch"] else 0
+        if "TargetTemperature" in g:
+            v = int(g["TargetTemperature"])
+            info = self.gputemp.info() if self.gputemp else None
+            lo, hi = (info["min"], info["max"]) if info else (50, 95)
+            if v != gpu.get("TargetTemperature") and not lo <= v <= hi:
+                raise ValueError(f"GPU temperature limit {lo}..{hi} °C")
+            gpu["TargetTemperature"] = v
         if "DynamicBoostSwitch" in g:
             gpu["DynamicBoostSwitch"] = 1 if g["DynamicBoostSwitch"] else 0
         if "DynamicBoost" in g:
@@ -513,7 +544,8 @@ class PowerManagerStd(PowerManager):
             "current_table": (cur.get("FAN") or {}).get("TableName"),
             "ac_online": self.ac_online,
             "pl_default": self.pl_default,
-            "limits": self.limits,
+            "limits": {**self.limits, "gpu_temp": self.gputemp.cache if self.gputemp else None,
+                       "tcc_extended": self.tcc_extended},
             "fan_safety": self.fan_safety,
             "table_names": self.TABLE_NAMES,
         }

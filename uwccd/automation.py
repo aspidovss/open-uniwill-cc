@@ -1,7 +1,8 @@
 """Service-side automation that goes beyond the OEM program (ideas from Control Center X V5 / OpenRevo):
 
-  * Sampler      — one monitor snapshot every 2 s shared by all UI clients, plus a one-hour history
-                   (every 5 s) of temperatures, load, CPU package / GPU power, fans and the liquid cooler;
+  * Sampler      — one monitor snapshot every 2 s shared by all UI clients, plus the sensor history
+                   (temperatures, load, CPU package / GPU power, fans, liquid cooler) in three resolutions:
+                   every 2 s for 15 min, every 5 s for an hour, per-minute averages for 24 h (kept on disk);
   * overheat     — notify when the CPU or GPU stays at/above a limit for 30 s (at most once in 10 min),
                    optionally switch Fan Boost on if it is still hot 30 s after the notice;
   * power source — switch the operating mode when the charger is plugged in / unplugged, turn the keyboard
@@ -24,6 +25,12 @@ HOLD = 30            # s above the limit before a notice
 REPEAT = 600         # s between two notices for the same sensor
 HISTORY_STEP = 5     # s
 HISTORY_LEN = 720    # one hour
+FINE_LEN = 450       # 15 min of 2 s samples
+DAY_STEP = 60        # s, one averaged point per minute
+DAY_LEN = 1440       # 24 h
+DAY_SAVE = 600       # s between writes of the 24 h history to disk
+LAST_KEYS = ("pl1", "pl2", "pl4", "gpl")      # limits: the last value of the minute, not an average
+RANGES = {60: "fine", 300: "fine", 900: "fine", 3600: "history", 86400: "day"}
 
 DEFAULTS = {
     "alerts": True, "cpu_alert": 95, "gpu_alert": 87, "overheat_boost": False,
@@ -43,7 +50,12 @@ class Sampler(threading.Thread):
         self.stop = threading.Event()
         self.latest = None
         self.history = collections.deque(maxlen=HISTORY_LEN)
+        self.fine = collections.deque(maxlen=FINE_LEN)
+        self.day = collections.deque(maxlen=DAY_LEN)
+        self._minute = []                    # fine points of the current minute
         self._last_hist = 0.0
+        self._last_save = time.time()
+        self._load_day()
         self.hot = {"cpu": {"since": None, "notified": 0.0, "boosted": False},
                     "gpu": {"since": None, "notified": 0.0, "boosted": False}}
         self.lock = threading.Lock()
@@ -65,13 +77,54 @@ class Sampler(threading.Thread):
                 with self.lock:
                     self._sample()
                 m = self.latest
-                now = time.time()
-                if now - self._last_hist >= HISTORY_STEP:
-                    self._last_hist = now
-                    self.history.append(self._point(m))
+                if self.recording():
+                    self._record(m)
                 self._overheat(m)
             except Exception:  # noqa: BLE001
                 log.exception("sampler")
+
+    # -- history ---------------------------------------------------------------------------------
+    def recording(self):
+        return bool(self.svc.settings_store.get("history_record", True))
+
+    def _record(self, m):
+        now = time.time()
+        p = self._point(m)
+        self.fine.append(p)
+        if now - self._last_hist >= HISTORY_STEP:
+            self._last_hist = now
+            self.history.append(p)
+        if self._minute and int(p["t"]) // DAY_STEP != int(self._minute[0]["t"]) // DAY_STEP:
+            self.day.append(average(self._minute))
+            self._minute = []
+        self._minute.append(p)
+        if now - self._last_save >= DAY_SAVE:
+            self.save_day()
+
+    def points(self, seconds=3600):
+        """History for the last `seconds` (60 / 300 / 900 -> 2 s, 3600 -> 5 s, 86400 -> 1 min averages)."""
+        buf = getattr(self, RANGES.get(seconds) or ("day" if seconds > 3600 else "history"))
+        t0 = time.time() - seconds
+        return [p for p in list(buf) if p["t"] >= t0]
+
+    def _day_path(self):
+        from . import store
+        return store.path("history-24h.json")
+
+    def _load_day(self):
+        from . import store
+        data = store.load_json(self._day_path(), [])
+        t0 = time.time() - DAY_LEN * DAY_STEP
+        if isinstance(data, list):
+            self.day.extend(p for p in data if isinstance(p, dict) and isinstance(p.get("t"), (int, float)) and p["t"] >= t0)
+
+    def save_day(self):
+        from . import store
+        self._last_save = time.time()
+        try:
+            store.save_json(self._day_path(), list(self.day))
+        except OSError as e:
+            log.warning("cannot save the 24 h history: %s", e)
 
     def _limits(self):
         """Current CPU power limits for the chart marks: what the service wrote to the EC (0x783/84/85);
@@ -139,6 +192,24 @@ class Sampler(threading.Thread):
                 self.svc.emit("overheat_boost", {"sensor": sensor, "temp": t})
 
 
+def average(points):
+    """One per-minute point of the 24 h history: averages of the sensors, the last value of the limits."""
+    out = {"t": points[-1]["t"], "n": len(points)}
+    for k in points[-1]:
+        if k in ("t", "n"):
+            continue
+        vals = [p[k] for p in points if isinstance(p.get(k), (int, float))]
+        if k in LAST_KEYS:
+            out[k] = points[-1].get(k)
+        elif vals:
+            out[k] = round(sum(vals) / len(vals), 1)
+            if k in ("ct", "gt", "cp", "gp", "tp"):
+                out[k + "_mx"] = max(vals)          # peaks of the minute
+        else:
+            out[k] = None
+    return out
+
+
 EXPORT_COLUMNS = [("t", "time"), ("ct", "cpu_temp_c"), ("gt", "gpu_temp_c"), ("cl", "cpu_load_pct"),
                   ("gl", "gpu_load_pct"), ("cp", "cpu_power_w"), ("gp", "gpu_power_w"), ("tp", "cpu_gpu_power_w"),
                   ("bp", "battery_discharge_w"), ("pl1", "cpu_pl1_w"), ("pl2", "cpu_pl2_w"), ("pl4", "cpu_pl4_w"),
@@ -147,7 +218,7 @@ EXPORT_COLUMNS = [("t", "time"), ("ct", "cpu_temp_c"), ("gt", "gpu_temp_c"), ("c
 
 
 def export_history(points, fmt="csv"):
-    """The last hour of samples as CSV (UTF-8 with BOM, ISO local time) or JSON. Returns (bytes, mime, ext)."""
+    """History samples as CSV (UTF-8 with BOM, ISO local time) or JSON. Returns (bytes, mime, ext)."""
     rows = []
     for p in points:
         r = {}

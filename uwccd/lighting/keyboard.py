@@ -98,9 +98,17 @@ class KeyboardManager:
                     log.warning("restore light bar %s: %s", zone, e)
 
     # -- API -------------------------------------------------------------------------
+    def picture_modes_blocked(self):
+        """User mode (per-key colours) and the gaming zones are drawn as 12h/16h pictures; ITE firmware 0x11 ignores
+        them (MAIBENBEN Tsunami), so they are hidden there unless the user turns them on (setting kb_picture_modes)."""
+        return bool(self.rgb and self.rgb.ver[0] == 0x11 and not self.rgb.fw_effects()
+                    and not self.st.get("kb_picture_modes", False))
+
     def set_effect(self, **kw):
         if self.kind != "rgb":
             raise ValueError("no RGB keyboard")
+        if self.picture_modes_blocked() and kw.get("idx") in (14, 15):
+            raise ValueError("this keyboard does not support per-key / gaming modes (see Settings to try anyway)")
         with self.lock:
             self.rgb.set_effect(**kw)
             self.st.set("kb_effect", self.rgb.saved)
@@ -160,7 +168,10 @@ class KeyboardManager:
              "effects": {i: n for i, (n, _) in ite.EFFECTS.items()},
              "software_effects": [i for i, (_, c) in ite.EFFECTS.items() if c in ite.AP_EFFECTS],
              "unsupported_effects": [i for i, (_, c) in ite.EFFECTS.items()
-                                     if c == 0x22 or (c in ite.LB_ONLY_EFFECTS and not (self.rgb and self.rgb.kb_type in ite.ME_LIGHTBAR))],
+                                     if c == 0x22 or (c in ite.LB_ONLY_EFFECTS and not (self.rgb and self.rgb.kb_type in ite.ME_LIGHTBAR))
+                                     or (i in (14, 15) and self.picture_modes_blocked())],
+             "picture_modes_blocked": self.picture_modes_blocked(),
+             "picture_modes_override": bool(self.st.get("kb_picture_modes", False)),
              "default_colors": ite.DEFAULT_COLORS}
         if self.lb:
             d["lightbar"] = {"device": self.lb.info(), "effects": list(ite.LB_EFFECTS),

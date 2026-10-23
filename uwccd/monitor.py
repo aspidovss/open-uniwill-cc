@@ -4,6 +4,7 @@ import platform as platform_mod
 import os
 import shutil
 import subprocess
+import sys
 import time
 
 from . import regs as R
@@ -66,6 +67,17 @@ def dgpu_users():
             cmd = (_read(os.path.join(pdir, "cmdline"), "") or "").replace("\0", " ").strip()
             out.append({"pid": pid, "name": name, "cmd": cmd[:160]})
     return sorted(out, key=lambda x: x["pid"])
+
+
+def tjmax():
+    """Maximum junction temperature: coretemp "crit" on Linux (Intel), 100 °C otherwise (Intel HX/H default)."""
+    if sys.platform != "win32":
+        for d in glob.glob("/sys/class/hwmon/hwmon*"):
+            if _read(os.path.join(d, "name"), "") == "coretemp":
+                v = _read(os.path.join(d, "temp1_crit"))
+                if v and v.isdigit() and 60000 <= int(v) <= 130000:
+                    return int(v) // 1000
+    return 100
 
 
 class Rapl:

@@ -12,6 +12,7 @@ Lives in the notification area (hidden by default), starts with Windows, and:
   ControlCenter.exe --open     open the window of the running instance (or start it)
 """
 import ctypes
+import hashlib
 import json
 import logging
 import logging.handlers
@@ -27,7 +28,7 @@ import winreg
 import pystray
 from PIL import Image, ImageDraw
 
-from .. import agentcore
+from .. import agentcore, updates
 from . import winapi
 from .winplat import data_root
 
@@ -237,6 +238,11 @@ class Tray:
             items.append(I(T("lang"), pystray.Menu(
                 I("English", lambda *_: self.act("setting", {"key": "lang", "value": "en"}), checked=lambda *_: self.lang == "en", radio=True),
                 I("Русский", lambda *_: self.act("setting", {"key": "lang", "value": "ru"}), checked=lambda *_: self.lang == "ru", radio=True))))
+        upd = (st or {}).get("update") or {}
+        if upd.get("newer") and upd.get("setup"):
+            items.append(I(T("upd_install", upd.get("latest")), lambda *_: self.act("update/download", {})))
+        items.append(I(T("upd_check"), self.check_updates))
+        items.append(I(T("github"), lambda *_: os.startfile(updates.REPO_URL)))
         items.append(I(T("autostart"), self.toggle_autostart, checked=self.autostart_enabled))
         items.append(I(T("exit"), lambda *_: self.icon.stop()))
         return items
@@ -264,8 +270,44 @@ class Tray:
                     self.icon.notify(self.T("svc_down_body"), self.T("svc_down"))
                 time.sleep(3)
 
+    def check_updates(self, *_):
+        def run():
+            try:
+                r = self.api.call("update/check", {}, timeout=40)
+                if r.get("error"):
+                    self.icon.notify(str(r["error"]), self.T("upd_failed"))
+                elif not r.get("newer"):
+                    self.icon.notify(" ", self.T("upd_latest", r.get("current")))
+                # a newer version is announced by the "update" event of the service
+            except Exception as e:  # noqa: BLE001
+                self.icon.notify(str(e), self.T("upd_failed"))
+            self.refresh()
+        threading.Thread(target=run, daemon=True).start()
+
+    def install_update(self, d):
+        """update_ready: the service downloaded and verified setup.exe; check it again and start it elevated."""
+        path, digest = d.get("path") or "", (d.get("sha256") or "").lower()
+        try:
+            folder = os.path.normcase(os.path.join(data_root(), "updates"))
+            if os.path.normcase(os.path.dirname(os.path.abspath(path))) != folder or not path.lower().endswith(".exe"):
+                raise ValueError(f"unexpected installer location: {path}")
+            h = hashlib.sha256()
+            with open(path, "rb") as f:
+                for chunk in iter(lambda: f.read(1 << 20), b""):
+                    h.update(chunk)
+            if h.hexdigest() != digest:
+                raise ValueError("checksum mismatch")
+            self.icon.notify(" ", self.T("upd_ready", d.get("version", "")))
+            rc = ctypes.windll.shell32.ShellExecuteW(None, "runas", path, None, None, 1)
+            if rc <= 32:
+                raise OSError(f"ShellExecute: {rc}")
+        except Exception as e:  # noqa: BLE001
+            self.icon.notify(str(e), self.T("upd_err"))
+
     def on_event(self, ev):
         t = ev.get("type")
+        if t == "update_ready":
+            threading.Thread(target=self.install_update, args=(ev.get("data") or {},), daemon=True).start()
         osd = bool((self.state or {}).get("settings", {}).get("osd", True))
         for title, body, _critical in agentcore.describe(ev, osd, self.lang):
             if title:
@@ -274,7 +316,7 @@ class Tray:
             winapi.send_keys(winapi.VK_LWIN, winapi.VK_CONTROL, winapi.VK_F24)
         elif t == "launch":
             self.open_window()
-        if t in ("status", "mode", "fanboost", "lc", "setting", "keyboard", "ac"):
+        if t in ("status", "mode", "fanboost", "lc", "setting", "keyboard", "ac", "update"):
             self.refresh()
 
     def idle_loop(self):

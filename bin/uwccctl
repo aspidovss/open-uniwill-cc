@@ -8,8 +8,12 @@
   uwccctl kb off|on|effect N     keyboard backlight
   uwccctl lb [hinge|base|logo] on|off|color RRGGBB [EFFECT]|effect static|breathing|wave|rainbow|...|light 0-4
   uwccctl lighting               keyboard / light bar devices (diagnostics)
-  uwccctl history [csv|csv-excel|json] [FILE]   last hour of sensors (stdout or FILE)
+  uwccctl history [csv|csv-excel|json] [1m|5m|15m|1h|24h] [FILE]   sensor history (default 1h; stdout or FILE)
   uwccctl debug on|off           verbose service log (for bug reports)
+  uwccctl version                version of the service and the latest release
+  uwccctl update [check|install] check GitHub for a new release (install: Windows only)
+  uwccctl export fans|all FILE   fan tables / full backup (profiles, settings, liquid cooler) to FILE
+  uwccctl import FILE [fans,profiles,settings] [--force]   default: fans,profiles; --force ignores another project
   uwccctl lang en|ru             interface language (UI, notifications, this tool)
   uwccctl lc status              liquid cooler (Bluetooth)
   uwccctl lc scan                find coolers nearby
@@ -235,15 +239,49 @@ def main(a):
     elif cmd == "lighting":
         print(json.dumps(call("lighting/devices"), indent=2, ensure_ascii=False))
     elif cmd == "history":
-        fmt = a[1] if a[1:] and a[1] in ("csv", "csv-excel", "json") else "csv"
-        out = next((x for x in a[1:] if x not in ("csv", "csv-excel", "json")), None)
-        data = call_raw(f"history/export?format={fmt}")
+        ranges = ("1m", "5m", "15m", "1h", "24h")
+        fmt = next((x for x in a[1:] if x in ("csv", "csv-excel", "json")), "csv")
+        rng = next((x for x in a[1:] if x in ranges), "1h")
+        out = next((x for x in a[1:] if x not in ("csv", "csv-excel", "json") + ranges), None)
+        data = call_raw(f"history/export?format={fmt}&range={rng}")
         if out:
             with open(out, "wb") as f:
                 f.write(data)
             print(out)
         else:
             sys.stdout.write(data.decode("utf-8-sig"))
+    elif cmd in ("version", "update"):
+        st = call("update/check", {}, timeout=40) if cmd == "update" or a[1:2] == ["check"] else call("update")
+        print("open-uniwill-cc", st.get("current"))
+        if st.get("error"):
+            print("update check:", st["error"])
+        elif st.get("latest"):
+            print("latest release:", st["latest"], "— newer, see " + str(st.get("url")) if st.get("newer") else "(up to date)")
+        if cmd == "update" and a[1:2] == ["install"]:
+            if not st.get("can_install"):
+                sys.exit("Linux: download the release archive and run: sudo bash install.sh")
+            call("update/download", {})
+            print("downloading; the Control Center tray app starts the installer when it is verified")
+        elif st.get("newer") and not IS_WIN:
+            print("install: download " + str(st.get("linux") or st.get("url")) + ", unpack it and run: sudo bash install.sh")
+    elif cmd == "export":
+        what = a[1] if a[1:] and a[1] in ("fans", "all") else sys.exit("uwccctl export fans|all FILE")
+        data = call_raw(f"export?what={what}")
+        if a[2:]:
+            with open(a[2], "wb") as f:
+                f.write(data)
+            print(a[2])
+        else:
+            sys.stdout.write(data.decode())
+    elif cmd == "import":
+        if not a[1:]:
+            sys.exit("uwccctl import FILE [fans,profiles,settings] [--force]")
+        with open(a[1], encoding="utf-8-sig") as f:
+            data = json.load(f)
+        rest = [x for x in a[2:] if x != "--force"]
+        sections = rest[0].split(",") if rest else ["fans", "profiles"]
+        r = call("import", {"data": data, "sections": sections, "force": "--force" in a})
+        print(json.dumps(r, indent=2, ensure_ascii=False))
     elif cmd == "debug":
         if a[1:] and a[1] in ("on", "off"):
             call("setting", {"key": "debug", "value": a[1] == "on"})

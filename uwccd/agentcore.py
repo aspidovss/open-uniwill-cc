@@ -7,6 +7,8 @@ TEXT = {
            "hot_body": "It has stayed at or above {} °C for 30 seconds.",
            "hot_body_boost": "It has stayed at or above {} °C for 30 seconds. If it does not cool down within 30 seconds, Fan Boost turns on.",
            "hot_boost": "Fan Boost turned on because of overheating", "hot_boost_body": "Turn it off in Control Center when the load is over.",
+           "upd": "open-uniwill-cc {} is available", "upd_body": "Open Control Center → Information to see what's new and update.",
+           "upd_err": "Update failed", "upd_ready": "Installing open-uniwill-cc {}",
            "lc_again": "Liquid cooler connected again",
            "lc_guard": "The pump was raised to 11 V and the fan to at least 60 % until the laptop mode changes or you pick a setting.",
            "boost_on": "Fan Boost on", "boost_off": "Fan Boost off",
@@ -25,6 +27,8 @@ TEXT = {
            "hot_body": "Температура держится на уровне {} °C и выше уже 30 секунд.",
            "hot_body_boost": "Температура держится на уровне {} °C и выше уже 30 секунд. Если за 30 секунд не остынет, включится турбовентиляция.",
            "hot_boost": "Турбовентиляция включена из-за перегрева", "hot_boost_body": "Выключите её в Control Center, когда нагрузка закончится.",
+           "upd": "Доступна версия open-uniwill-cc {}", "upd_body": "Откройте Control Center → Информация, чтобы посмотреть изменения и обновиться.",
+           "upd_err": "Не удалось обновить", "upd_ready": "Установка open-uniwill-cc {}",
            "lc_again": "Система охлаждения снова подключена",
            "lc_guard": "Напряжение помпы поднято до 11 В, вентилятор — не меньше 60 %, пока не сменится режим ноутбука или вы не выберете настройку вручную.",
            "boost_on": "Турбовентиляция включена", "boost_off": "Турбовентиляция выключена",
@@ -48,14 +52,18 @@ TRAY = {
            "lang": "Language", "autostart": "Start with Windows", "exit": "Exit", "offline": "no connection to the service",
            "custom": "Custom", "office": "Office", "gaming": "Gaming", "turbo": "Turbo",
            "not_connected": "not connected", "svc_down": "The Control Center service is not running",
-           "svc_down_body": "Start it in Services (uwccd) or reinstall Control Center."},
+           "svc_down_body": "Start it in Services (uwccd) or reinstall Control Center.",
+           "upd_check": "Check for updates", "upd_install": "Install update {}", "github": "Project on GitHub",
+           "upd_latest": "You have the latest version ({})", "upd_failed": "Update check failed"},
     "ru": {"open": "Открыть Control Center", "mode": "Режим", "boost": "Турбовентиляция", "kb": "Подсветка клавиатуры",
            "lc": "Система охлаждения", "lc_auto": "Автоматический", "lc_laptop": "Как у ноутбука", "lc_low": "Низкий",
            "lc_medium": "Средний", "lc_high": "Высокий", "lc_off": "Выкл", "lc_connect": "Подключить",
            "lc_disconnect": "Отключить", "lang": "Язык", "autostart": "Запускать вместе с Windows", "exit": "Выход",
            "offline": "нет связи со службой", "custom": "Пользовательский", "office": "Офисный", "gaming": "Игровой",
            "turbo": "Турбо", "not_connected": "не подключена", "svc_down": "Служба Control Center не запущена",
-           "svc_down_body": "Запустите её в «Службах» (uwccd) или переустановите Control Center."},
+           "svc_down_body": "Запустите её в «Службах» (uwccd) или переустановите Control Center.",
+           "upd_check": "Проверить обновления", "upd_install": "Установить обновление {}", "github": "Проект на GitHub",
+           "upd_latest": "У вас последняя версия ({})", "upd_failed": "Не удалось проверить обновления"},
 }
 
 
@@ -95,6 +103,10 @@ def describe(ev, osd_enabled, lang):
           T(lang, "hot_body_boost" if d.get("boost") else "hot_body", d.get("limit")), True)
     elif t == "overheat_boost":
         n(T(lang, "hot_boost"), T(lang, "hot_boost_body"), True)
+    elif t == "update":
+        n(T(lang, "upd", d.get("version", "")), T(lang, "upd_body"))
+    elif t == "update_error":
+        n(T(lang, "upd_err"), str(d.get("error", "")))
     elif not osd_enabled:
         pass
     elif t == "mode" and d.get("osd"):

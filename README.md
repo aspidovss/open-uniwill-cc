@@ -25,7 +25,9 @@ hardware switches — plus Bluetooth control of the **XMG Oasis** liquid cooler 
 ## Features
 
 - **Modes** Office / Gaming / Turbo (and **Custom** with 5 named slots on platforms that have it), the Fn mode key, Fan Boost
-- **Power limits** PL1 / PL2 / PL4, TCC offset, NVIDIA cTGP and Dynamic Boost — within the limits the firmware reports
+- **Power limits** PL1 / PL2 / PL4, NVIDIA cTGP and Dynamic Boost — within the limits the firmware reports
+- **Temperature limits** per mode / profile: CPU in °C (85–100 °C, optionally down to 60 °C) and NVIDIA GPU target
+  temperature
 - **Fan curves** for CPU and GPU (16 points), presets, reset to factory
 - **Keyboard lighting**: 17 hardware effects, per-key colours, gaming zones, software effects, auto-off;
   **chassis light bar** (rear / base / logo zones)
@@ -37,6 +39,9 @@ hardware switches — plus Bluetooth control of the **XMG Oasis** liquid cooler 
 - **Liquid cooler** XMG Oasis (LCT21001 Mk1 / LCT22002 Mk2), Eluktronics Liquid Pad Pro, PCS Liquid Series,
   TUXEDO Aquaris: automatic temperature tiers, follow-the-laptop mode, lighting, coolant flow guard, filling cycle
 - **English and Russian** interface; tray app with notifications on Windows; desktop notifications on Linux
+- **Backup and transfer**: export / import of fan curves (one or all), full backup, import from the original Control Center
+- **Update check** against the GitHub releases (once a day, can be switched off); on Windows download, checksum check and
+  install from the window or the tray
 - **`uwccctl`** command line tool on both systems
 
 Full list with the EC registers behind each feature: [docs/FEATURES.md](docs/FEATURES.md).
@@ -108,7 +113,7 @@ The installer builds the `uwcc` kernel module with DKMS (falls back to `acpi_cal
 ## Usage
 
 - **Window** — all settings; the language switch (EN / RU) is at the bottom of the side bar.
-- **Tray (Windows)** — right click: mode, Fan Boost, keyboard backlight, liquid cooler, language, *Start with Windows*.
+- **Tray (Windows)** — right click: mode, Fan Boost, keyboard backlight, liquid cooler, language, updates, *Start with Windows*.
 - **Console** (`uwccctl` on Linux, `uwccctl.exe` on Windows):
 
 ```text
@@ -122,6 +127,9 @@ uwccctl lc mode auto|ec|low|medium|high|off
 uwccctl lang en|ru
 uwccctl history csv out.csv      last hour of sensors to a file
 uwccctl debug on|off             verbose service log
+uwccctl export all backup.json   fan curves, profiles and settings to a file
+uwccctl import backup.json       fan curves and profiles back (add fans,profiles,settings to choose)
+uwccctl update                   check for a new release
 ```
 
 ## Uninstall / back to the original

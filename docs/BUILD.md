@@ -45,7 +45,7 @@ The kernel module alone: `cd kernel && make -C /lib/modules/$(uname -r)/build M=
 Release archive (from a tagged commit, includes `proprietary/`):
 
 ```bash
-git archive --format=tar.gz --prefix=open-uniwill-cc-1.3.1/ -o open-uniwill-cc-linux-1.3.1.tar.gz v1.3.1
+git archive --format=tar.gz --prefix=open-uniwill-cc-1.4.0/ -o open-uniwill-cc-linux-1.4.0.tar.gz v1.4.0
 ```
 
 ## Windows
@@ -169,7 +169,7 @@ sudo bash uninstall.sh [--purge]
 Архив релиза (из коммита с тегом, вместе с `proprietary/`):
 
 ```bash
-git archive --format=tar.gz --prefix=open-uniwill-cc-1.3.1/ -o open-uniwill-cc-linux-1.3.1.tar.gz v1.3.1
+git archive --format=tar.gz --prefix=open-uniwill-cc-1.4.0/ -o open-uniwill-cc-linux-1.4.0.tar.gz v1.4.0
 ```
 
 ## Windows
@@ -243,3 +243,22 @@ sudo uwccctl ec-direct dump 0x700     256 байт EC без службы (Linux
 2. ОС и версия; для Linux: `uname -r`, состояние Secure Boot (`mokutil --sb-state`).
 3. Вывод `uwccctl status`.
 4. Журнал службы с включённым отладочным режимом за момент проблемы.
+
+## Publishing a release (update check)
+
+The update check reads `https://api.github.com/repos/aspidovss/open-uniwill-cc/releases/latest` and compares its tag
+(`v1.4.0`) with the running version. For *Download and install* on Windows the release must have these assets:
+
+- `open-uniwill-cc-windows-<ver>-setup.exe` — the installer (any name ending in `-setup.exe`);
+- `SHA256SUMS.txt` — `<sha256>  <file name>` per line; the download is refused when the installer is missing from it
+  or its hash differs;
+- `open-uniwill-cc-linux-<ver>.tar.gz` — shown as the Linux download.
+
+`SHA256SUMS.txt` for all files in `dist\` (PowerShell):
+
+```powershell
+Get-ChildItem dist\open-uniwill-cc-* -File | ForEach-Object { "{0}  {1}" -f (Get-FileHash $_ -Algorithm SHA256).Hash.ToLower(), $_.Name } |
+  Set-Content -Encoding ascii dist\SHA256SUMS.txt
+```
+
+On Linux: `sha256sum open-uniwill-cc-* > SHA256SUMS.txt`.
