@@ -103,11 +103,21 @@ if ($Public) {
     Warn "UserFanTables not found - fan tables will be read from the EC"
 }
 
+# ---------------------------------------------------------------- build stamp
+# shown as "1.4.2 - build 2026-10-23 - a1b2c3d" in the window, the log and uwccctl version
+$commit = ""
+try { $commit = "$(& git rev-parse --short HEAD 2>$null)".Trim() } catch { $commit = "" }
+$buildDate = Get-Date -Format "yyyy-MM-dd"
+$commitPy = if ($commit) { "`"$commit`"" } else { "None" }
+Set-Content -Path "uwccd\_build.py" -Encoding ASCII -Value "BUILD = {`"date`": `"$buildDate`", `"commit`": $commitPy}"
+Say "Build $Version / $buildDate / $(if ($commit) { $commit } else { 'no git' })"
+
 # ---------------------------------------------------------------- PyInstaller
 Say "PyInstaller"
 & $vpy -m PyInstaller --noconfirm --clean --log-level WARN --distpath dist --workpath build windows\uwcc.spec
 $rc = $LASTEXITCODE
 if ($createdData) { Remove-Item -Recurse -Force $dataDir }
+Remove-Item -Force "uwccd\_build.py" -ErrorAction SilentlyContinue
 if ($rc) { Die "PyInstaller failed" }
 $out = Join-Path $Root "dist\ControlCenter"
 foreach ($e in "uwccd.exe", "ControlCenter.exe", "uwccctl.exe") {

@@ -101,6 +101,17 @@
         <dl class="kv" id="about-kv"></dl>
         <p class="muted tiny" id="upd-text"></p>
       </div>
+      <div class="card" id="report-card">
+        <div class="row between wrap"><h3 data-i>Diagnostic report</h3><button class="btn" id="rep-make" data-i>Create report</button></div>
+        <p class="muted" data-i>A zip file with everything needed to add support for another laptop or to look into a problem: the EC registers the program uses, BIOS settings (UniWillVariable, SmartAPC), keyboard and light bar devices, NVIDIA limits, sensors and the service log. Nothing is changed on the laptop.</p>
+        <div class="rep-grid">
+          <div><h4 data-i>Included</h4><div id="rep-sections" class="rep-list"></div></div>
+          <div><h4 data-i>Private details</h4>
+            <p class="muted tiny" data-i>Usually not needed. Tick them only if the developer asks.</p>
+            <div id="rep-private" class="rep-list"></div></div>
+        </div>
+        <div id="rep-done" class="rep-done hidden"></div>
+      </div>
     </section>
 
     <!-- MODES -->
@@ -205,8 +216,9 @@
         <div class="card" id="lc-tiers-card">
           <div class="row between"><h3 data-i>Automatic mode: temperature tiers</h3>
             <div class="row"><button class="btn ghost" id="lc-tiers-reset" data-i>Default</button><button class="btn" id="lc-tiers-save" data-i>Save</button></div></div>
-          <p class="muted tiny" data-i>Uses the hotter of CPU and GPU. Switching to a lower tier waits for the temperature to drop 3 °C below the threshold.</p>
+          <p class="muted tiny" data-i>Switching to a lower tier also waits for the temperature to drop 3 °C below the threshold. In the Controller mode the table is used when the EC publishes no targets; the settings below apply to both modes.</p>
           <div class="table-wrap"><table class="pts" id="lc-tiers"></table></div>
+          <div class="lc-calm" id="lc-calm"></div>
         </div>
 
         <div class="card">

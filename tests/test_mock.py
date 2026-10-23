@@ -181,6 +181,7 @@ class LiquidCoolerUnit(unittest.TestCase):
         self.lc = self.W.LiquidCooler(self.ec, lambda: self.temp[0], lambda k, d: self.events.append(d["event"]), mock=True)
         self.lc.start()
         self.lc.connect("C0:FF:EE:22:00:02")
+        self.lc.configure({"delay_up": 0, "delay_down": 0, "smooth": False})   # immediate, as the policy tests expect
 
     def tearDown(self):
         self.W.MockLink.flow_ok = True
@@ -207,6 +208,63 @@ class LiquidCoolerUnit(unittest.TestCase):
             time.sleep(0.3)
             st = lc.status()
             self.assertEqual((st["fan"], st["pump"]), want, f"at {t} °C")
+
+    def _step(self, t=None, advance=0):
+        if t is not None:
+            self.temp[0] = t
+        self.clock[0] += advance
+        self.lc._wake_up()
+        time.sleep(0.25)
+        st = self.lc.status()
+        return st["fan"], st["pump"]
+
+    def _fake_clock(self):
+        self.clock = [time.monotonic() + 1]
+        self.lc._now = lambda: self.clock[0]
+
+    def test_tier_delays(self):
+        self._fake_clock()
+        self.lc.configure({"delay_up": 10, "delay_down": 30})
+        self.assertEqual(self._step(50), (25, 8))
+        self.assertEqual(self._step(60), (25, 8))                 # a short peak does not switch
+        self.assertEqual(self.lc.status()["pending"]["dir"], "up")
+        self.assertEqual(self._step(50, 3), (25, 8))              # back down before the delay -> nothing
+        self.assertIsNone(self.lc.status()["pending"])
+        self._step(60)
+        self.assertEqual(self._step(60, 10), (50, 8))             # held 10 s -> next tier
+        self.assertEqual(self._step(50), (50, 8))                 # going down waits 30 s
+        self.assertEqual(self._step(50, 29), (50, 8))
+        self.assertEqual(self._step(50, 2), (25, 8))
+        self.assertEqual(self._step(64), (50, 8))                 # 8 °C over the tier threshold: at once
+        self.assertEqual(self._step(97), (90, 11))                # 95 °C: at once
+
+    def test_smoothing_and_ramp(self):
+        self._fake_clock()
+        self.lc.configure({"smooth": True})
+        self._step(50)
+        self.assertEqual(self._step(60, 11)[0], 35)               # old samples left the 10 s window; 25 -> 50 % in steps
+        self.assertEqual([self._step(60, 1)[0] for _ in range(2)], [45, 50])
+        self.lc.configure({"tiers": [{"below": 55, "fan": 25, "pump": 7}, {"below": 999, "fan": 50, "pump": 12}]})
+        pumps = [self._step(60, 1)[1] for _ in range(3)]
+        self.assertEqual(pumps, [11, 12, 12])                     # one voltage step at a time (8 -> 11 -> 12)
+
+    def test_pump_idle_and_tier_pump_off(self):
+        self._fake_clock()
+        self.lc.configure({"pump_idle": {"enabled": True, "off_below": 50, "off_after": 60, "on_above": 55,
+                                         "on_after": 10, "min_run": 0}})
+        self.assertEqual(self._step(40)[1], 8)
+        self.assertEqual(self._step(40, 61)[1], 0)
+        self.assertTrue(self.lc.status()["pump_idle"])
+        self.assertEqual(self._step(53, 30)[1], 0)                # between the thresholds: stays off
+        self._step(60)
+        self.assertEqual(self._step(60, 10)[1], 8)
+        with self.assertRaises(ValueError):
+            self.lc.configure({"pump_idle": {"off_below": 60, "on_above": 61}})
+        with self.assertRaises(ValueError):
+            self.lc.configure({"temp_source": "ram"})
+        self.lc.configure({"pump_idle": {"enabled": False}, "temp_source": "gpu",
+                           "tiers": [{"below": 50, "fan": 0, "pump": 0}, {"below": 999, "fan": 60, "pump": 8}]})
+        self.assertEqual(self._step(45), (0, 0))
 
     def test_ec_targets(self):
         self.ec.write(0x7E6, 0x80 | 70)
@@ -390,6 +448,24 @@ class CustomModeService(MockService):
         self.assertFalse(self.get("state")["settings"]["history_record"])
         self.post("setting", {"key": "history_record", "value": True})
 
+    def test_report_and_update_request(self):
+        import io as _io
+        import zipfile
+        r = urllib.request.Request(f"http://127.0.0.1:{self.port}/api/report?private=mac&name=uwcc-report-test-1.zip",
+                                   headers={"X-UWCC-Token": TOKEN})
+        resp = urllib.request.urlopen(r, timeout=60)
+        self.assertEqual(resp.headers["X-UWCC-Filename"], "uwcc-report-test-1.zip")
+        z = zipfile.ZipFile(_io.BytesIO(resp.read()))
+        self.assertEqual(sorted(z.namelist()), ["report.json", "report.txt", "uwccd.log"])
+        rep = json.loads(z.read("report.json"))
+        self.assertEqual(rep["private_included"], ["mac"])
+        self.assertIn("0700-07FF", rep["ec"]["dump"])
+        self.assertEqual(rep["ec"]["named"]["PROJECT_ID"]["addr"], "0x740")
+        self.assertNotIn("hostname", rep["system"])
+        self.assertIn("project_id", self.get("report/summary"))
+        self.assertEqual(self.post("reveal", {"name": "uwcc-report-test-1.zip"})[1], {"tray": False})
+        self.assertIn("build", self.get("update"))
+
     def test_history_export(self):
         r = urllib.request.Request(f"http://127.0.0.1:{self.port}/api/history/export?format=csv", headers={"X-UWCC-Token": TOKEN})
         resp = urllib.request.urlopen(r, timeout=10)
@@ -398,6 +474,51 @@ class CustomModeService(MockService):
         r = urllib.request.Request(f"http://127.0.0.1:{self.port}/api/history/export?format=xml", headers={"X-UWCC-Token": TOKEN})
         with self.assertRaises(urllib.error.HTTPError):
             urllib.request.urlopen(r, timeout=10)
+
+
+class UpdateAndBuildUnit(unittest.TestCase):
+    def test_download_verified(self):
+        import hashlib
+        import http.server
+        import threading as th
+        sys.path.insert(0, ROOT)
+        from uwccd import updates
+        d = tempfile.mkdtemp(prefix="uwcc-upd-")
+        payload = b"MZ fake installer" * 1000
+        os.makedirs(os.path.join(d, "srv"))
+        with open(os.path.join(d, "srv", "open-uniwill-cc-windows-9.9.9-setup.exe"), "wb") as f:
+            f.write(payload)
+        with open(os.path.join(d, "srv", "SHA256SUMS.txt"), "w") as f:
+            f.write(f"{hashlib.sha256(payload).hexdigest()}  open-uniwill-cc-windows-9.9.9-setup.exe\n")
+        with open(os.path.join(d, "srv", "BAD.txt"), "w") as f:
+            f.write("0" * 64 + "  open-uniwill-cc-windows-9.9.9-setup.exe\n")
+        handler = lambda *a, **k: http.server.SimpleHTTPRequestHandler(*a, directory=os.path.join(d, "srv"), **k)  # noqa: E731
+        handler.log_message = lambda *a: None
+        srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        th.Thread(target=srv.serve_forever, daemon=True).start()
+        base = f"http://127.0.0.1:{srv.server_address[1]}"
+        try:
+            pct = []
+            path = updates.download_verified(base + "/open-uniwill-cc-windows-9.9.9-setup.exe", base + "/SHA256SUMS.txt",
+                                             os.path.join(d, "Downloads"), pct.append)
+            with open(path, "rb") as f:
+                self.assertEqual(f.read(), payload)
+            self.assertEqual(pct[-1], 100)
+            with self.assertRaises(ValueError):
+                updates.download_verified(base + "/open-uniwill-cc-windows-9.9.9-setup.exe", base + "/BAD.txt",
+                                          os.path.join(d, "Bad"))
+            self.assertEqual(os.listdir(os.path.join(d, "Bad")), [])           # the damaged file is deleted
+        finally:
+            srv.shutdown()
+
+    def test_version_string(self):
+        sys.path.insert(0, ROOT)
+        import uwccd
+        uwccd._build = {"date": "2026-10-23", "commit": "abc1234", "source": "build"}
+        try:
+            self.assertEqual(uwccd.version_string(), f"{uwccd.__version__} · build 2026-10-23 · abc1234")
+        finally:
+            uwccd._build = None
 
 
 class FanTableUnit(unittest.TestCase):

@@ -42,6 +42,7 @@ hardware switches — plus Bluetooth control of the **XMG Oasis** liquid cooler 
 - **Backup and transfer**: export / import of fan curves (one or all), full backup, import from the original Control Center
 - **Update check** against the GitHub releases (once a day, can be switched off); on Windows download, checksum check and
   install from the window or the tray
+- **Diagnostic report** for bug reports and new laptops (privacy options, send via GitHub or e-mail)
 - **`uwccctl`** command line tool on both systems
 
 Full list with the EC registers behind each feature: [docs/FEATURES.md](docs/FEATURES.md).
@@ -68,6 +69,11 @@ Clevo, Uniwill laptops that shipped with Control Center 3.x.
 | MAIBENBEN Tsunami Series | i9-12900HX / NVIDIA | `0x10` | N.1.23A14 / 1.13 | ✅ Ubuntu 24.04 | ✅ Windows 11 24H2 |
 
 Tested yours? Please open a [model report](https://github.com/aspidovss/open-uniwill-cc/issues/new?template=model_report.yml).
+
+**Your laptop is not supported or something does not work?** Create a diagnostic report: *Information → Diagnostic
+report → Create report* (or `uwccctl report`). It collects what is needed to add a platform — EC registers, BIOS
+settings, keyboard / light bar devices, NVIDIA limits, the log — without serial numbers, MAC addresses or user names
+(those can be ticked separately if asked). Attach the zip to an issue or send it to **OUCC@aspidov.ru**.
 
 ## Download
 
@@ -130,6 +136,7 @@ uwccctl debug on|off             verbose service log
 uwccctl export all backup.json   fan curves, profiles and settings to a file
 uwccctl import backup.json       fan curves and profiles back (add fans,profiles,settings to choose)
 uwccctl update                   check for a new release
+uwccctl report                   diagnostic report (zip) for bug reports and new laptops
 ```
 
 ## Uninstall / back to the original
@@ -151,6 +158,11 @@ uwccctl update                   check for a new release
 
 [docs/BUILD.md](docs/BUILD.md) — building the Linux and Windows packages, running without hardware (`--mock`),
 debug logging, where the logs are, what to attach to a bug report.
+
+## Contact
+
+- Bugs, questions, new laptops: [GitHub issues](https://github.com/aspidovss/open-uniwill-cc/issues)
+- E-mail: **OUCC@aspidov.ru** (also for security reports, see [SECURITY.md](SECURITY.md))
 
 ## License
 

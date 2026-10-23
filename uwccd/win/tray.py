@@ -12,7 +12,6 @@ Lives in the notification area (hidden by default), starts with Windows, and:
   ControlCenter.exe --open     open the window of the running instance (or start it)
 """
 import ctypes
-import hashlib
 import json
 import logging
 import logging.handlers
@@ -94,7 +93,7 @@ class Api:
             raise
 
     def events(self):
-        req = urllib.request.Request(f"http://127.0.0.1:{PORT}/api/events?token={self._tok()}")
+        req = urllib.request.Request(f"http://127.0.0.1:{PORT}/api/events?client=tray&token={self._tok()}")
         return urllib.request.urlopen(req, timeout=60)
 
 
@@ -284,29 +283,66 @@ class Tray:
             self.refresh()
         threading.Thread(target=run, daemon=True).start()
 
-    def install_update(self, d):
-        """update_ready: the service downloaded and verified setup.exe; check it again and start it elevated."""
-        path, digest = d.get("path") or "", (d.get("sha256") or "").lower()
+    @staticmethod
+    def downloads_dir():
+        """The user's Downloads folder (FOLDERID_Downloads), also when it was moved to another drive."""
         try:
-            folder = os.path.normcase(os.path.join(data_root(), "updates"))
-            if os.path.normcase(os.path.dirname(os.path.abspath(path))) != folder or not path.lower().endswith(".exe"):
-                raise ValueError(f"unexpected installer location: {path}")
-            h = hashlib.sha256()
-            with open(path, "rb") as f:
-                for chunk in iter(lambda: f.read(1 << 20), b""):
-                    h.update(chunk)
-            if h.hexdigest() != digest:
-                raise ValueError("checksum mismatch")
-            self.icon.notify(" ", self.T("upd_ready", d.get("version", "")))
-            rc = ctypes.windll.shell32.ShellExecuteW(None, "runas", path, None, None, 1)
-            if rc <= 32:
-                raise OSError(f"ShellExecute: {rc}")
+            import uuid
+            from ctypes import wintypes
+            guid = uuid.UUID("{374DE290-123F-4565-9164-39C4925E467B}")
+            buf = (ctypes.c_byte * 16).from_buffer_copy(guid.bytes_le)
+            p = ctypes.c_wchar_p()
+            sh = ctypes.windll.shell32
+            sh.SHGetKnownFolderPath.argtypes = [ctypes.c_void_p, wintypes.DWORD, wintypes.HANDLE, ctypes.POINTER(ctypes.c_wchar_p)]
+            if sh.SHGetKnownFolderPath(ctypes.byref(buf), 0, None, ctypes.byref(p)) == 0:
+                path = p.value
+                ctypes.windll.ole32.CoTaskMemFree(p)
+                return path
+        except Exception:  # noqa: BLE001
+            pass
+        return os.path.join(os.path.expanduser("~"), "Downloads")
+
+    def install_update(self, d):
+        """update_install: download to Downloads, verify against SHA256SUMS.txt, start it (UAC prompt)."""
+        if getattr(self, "_installing", False):
+            return
+        self._installing = True
+        report = lambda **kw: self._try(lambda: self.api.call("update/progress", kw, timeout=5))   # noqa: E731
+        path = None
+        try:
+            report(state="downloading", percent=0)
+            path = updates.download_verified(d["setup"], d["sums"], self.downloads_dir(),
+                                             lambda pct: report(state="downloading", percent=pct))
+            report(state="verified", path=path)
+            self.icon.notify(path, self.T("upd_ready", d.get("version", "")))
+            rc = ctypes.windll.shell32.ShellExecuteW(None, "runas", path, None, os.path.dirname(path), 1)
+            if rc <= 32:                       # 5 = the UAC prompt was declined
+                report(state="declined", path=path)
+                self.icon.notify(path, self.T("upd_manual"))
+                subprocess.Popen(f'explorer /select,"{path}"')
+            else:
+                report(state="started", path=path)
         except Exception as e:  # noqa: BLE001
+            report(state="error", error=str(e), path=path)
             self.icon.notify(str(e), self.T("upd_err"))
+        finally:
+            self._installing = False
+
+    @staticmethod
+    def _try(fn):
+        try:
+            return fn()
+        except Exception:  # noqa: BLE001
+            return None
 
     def on_event(self, ev):
         t = ev.get("type")
-        if t == "update_ready":
+        if t == "reveal":
+            name = os.path.basename(str((ev.get("data") or {}).get("name", "")))
+            path = os.path.join(self.downloads_dir(), name)
+            self._try(lambda: subprocess.Popen(f'explorer /select,"{path}"' if os.path.exists(path)
+                                               else f'explorer "{self.downloads_dir()}"'))
+        if t == "update_install":
             threading.Thread(target=self.install_update, args=(ev.get("data") or {},), daemon=True).start()
         osd = bool((self.state or {}).get("settings", {}).get("osd", True))
         for title, body, _critical in agentcore.describe(ev, osd, self.lang):

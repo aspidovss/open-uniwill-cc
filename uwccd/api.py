@@ -8,6 +8,7 @@ import logging
 import mimetypes
 import os
 import queue
+import re
 import secrets
 import time
 import sys
@@ -181,6 +182,26 @@ class Handler(BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(data)
                 return None
+            if u.path == "/api/report/summary":
+                from . import report
+                return self._json(200, report.summary(s))
+            if u.path == "/api/report":
+                from . import report
+                q = parse_qs(u.query)
+                split = lambda k, d: [x for x in (q.get(k) or [d])[0].split(",") if x]   # noqa: E731
+                data, name = report.build(s, split("sections", ",".join(report.SECTIONS)), split("private", ""))
+                want = (q.get("name") or [""])[0]
+                if re.fullmatch(r"uwcc-report-[\w.-]{1,80}\.zip", want):
+                    name = want
+                self.send_response(200)
+                self.send_header("Content-Type", "application/zip")
+                self.send_header("Content-Disposition", f'attachment; filename="{name}"')
+                self.send_header("X-UWCC-Filename", name)
+                self.send_header("Content-Length", str(len(data)))
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(data)
+                return None
             if u.path == "/api/gpu":
                 from .monitor import dgpu_state, dgpu_users
                 st = dgpu_state()
@@ -276,7 +297,15 @@ class Handler(BaseHTTPRequestHandler):
                 s.updater.check()
                 return self._json(200, s.updater.status())
             elif path == "/api/update/download":
-                return self._json(200, s.updater.download())
+                return self._json(200, s.updater.request_install())
+            elif path == "/api/reveal":                    # the tray shows a downloaded file in Explorer
+                name = os.path.basename(str(b.get("name", "")))
+                if not name.startswith("uwcc-") or not s.tray_clients:
+                    return self._json(200, {"tray": False})
+                s.emit("reveal", {"name": name})
+                return self._json(200, {"tray": True})
+            elif path == "/api/update/progress":           # reported by the tray, which downloads and installs
+                return self._json(200, s.updater.set_progress(b))
             elif path == "/api/dynamic-boost/enable":
                 from . import nvpowerd
                 return self._json(200, nvpowerd.enable())
@@ -400,6 +429,9 @@ class Handler(BaseHTTPRequestHandler):
     def _sse(self):
         s = self.svc
         q = s.subscribe()
+        tray = (parse_qs(urlparse(self.path).query).get("client") or [""])[0] == "tray"
+        if tray:
+            s.tray_clients += 1
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
         self.send_header("Cache-Control", "no-store")
@@ -418,6 +450,8 @@ class Handler(BaseHTTPRequestHandler):
             pass
         finally:
             s.unsubscribe(q)
+            if tray:
+                s.tray_clients -= 1
 
 
 def serve(svc, port=47321, token=None):

@@ -4,7 +4,7 @@ import signal
 import sys
 import threading
 
-from . import __version__
+from . import version_string
 from .api import serve
 from .service import Service
 
@@ -17,7 +17,7 @@ def main():
     ap.add_argument("--port", type=int, default=47321)
     ap.add_argument("--token", help="fixed API token (default: random, written to /run/uwcc/token)")
     ap.add_argument("-v", "--verbose", action="store_true")
-    ap.add_argument("--version", action="version", version=__version__)
+    ap.add_argument("--version", action="version", version=version_string())
     a = ap.parse_args()
     logging.basicConfig(level=logging.DEBUG if a.verbose else logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")

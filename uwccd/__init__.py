@@ -4,4 +4,56 @@ Hardware protocol reconstructed from GCUService.exe (interoperability analysis):
 EC RAM is accessed through the firmware ACPI methods ECRR(addr) / ECRW(addr, data)
 of the ACPI device INOU0000, exactly like the Windows UWACPIDriver.sys does.
 """
-__version__ = "1.4.0"
+import os
+
+__version__ = "1.4.2"
+CONTACT = "OUCC@aspidov.ru"
+_build = None
+
+
+def build_info():
+    """{"date": "YYYY-MM-DD", "commit": "abc1234", "source": ...} of this copy of the program.
+
+    build    — uwccd/_build.py written by build_windows.ps1 / install.sh;
+    archive  — uwccd/_gitinfo.txt filled in by `git archive` (export-subst);
+    checkout — `git log` of a source checkout; otherwise unknown."""
+    global _build
+    if _build is not None:
+        return _build
+    info = {"date": None, "commit": None, "source": "unknown"}
+    try:
+        from ._build import BUILD
+        info = {**info, **BUILD, "source": "build"}
+    except ImportError:
+        here = os.path.dirname(os.path.abspath(__file__))
+        try:
+            with open(os.path.join(here, "_gitinfo.txt"), encoding="utf-8") as f:
+                parts = f.read().split()
+            if len(parts) >= 2 and not parts[0].startswith("$"):
+                info = {"commit": parts[0], "date": parts[1], "source": "archive"}
+        except OSError:
+            pass
+        if info["commit"] is None and os.path.isdir(os.path.join(here, "..", ".git")):
+            try:
+                import subprocess
+                out = subprocess.run(["git", "-C", os.path.join(here, ".."), "log", "-1", "--format=%h %cs"],
+                                     capture_output=True, text=True, timeout=5, check=False).stdout.split()
+                if len(out) >= 2:
+                    info = {"commit": out[0], "date": out[1], "source": "checkout"}
+            except (OSError, ValueError):
+                pass
+    _build = info
+    return info
+
+
+def version_string(word="build"):
+    """1.4.2 · build 2026-10-23 · a1b2c3d"""
+    b = build_info()
+    parts = [__version__]
+    if b.get("date"):
+        parts.append(f"{word} {b['date']}")
+    if b.get("commit"):
+        parts.append(b["commit"])
+    if b.get("source") == "checkout":
+        parts.append("dev")
+    return " · ".join(parts)

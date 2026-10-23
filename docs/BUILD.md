@@ -262,3 +262,18 @@ Get-ChildItem dist\open-uniwill-cc-* -File | ForEach-Object { "{0}  {1}" -f (Get
 ```
 
 On Linux: `sha256sum open-uniwill-cc-* > SHA256SUMS.txt`.
+
+## Build stamp
+
+The version shown by the program is `<version> · build <date> · <commit>`:
+
+- Windows: `build_windows.ps1` writes `uwccd/_build.py` (build date, `git rev-parse --short HEAD`) for PyInstaller
+  and removes it afterwards;
+- Linux: `install.sh` writes `/opt/uwcc/uwccd/_build.py` (install date, commit of the checkout); a release archive made
+  with `git archive` carries the commit in `uwccd/_gitinfo.txt` (`export-subst` in `.gitattributes`);
+- running from a source checkout shows the last commit and `dev`.
+
+## Bug reports
+
+*Information → Diagnostic report* or `uwccctl report` creates a zip with everything needed (no serial numbers, MAC
+addresses or user names unless ticked). Attach it to a GitHub issue or send it to OUCC@aspidov.ru.

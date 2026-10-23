@@ -60,6 +60,15 @@ rm -rf "$PREFIX"
 mkdir -p "$PREFIX"
 cp -r "$HERE/uwccd" "$HERE/bin" "$PREFIX/"
 find "$PREFIX" -name '__pycache__' -prune -exec rm -rf {} +
+# build stamp: commit of a source checkout (a release archive has it in uwccd/_gitinfo.txt) and the install date
+COMMIT=""
+if command -v git >/dev/null 2>&1 && git -C "$HERE" rev-parse --git-dir >/dev/null 2>&1; then
+  COMMIT=$(git -C "$HERE" rev-parse --short HEAD 2>/dev/null || true)
+elif [ -f "$HERE/uwccd/_gitinfo.txt" ] && ! grep -q '^\$Format' "$HERE/uwccd/_gitinfo.txt"; then
+  COMMIT=$(awk '{print $1}' "$HERE/uwccd/_gitinfo.txt")
+fi
+printf 'BUILD = {"date": "%s", "commit": %s}\n' "$(date +%F)" "$( [ -n "$COMMIT" ] && printf '"%s"' "$COMMIT" || printf None)" \
+  > "$PREFIX/uwccd/_build.py"
 chmod 755 "$PREFIX"/bin/*
 
 # factory per-project fan tables: proprietary/ of this repository, or the Windows Control Center package

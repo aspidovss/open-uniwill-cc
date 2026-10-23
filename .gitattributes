@@ -7,3 +7,4 @@
 *.cat binary
 *.ico binary
 *.png binary
+uwccd/_gitinfo.txt export-subst

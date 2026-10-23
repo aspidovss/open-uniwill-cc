@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.4.2
+
+- **Updates (Windows):** the tray app downloads the installer to your **Downloads** folder, checks it against
+  `SHA256SUMS.txt` and starts it (Windows asks for administrator rights). If the prompt is declined the installer stays
+  in Downloads and Explorer shows it. Fixes *Permission denied* of 1.4.1 (the service downloaded into a folder the tray
+  could not read). Without the tray app the button opens the release page.
+- **Build date and commit** next to the version: *Information → About*, the service log, `uwccctl version`
+  (`1.4.2 · build 2026-10-23 · a1b2c3d`).
+- **Diagnostic report** (*Information → Diagnostic report*, `uwccctl report`): a zip with the system and BIOS versions,
+  platform, EC registers the program uses (read only), UniWillVariable and SmartAPC, keyboard / light bar HID devices
+  with report descriptors, NVIDIA limits, sensors, original Control Center files, liquid cooler, log and settings.
+  Serial numbers, UUID, MAC addresses, computer / user names and program lists are left out unless ticked.
+  Buttons to open a GitHub issue or an e-mail to **OUCC@aspidov.ru** with a prefilled summary.
+- Contact e-mail in README, SECURITY.md, *About* and the installer.
+
+## 1.4.1
+
+- **Liquid cooler, calm control** (Automatic and Controller modes): the temperature is averaged over 10 s; a faster
+  tier is taken after the temperature holds for 10 s, a slower one after 30 s (both adjustable, 0–300 s); at 95 °C or
+  8 °C above the tier's threshold at once. The fan changes by 10 % and the pump by one voltage step per 3 s.
+  The same delays apply to the targets the EC publishes in the Controller mode. On by default.
+- **Stop the pump when it is cool** (off by default): below 50 °C for 60 s the pump stops, above 55 °C for 10 s it
+  starts again, at least 2 minutes of running after each start — all adjustable. Tiers may also use *Off* for the pump.
+- Cooler temperature source: the hotter of CPU and GPU, CPU only, or GPU only (the CPU is used while the GPU sleeps).
+
 ## 1.4.0
 
 - **CPU temperature limit** in each mode / profile, set in °C (the original's *CPU limit*; stored as the TCC offset

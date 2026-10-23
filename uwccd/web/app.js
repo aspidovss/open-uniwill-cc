@@ -151,7 +151,7 @@ function render() {
   const mode = S.power.mode;
   const pill = $("#modepill"); pill.textContent = MODES[mode] ? t(MODES[mode].name) : "—"; pill.className = "modepill m" + mode;
   $("#brand-sub").textContent = S.platform.project_name;
-  renderModes(); renderFanPage(); renderLiquid(); renderLight(); renderBattery(); renderSwitches(); renderBinding(); renderInfo(); renderAuto(); renderAbout();
+  renderModes(); renderFanPage(); renderLiquid(); renderLight(); renderBattery(); renderSwitches(); renderBinding(); renderInfo(); renderAuto(); renderAbout(); renderReportCard();
   renderHistSeg(); drawHistory();
 }
 
@@ -790,7 +790,11 @@ function renderLiquid() {
     kpi(t("Pump"), L.connected && L.pump != null ? (L.pump ? `${L.pump} V` : t("off")) : "—"),
     kpi(t("Coolant flow"), L.connected ? t(FLOW[L.flow] || L.flow) + (L.guard ? " · " + t("guard 11 V") : "") : "—", L.connected ? "flow-" + L.flow : ""),
     kpi(c.mode === "ec" && L.ec_target ? t("Source") : t("Temperature (tier)"),
-      c.mode === "ec" && L.ec_target ? t("EC targets") : L.temp != null ? `${L.temp}°C${L.tier != null && ["auto", "ec"].includes(c.mode) ? ` (${L.tier + 1})` : ""}` : "—"));
+      c.mode === "ec" && L.ec_target ? t("EC targets") : L.temp != null ? `${L.temp_avg ?? L.temp}°C${L.tier != null && ["auto", "ec"].includes(c.mode) ? ` (${L.tier + 1})` : ""}` : "—"));
+  if (L.connected && ["auto", "ec"].includes(c.mode) && (L.pending || L.pump_idle))
+    live.append(h("p", { class: "muted tiny", style: "grid-column:1/-1;margin:0" },
+      [L.pending ? t(L.pending.dir === "up" ? "Faster in {0} s if the temperature holds" : "Slower in {0} s if the temperature holds", L.pending.left) : "",
+       L.pump_idle ? t("Pump stopped: cool") : ""].filter(Boolean).join(" · ")));
   // modes
   const mb = $("#lc-modes"); mb.innerHTML = "";
   for (const m of LC_MODES) {
@@ -803,7 +807,7 @@ function renderLiquid() {
   // tiers
   $("#lc-tiers-card").classList.toggle("hidden", !["auto", "ec"].includes(c.mode));
   if (!lcTiers) lcTiers = JSON.parse(JSON.stringify(c.tiers));
-  drawTiers(L);
+  if (!$("#lc-tiers-card").contains(document.activeElement) || document.activeElement.tagName === "BUTTON") drawTiers(L);   // not while typing
   // lighting
   $("#lc-rgb-on").checked = !!c.rgb.on;
   const fx = $("#lc-fx"); fx.innerHTML = "";
@@ -835,7 +839,42 @@ function drawTiers(L) {
   tb.append(head,
     row(t("Below, °C"), "below", (tr, i) => i === n - 1 ? h("span", { class: "muted" }, "∞") : num(tr, "below", 20, 110)),
     row(t("Fan, %"), "fan", tr => num(tr, "fan", 0, 100)),
-    row(t("Pump, V"), "pump", tr => { const e = h("select", {}, ...[7, 8, 11, 12].map(v => { const o = h("option", { value: v }, v); if (tr.pump === v) o.selected = true; return o; })); e.addEventListener("change", () => { tr.pump = +e.value; }); return e; }));
+    row(t("Pump, V"), "pump", tr => { const e = h("select", {}, ...[0, 7, 8, 11, 12].map(v => { const o = h("option", { value: v }, v ? v : t("Off")); if (tr.pump === v) o.selected = true; return o; })); e.addEventListener("change", () => { tr.pump = +e.value; }); return e; }));
+  drawCalm(L);
+}
+// delays, smoothing, temperature source, pump stop when cool (auto / Controller modes)
+let lcCalm = null;
+function drawCalm(L) {
+  const c = L.config;
+  if (!lcCalm) lcCalm = { temp_source: c.temp_source || "max", delay_up: c.delay_up ?? 10, delay_down: c.delay_down ?? 30,
+    smooth: c.smooth !== false, pump_idle: { ...(c.pump_idle || {}) } };
+  const k = lcCalm, pi = k.pump_idle, box = $("#lc-calm"); box.innerHTML = "";
+  const num = (obj, key, min, max, unit) => {
+    const e = h("input", { type: "number", min, max, value: obj[key], class: "num" });
+    e.addEventListener("change", () => { obj[key] = +e.value; });
+    return h("span", { class: "row", style: "gap:6px;flex:none" }, e, h("span", { class: "muted" }, unit));
+  };
+  const chk = (obj, key, label, after) => {
+    const e = h("input", { type: "checkbox" }); e.checked = !!obj[key];
+    e.addEventListener("change", () => { obj[key] = e.checked; if (after) after(); });
+    return h("label", { class: "chk" }, e, " ", h("span", {}, label));
+  };
+  const line = (label, ...ctrl) => h("div", { class: "calm-row" }, h("span", {}, label), h("div", { class: "row wrap", style: "gap:10px" }, ...ctrl));
+  const src = h("select", {}, ...[["max", "Hotter of CPU and GPU"], ["cpu", "CPU"], ["gpu", "GPU only"]].map(([v, n]) => {
+    const o = h("option", { value: v }, t(n)); if (k.temp_source === v) o.selected = true; return o; }));
+  src.addEventListener("change", () => { k.temp_source = src.value; });
+  box.append(
+    h("h4", {}, t("Behaviour")),
+    line(t("Temperature"), src, h("span", { class: "muted tiny" }, t("GPU only: while the graphics card sleeps, the CPU is used"))),
+    line(t("Raise the speed after"), num(k, "delay_up", 0, 300, t("s")), h("span", { class: "muted tiny" }, t("at once from 95 °C or 8 °C above the tier"))),
+    line(t("Lower the speed after"), num(k, "delay_down", 0, 300, t("s"))),
+    chk(k, "smooth", t("Smooth: average the temperature over 10 s, change the fan by 10 % and the pump by one voltage step at a time")),
+    h("h4", {}, t("Stop the pump when it is cool")),
+    chk(pi, "enabled", t("Stop the pump at low load (the cooler fan keeps following the tiers)"), () => drawCalm(L)));
+  if (pi.enabled) box.append(
+    line(t("Stop below"), num(pi, "off_below", 30, 85, "°C"), h("span", { class: "muted" }, t("for")), num(pi, "off_after", 10, 900, t("s"))),
+    line(t("Start again above"), num(pi, "on_above", 32, 95, "°C"), h("span", { class: "muted" }, t("for")), num(pi, "on_after", 0, 120, t("s"))),
+    line(t("Run at least"), num(pi, "min_run", 0, 1800, t("s")), h("span", { class: "muted tiny" }, t("after each start, so the pump does not cycle"))));
 }
 $("#lc-scan").addEventListener("click", async () => {
   lcScanning = true; renderLiquid();
@@ -853,8 +892,14 @@ $("#lc-pump").addEventListener("change", e => {
   if (v === 0 && !confirm(t("Stop the pump? The coolant will not circulate."))) { e.target.value = S.liquid.config.pump; return; }
   lcPost("config", { mode: "manual", pump: v });
 });
-$("#lc-tiers-save").addEventListener("click", () => act(async () => { await api("lc/config", { tiers: lcTiers }); lcTiers = null; }, t("Tiers saved")));
-$("#lc-tiers-reset").addEventListener("click", () => { lcTiers = JSON.parse(JSON.stringify(S.liquid.default_tiers)); drawTiers(S.liquid); });
+$("#lc-tiers-save").addEventListener("click", () => act(async () => {
+  await api("lc/config", { tiers: lcTiers, ...(lcCalm || {}) }); lcTiers = null; lcCalm = null;
+}, t("Saved")));
+$("#lc-tiers-reset").addEventListener("click", () => {
+  lcTiers = JSON.parse(JSON.stringify(S.liquid.default_tiers));
+  lcCalm = { temp_source: "max", delay_up: 10, delay_down: 30, smooth: true, pump_idle: { ...(S.liquid.config.pump_idle || {}), enabled: false } };
+  drawTiers(S.liquid);
+});
 $("#lc-rgb-on").addEventListener("change", e => lcPost("config", { rgb: { on: e.target.checked } }));
 $("#lc-color").addEventListener("change", e => lcPost("config", { rgb: { on: true, color: hex2rgb(e.target.value) } }));
 $("#lc-prime").addEventListener("click", () => {
@@ -1098,9 +1143,13 @@ function renderAbout() {
   const u = S.update || {};
   const a = (href, text) => h("a", { href, target: "_blank", rel: "noopener" }, text);
   const dl = $("#about-kv"); dl.innerHTML = "";
-  const rows = [[t("Program"), "open-uniwill-cc"], [t("Version"), u.current || "—"],
+  const b = u.build || {};
+  const ver = [u.current || "—", b.date ? `${t("build")} ${b.date}` : "", b.commit || "", b.source === "checkout" ? "dev" : ""].filter(Boolean).join(" · ");
+  const mail = u.contact || "OUCC@aspidov.ru";
+  const rows = [[t("Program"), "open-uniwill-cc"], [t("Version"), ver],
     [t("Source code"), a(u.repo || "https://github.com/aspidovss/open-uniwill-cc", (u.repo || "").replace("https://", "") || "github.com/aspidovss/open-uniwill-cc")],
-    [t("License"), "MIT (kernel/: GPL-2.0)"], [t("Report a problem"), a((u.repo || "") + "/issues", t("GitHub issues"))]];
+    [t("License"), "MIT (kernel/: GPL-2.0)"], [t("Report a problem"), a((u.repo || "") + "/issues", t("GitHub issues"))],
+    [t("Email"), h("a", { href: "mailto:" + mail }, mail)]];
   for (const [k, v] of rows) dl.append(h("dt", {}, k), h("dd", {}, v));
   let txt;
   if (u.error) txt = t("Update check failed: {0}", u.error);
@@ -1113,15 +1162,84 @@ function renderAbout() {
     $("#upd-text").append(" ", a(u.url, t("What's new")));
     if (!u.can_install) $("#upd-text").append(h("br"), t("Linux: download the archive from the release page and run sudo bash install.sh in it."));
   }
-  $("#upd-install").classList.toggle("hidden", !(u.newer && u.can_install && u.setup));
+  const dlst = u.download || {};
+  const busy = ["requested", "downloading"].includes(dlst.state);
+  if (u.newer && u.can_install && dlst.state) {
+    const msg = {
+      requested: t("Starting the download…"),
+      downloading: t("Downloading… {0}%", dlst.percent ?? 0),
+      verified: t("Downloaded and verified: {0}", dlst.path || ""),
+      started: t("The installer is running — confirm the Windows prompt. File: {0}", dlst.path || ""),
+      declined: t("The installer is in your Downloads folder, run it to update: {0}", dlst.path || ""),
+      error: t("Update failed: {0}", dlst.error || ""),
+    }[dlst.state];
+    if (msg) $("#upd-text").append(h("br"), h("span", { class: dlst.state === "error" ? "warn-text" : "" }, msg));
+  }
+  const ib = $("#upd-install");
+  ib.classList.toggle("hidden", !(u.newer && u.can_install && u.setup));
+  ib.disabled = busy;
 }
 $("#upd-check").addEventListener("click", () => act(async () => { S.update = await api("update/check", {}); renderAbout(); },
   null));
 $("#upd-install").addEventListener("click", () => act(async () => {
-  if (!confirm(t("Download version {0}, check its checksum and start the installer?", S.update.latest))) return;
-  await api("update/download", {});
-  toast(t("Downloading… the installer starts when it is ready (confirm the Windows prompt)."));
+  if (!confirm(t("Download version {0} to your Downloads folder, check its checksum and start the installer?", S.update.latest))) return;
+  const r = await api("update/download", {});
+  if (!r.tray) {                                     // the tray app downloads; without it open the release page
+    toast(t("The Control Center tray app is not running — opening the release page."));
+    window.open(r.url || S.update.url, "_blank");
+  }
 }));
+
+// ---------------------------------------------------------------- diagnostic report
+const REP_SECTIONS = [["system", "System, BIOS and EC versions"], ["platform", "Platform, modes, fan tables and profiles"],
+  ["ec", "EC registers (read only)"], ["bios", "BIOS settings: UniWillVariable, SmartAPC limits"],
+  ["lighting", "Keyboard and light bar devices (HID)"], ["nvidia", "NVIDIA: driver, limits, Dynamic Boost"],
+  ["sensors", "Sensors and the last 15 minutes of history"], ["original", "Original Control Center files"],
+  ["cooler", "Liquid cooler"], ["log", "Service log"], ["settings", "Program settings"]];
+const REP_PRIVATE = [["serial", "Serial numbers of the laptop and the board", "to tell firmware batches of one model apart"],
+  ["uuid", "System UUID", "to match several reports from one laptop"],
+  ["mac", "MAC addresses (network, Bluetooth, cooler)", "for liquid cooler connection problems"],
+  ["names", "Computer name and user name in paths", "for problems with paths and permissions"],
+  ["apps", "Programs from App binding and processes on the GPU", "for automatic mode switching problems"]];
+let repLang = null;
+function renderReportCard() {                      // rebuilt only when the language changes; keeps the ticks
+  const sec = $("#rep-sections"), pri = $("#rep-private");
+  if (repLang === LANG) return;
+  repLang = LANG;
+  const was = Object.fromEntries($$("#report-card input[data-k]").map(i => [i.dataset.k, i.checked]));
+  const box = (k, def) => { const i = h("input", { type: "checkbox", "data-k": k }); i.checked = k in was ? was[k] : def; return i; };
+  sec.innerHTML = ""; pri.innerHTML = "";
+  for (const [k, n] of REP_SECTIONS) sec.append(h("label", { class: "chk" }, box(k, true), " ", h("span", {}, t(n))));
+  for (const [k, n, why] of REP_PRIVATE) pri.append(h("label", { class: "chk" }, box(k, false), " ",
+    h("span", {}, t(n), h("small", { class: "muted" }, " — " + t(why)))));
+}
+async function makeReport() {
+  const pick = sel => $$(sel + " input:checked").map(i => i.dataset.k).join(",");
+  let sum = {};
+  try { sum = await api("report/summary"); } catch (_) {}
+  const d = new Date(), z = n => String(n).padStart(2, "0");
+  const stamp = `${d.getFullYear()}${z(d.getMonth() + 1)}${z(d.getDate())}-${z(d.getHours())}${z(d.getMinutes())}${z(d.getSeconds())}`;
+  const name = `uwcc-report-${String(sum.model || sum.project || "laptop").replace(/[^\w.-]+/g, "-").slice(0, 40)}-${stamp}.zip`;
+  // served with Content-Disposition, like the history export: works in Edge (Windows) and in the WebKitGTK window
+  const a = h("a", { href: `/api/report?sections=${pick("#rep-sections")}&private=${pick("#rep-private")}&name=${encodeURIComponent(name)}&token=${encodeURIComponent(TOKEN)}`, download: name });
+  document.body.append(a); a.click(); a.remove();
+  const repo = (S.update && S.update.repo) || "https://github.com/aspidovss/open-uniwill-cc";
+  const mail = (S.update && S.update.contact) || "OUCC@aspidov.ru";
+  const lines = Object.entries(sum).map(([k, v]) => `- ${k}: ${v}`).join("\n");
+  const title = `Report: ${sum.vendor || ""} ${sum.model || sum.project || ""}`.replace(/\s+/g, " ").trim();
+  const body = `${t("Describe the problem or the laptop here.")}\n\n${lines}\n\n${t("Attached: {0}", name)}\n`;
+  const box = $("#rep-done"); box.innerHTML = ""; box.classList.remove("hidden");
+  const issue = `${repo}/issues/new?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`;
+  const mailto = `mailto:${mail}?subject=${encodeURIComponent("open-uniwill-cc: " + title)}&body=${encodeURIComponent(body)}`;
+  const reveal = async () => { try { const x = await api("reveal", { name }); if (!x.tray) toast(t("The file is in your Downloads folder: {0}", name)); } catch (_) {} };
+  box.append(h("p", {}, h("b", {}, "✓ " + t("Report saved: {0}", name))),
+    h("p", { class: "muted tiny" }, t("It is in your Downloads folder. GitHub and e-mail cannot attach files by themselves: drag the file into the issue or the letter.")),
+    h("div", { class: "row wrap" },
+      h("button", { class: "btn", onclick: () => { window.open(issue, "_blank"); reveal(); } }, t("Create a GitHub issue")),
+      h("button", { class: "btn ghost", onclick: () => { location.href = mailto; reveal(); } }, t("Send by e-mail")),
+      h("button", { class: "btn ghost", onclick: reveal }, t("Show the file"))));
+}
+$("#rep-make").addEventListener("click", () => act(makeReport, t("Report saved")));
 
 // ---------------------------------------------------------------- export / import
 function download(url) {

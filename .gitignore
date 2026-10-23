@@ -14,3 +14,4 @@ kernel/Module.symvers
 kernel/modules.order
 .vscode/
 .idea/
+uwccd/_build.py

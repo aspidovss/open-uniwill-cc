@@ -11,6 +11,7 @@ Transport: Nordic UART Service. Every command is an 8-byte frame
 written to 6e400002; replies (firmware string, flow meter) arrive as notifications on 6e400003.
 """
 import asyncio
+import collections
 import copy
 import logging
 import re
@@ -46,6 +47,13 @@ LAPTOP_MODE_FAN = {0: 40, 1: 60, 2: 90, 3: 90}
 LAPTOP_MODE_PUMP = 11
 GUARD_FAN, GUARD_PUMP = 60, 11   # flow guard: no coolant flow -> pump 11 V, fan >= 60 %
 HYSTERESIS = 3          # °C: step down a tier only when this much below its threshold
+# Calm control (auto / ec modes): the temperature is averaged, a change must hold for a while, speeds ramp.
+SMOOTH_WINDOW = 10.0    # s of temperature samples averaged
+EMERGENCY_T = 95        # °C (average): step up at once
+EMERGENCY_OVER = 8      # °C above the current tier's threshold: step up at once
+FAN_STEP = 10           # % per control step (3 s) when ramping
+TEMP_SOURCES = ("max", "cpu", "gpu")
+PUMP_IDLE = {"enabled": False, "off_below": 50, "off_after": 60, "on_above": 55, "on_after": 10, "min_run": 120}
 METER_INTERVAL = 15.0
 METER_TIMEOUT = 5.0
 FLOW_GRACE = 5.0        # pump needs a few seconds before the flow sensor reports
@@ -60,6 +68,9 @@ DEFAULTS = {
     "notify_flow": True,
     "flow_guard": True,
     "boost_fan": False, "boost_pump": False,
+    "temp_source": "max",          # max | cpu | gpu (GPU falls back to the CPU while the GPU sleeps)
+    "delay_up": 10, "delay_down": 30, "smooth": True,
+    "pump_idle": PUMP_IDLE,
 }
 
 
@@ -183,6 +194,7 @@ class LiquidCooler:
         self.path = store.path("liquid.json")
         self.cfg = copy.deepcopy(DEFAULTS)
         self.cfg.update(store.load_json(self.path, {}) or {})
+        self.cfg["pump_idle"] = {**PUMP_IDLE, **(self.cfg.get("pump_idle") or {})}
         self.lock = threading.Lock()
         self.factory = MockLink if mock else BleakLink
         self.reason = None
@@ -218,6 +230,14 @@ class LiquidCooler:
         self.temp = None
         self.ec_target = None
         self.guard = False
+        self.temp_avg = None
+        self._temps = collections.deque()
+        self._pending = None           # (direction, since) of a tier / EC target change waiting for its delay
+        self._settled = None           # EC targets accepted so far
+        self._emergency = False
+        self._idle = False             # pump stopped because it is cool
+        self._idle_mark = None         # since when the idle condition (cool / hot again) holds
+        self._pump_on_since = 0.0
 
     # -- thread / loop plumbing -------------------------------------------------------------------
     def start(self):
@@ -475,6 +495,110 @@ class LiquidCooler:
             await asyncio.sleep(METER_INTERVAL)
 
     # -- speed policy -------------------------------------------------------------------------------
+    # -- calm control ----------------------------------------------------------------------------
+    @staticmethod
+    def _now():
+        return time.monotonic()
+
+    def _read_temp(self):
+        try:
+            return self.temp_fn(self.cfg.get("temp_source", "max"))
+        except TypeError:                         # a plain temperature function (tests)
+            return self.temp_fn()
+
+    def _sample_temp(self):
+        """Current temperature -> the value decisions use (average over SMOOTH_WINDOW when smoothing)."""
+        t, now = self._read_temp(), self._now()
+        if t is not None:
+            self.temp = t
+            self._temps.append((now, t))
+        while self._temps and now - self._temps[0][0] > SMOOTH_WINDOW:
+            self._temps.popleft()
+        if not self._temps:
+            self.temp_avg = None
+        elif not self.cfg.get("smooth", True):
+            self.temp_avg = self._temps[-1][1]
+        else:
+            self.temp_avg = round(sum(v for _, v in self._temps) / len(self._temps), 1)
+        return self.temp_avg
+
+    def _wait(self, direction, urgent=False):
+        """True when a change in `direction` (up / down) has been wanted for its delay (or is urgent)."""
+        if urgent:
+            self._pending = None
+            self._emergency = True
+            return True
+        now = self._now()
+        if not self._pending or self._pending[0] != direction:
+            self._pending = (direction, now)
+        delay = int(self.cfg.get("delay_up" if direction == "up" else "delay_down", 0))
+        if now - self._pending[1] >= delay:
+            self._pending = None
+            return True
+        return False
+
+    def _settle_tier(self, raw, avg, tiers):
+        cur = self.tier
+        if cur is None or raw == cur:
+            self._pending = None
+            return raw
+        up = raw > cur
+        urgent = up and (avg >= EMERGENCY_T or avg >= min(tiers[cur]["below"], 200) + EMERGENCY_OVER)
+        return raw if self._wait("up" if up else "down", urgent) else cur
+
+    @staticmethod
+    def _vidx(v):
+        return VOLTAGES.index(v) if v in VOLTAGES else -1
+
+    def _settle_pair(self, raw, avg):
+        cur = self._settled
+        if cur is None or raw == cur:
+            self._pending = None
+            self._settled = raw
+            return raw
+        up = raw[0] > cur[0] or self._vidx(raw[1]) > self._vidx(cur[1])
+        if self._wait("up" if up else "down", up and avg is not None and avg >= EMERGENCY_T):
+            self._settled = raw
+        return self._settled
+
+    def _pump_idle(self, pump, avg):
+        """Stop the pump while it is cool (auto / ec modes, when enabled)."""
+        pi = self.cfg.get("pump_idle") or PUMP_IDLE
+        if not pi.get("enabled"):
+            self._idle, self._idle_mark = False, None
+            return pump
+        if avg is None or not pump:
+            return 0 if self._idle else pump
+        now = self._now()
+        if self._idle:
+            if avg >= EMERGENCY_T:
+                self._idle, self._idle_mark = False, None
+            elif avg >= pi["on_above"]:
+                self._idle_mark = self._idle_mark or now
+                if now - self._idle_mark >= pi["on_after"]:
+                    self._idle, self._idle_mark = False, None
+            else:
+                self._idle_mark = None
+        elif avg < pi["off_below"]:
+            self._idle_mark = self._idle_mark or now
+            if now - self._idle_mark >= pi["off_after"] and now - self._pump_on_since >= pi["min_run"]:
+                self._idle, self._idle_mark = True, None
+                log.info("cooler pump stopped: %.1f °C is below %d °C", avg, pi["off_below"])
+        else:
+            self._idle_mark = None
+        return 0 if self._idle else pump
+
+    def _ramp(self, fan, pump):
+        """Move towards the target gradually: fan by FAN_STEP, pump one voltage step per control step."""
+        cf, cp = self.cur
+        if cf is not None and fan is not None and abs(fan - cf) > FAN_STEP:
+            fan = cf + FAN_STEP if fan > cf else cf - FAN_STEP
+        if cp and pump and cp in VOLTAGES and pump in VOLTAGES:
+            i, j = VOLTAGES.index(cp), VOLTAGES.index(pump)
+            if abs(i - j) > 1:
+                pump = VOLTAGES[i + (1 if j > i else -1)]
+        return fan, pump
+
     def _tier_index(self, t, tiers):
         for i, tr in enumerate(tiers):
             if t < tr["below"]:
@@ -487,6 +611,8 @@ class LiquidCooler:
         m = c["mode"]
         self.ec_target = None
         laptop_mode = self.mode_fn()
+        self._emergency = False
+        calm = False
         if self.guard and laptop_mode != self._guard_mode:    # the laptop's mode changed -> guard ends
             self.guard = False
         if m == "off":
@@ -499,23 +625,27 @@ class LiquidCooler:
             fan, pump = int(c["fan"]), int(c["pump"])
         else:
             fan = pump = None
+            calm = True
+            avg = self._sample_temp()
             if m == "ec" and self.ec_table:
                 f, p = self.ec.read(R.LC_EC_FAN), self.ec.read(R.LC_EC_PUMP)
                 if f & 0x80 and p & 0x80 and (p & 0x7F) in (0, *VOLTAGES):
-                    fan, pump = min(100, f & 0x7F), p & 0x7F
-                    self.ec_target = (fan, pump)
+                    self.ec_target = (min(100, f & 0x7F), p & 0x7F)
+                    fan, pump = self._settle_pair(self.ec_target, avg)
             if fan is None:                       # "auto", or the EC publishes nothing
-                t = self.temp_fn()
                 tiers = c["tiers"]
-                if t is None:
+                if avg is None:
                     i = self.tier if self.tier is not None else min(1, len(tiers) - 1)
                 else:
-                    self.temp = t
-                    i = self._tier_index(t, tiers)
+                    i = self._tier_index(avg, tiers)
                     if self.tier is not None and i < self.tier:
-                        i = max(i, self._tier_index(t + HYSTERESIS, tiers))
+                        i = max(i, self._tier_index(avg + HYSTERESIS, tiers))
+                    i = self._settle_tier(i, avg, tiers)
                 self.tier = i
                 fan, pump = tiers[i]["fan"], tiers[i]["pump"]
+            pump = self._pump_idle(pump, avg)
+        if calm and c.get("smooth", True) and not self._emergency and not self.guard:
+            fan, pump = self._ramp(fan, pump)
         if m != "off":
             if c["boost_fan"]:
                 fan = max(fan, BOOST_FAN)
@@ -534,6 +664,8 @@ class LiquidCooler:
             log.info("cooler fan %d%% (mode %s)", fan, self.cfg["mode"])
             self._changed()
         if force or pump != self.cur[1]:
+            if pump and not self.cur[1]:
+                self._pump_on_since = self._now()
             await self._pump(pump)
             self.cur = (self.cur[0], pump)
             log.info("cooler pump %s (mode %s)", f"{pump} V" if pump else "off", self.cfg["mode"])
@@ -646,6 +778,20 @@ class LiquidCooler:
             c["pump"] = p
         if "tiers" in b:
             c["tiers"] = self._check_tiers(b["tiers"])
+        if "temp_source" in b:
+            if b["temp_source"] not in TEMP_SOURCES:
+                raise ValueError("temperature source: max / cpu / gpu")
+            c["temp_source"] = b["temp_source"]
+        for k in ("delay_up", "delay_down"):
+            if k in b:
+                v = int(b[k])
+                if not 0 <= v <= 300:
+                    raise ValueError("delay 0..300 s")
+                c[k] = v
+        if "smooth" in b:
+            c["smooth"] = bool(b["smooth"])
+        if "pump_idle" in b:
+            c["pump_idle"] = self._check_idle({**c["pump_idle"], **b["pump_idle"]})
         if any(k in b for k in ("mode", "fan", "pump")):
             self.guard = False                       # a choice by hand ends the flow guard
         for k in ("notify_flow", "flow_guard", "boost_fan", "boost_pump"):
@@ -679,6 +825,19 @@ class LiquidCooler:
         self._changed()
 
     @staticmethod
+    def _check_idle(pi):
+        out = {"enabled": bool(pi["enabled"])}
+        for k, lo, hi in (("off_below", 30, 85), ("on_above", 32, 95), ("off_after", 10, 900), ("on_after", 0, 120),
+                          ("min_run", 0, 1800)):
+            v = int(pi[k])
+            if not lo <= v <= hi:
+                raise ValueError(f"pump idle {k}: {lo}..{hi}")
+            out[k] = v
+        if out["on_above"] < out["off_below"] + 2:
+            raise ValueError("the pump must restart at least 2 °C above the temperature it stops at")
+        return out
+
+    @staticmethod
     def _check_tiers(tiers):
         if not isinstance(tiers, list) or not 1 <= len(tiers) <= 8:
             raise ValueError("1..8 tiers")
@@ -689,8 +848,8 @@ class LiquidCooler:
                 below = 999
             if below <= last or not 20 <= below <= 999:
                 raise ValueError("tier temperatures must increase (20..110 °C)")
-            if not 0 <= fan <= 100 or pump not in VOLTAGES:
-                raise ValueError("tier fan 0..100 %, pump 7/8/11/12 V")
+            if not 0 <= fan <= 100 or pump not in (0, *VOLTAGES):
+                raise ValueError("tier fan 0..100 %, pump off/7/8/11/12 V")
             out.append({"below": below, "fan": fan, "pump": pump})
             last = below
         return out
@@ -745,6 +904,10 @@ class LiquidCooler:
             "fan": self.cur[0], "pump": self.cur[1], "flow": self.flow, "priming": self.priming,
             "guard": self.guard, "laptop_mode_fan": LAPTOP_MODE_FAN,
             "temp": self.temp, "tier": self.tier, "ec_target": self.ec_target,
+            "temp_avg": self.temp_avg, "pump_idle": self._idle,
+            "pending": ({"dir": self._pending[0],
+                         "left": max(0, round(int(c.get("delay_up" if self._pending[0] == "up" else "delay_down", 0))
+                                              - (self._now() - self._pending[1])))} if self._pending else None),
             "ec_support": self.ec_support, "ec_table": self.ec_table, "suspended": self.suspended,
             "config": copy.deepcopy(c), "scan": self.scan_result,
             "presets": {k: {"fan": v[0], "pump": v[1]} for k, v in PRESETS.items()},

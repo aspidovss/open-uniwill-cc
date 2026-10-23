@@ -186,3 +186,10 @@ table.bind td,table.bind th{padding:8px;border-bottom:1px solid var(--line);text
 .menu{min-width:0}.menu button{white-space:nowrap}
 .btn.busy{opacity:.7;cursor:progress}.btn.done{background:var(--acc2);color:#fff;border-color:var(--acc2)}
 .btn-err{color:var(--bad);font-size:12.5px;max-width:420px;align-self:center;margin:0 4px;line-height:1.35}
+.lc-calm{margin-top:14px;display:grid;gap:10px}.lc-calm h4{margin:8px 0 0;font-size:13.5px}
+.calm-row{display:grid;grid-template-columns:200px 1fr;align-items:center;gap:10px}.lc-calm input.num{width:72px}
+@media (max-width:700px){.calm-row{grid-template-columns:1fr}}
+.lc-calm .muted{margin:0}
+.rep-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 28px;margin-top:6px}.rep-grid h4{margin:0 0 6px}
+.rep-list{display:grid;gap:6px}.rep-list small{font-size:12px}.rep-done{margin-top:14px;padding:12px 14px;border:1px solid var(--acc2);border-radius:10px}
+.rep-done p{margin:0 0 8px}@media (max-width:800px){.rep-grid{grid-template-columns:1fr}}

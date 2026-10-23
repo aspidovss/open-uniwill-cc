@@ -74,18 +74,24 @@ class Service:
         self.liquid = LiquidCooler(self.ec, self.hottest_temp, self.emit, mock=mock,
                                    mode_fn=lambda: self.power.option.get("OperatingMode") if self.fan_control else None)
         self.sampler = Sampler(self)
+        self.tray_clients = 0          # Windows tray apps connected to /api/events (they install updates)
         from .updates import Updater
         self.updater = Updater(self)
         self.rules = PowerSourceRules(self)
         self.threads = []
         self.fan_control = False
 
-    def hottest_temp(self):
-        """Temperature driving the cooler's auto mode: the hotter of CPU and NVIDIA GPU."""
-        ts = [self.monitor.cpu_temp()]
-        if self.pf.nv_gpu:
-            ts.append((self.monitor.nvidia() or {}).get("temp"))
-        ts = [t for t in ts if isinstance(t, (int, float))]
+    def hottest_temp(self, source="max"):
+        """Temperature driving the cooler: the hotter of CPU and NVIDIA GPU, or one of them.
+        "gpu" falls back to the CPU while the GPU sleeps / is not there (otherwise the cooler would stay put)."""
+        cpu = self.monitor.cpu_temp()
+        gpu = (self.monitor.nvidia() or {}).get("temp") if self.pf.nv_gpu and source != "cpu" else None
+        ok = lambda v: isinstance(v, (int, float))          # noqa: E731
+        if source == "cpu":
+            return cpu if ok(cpu) else None
+        if source == "gpu":
+            return gpu if ok(gpu) else (cpu if ok(cpu) else None)
+        ts = [v for v in (cpu, gpu) if ok(v)]
         return max(ts) if ts else None
 
     # -- event fan-out to UI / agent (SSE) ------------------------------------------------
@@ -153,7 +159,9 @@ class Service:
         for t in self.threads:
             t.start()
         self.liquid.start()
-        log.info("service started (hotkeys: %s)", "kernel module" if hk.available else "polling")
+        from . import version_string
+        log.info("service started: open-uniwill-cc %s (hotkeys: %s)", version_string(),
+                 "kernel module" if hk.available else "polling")
 
     def stop(self):
         self.liquid.stop()

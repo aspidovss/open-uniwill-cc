@@ -7,11 +7,16 @@
 - Only the EC registers that the original Control Center service writes can be written; values are validated.
 
 Please report vulnerabilities privately through
-[GitHub Security Advisories](https://github.com/aspidovss/open-uniwill-cc/security/advisories/new),
-not in public issues.
+[GitHub Security Advisories](https://github.com/aspidovss/open-uniwill-cc/security/advisories/new)
+or by e-mail to **OUCC@aspidov.ru**, not in public issues.
+
+Update installation (Windows): the tray app, running as the user, downloads the installer of the latest GitHub release
+to the user's Downloads folder, checks it against `SHA256SUMS.txt` of the same release and starts it; Windows asks for
+administrator rights (UAC). The service itself does not download or start programs.
 
 ---
 
 Служба работает с правами root / LocalSystem, API слушает только `127.0.0.1:47321` и требует случайный ключ,
 который создаётся заново при каждом запуске. Об уязвимостях сообщайте приватно через
-[GitHub Security Advisories](https://github.com/aspidovss/open-uniwill-cc/security/advisories/new).
+[GitHub Security Advisories](https://github.com/aspidovss/open-uniwill-cc/security/advisories/new) или по почте
+**OUCC@aspidov.ru**.

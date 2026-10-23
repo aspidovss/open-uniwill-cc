@@ -1,20 +1,20 @@
 """Update check against the GitHub releases of the project (once a day when enabled, or on request).
 
 Only https://api.github.com/repos/<REPO>/releases/latest is requested (no identifiers besides the usual
-User-Agent). On Windows the service can also download the setup.exe of the release, check it against the
-SHA256SUMS.txt of the same release and hand it to the tray application, which starts it with elevation.
+User-Agent). On Windows the tray application (running as the user) downloads the setup.exe of the release to the user's
+Downloads folder, checks it against the SHA256SUMS.txt of the same release and starts it (UAC prompt).
 """
 import hashlib
 import json
-import logging
 import os
+import logging
 import re
 import sys
 import threading
 import time
 import urllib.request
 
-from . import __version__
+from . import CONTACT, __version__, build_info, version_string
 
 log = logging.getLogger("uwccd.update")
 
@@ -85,49 +85,75 @@ class Updater(threading.Thread):
         self.svc.emit("status", {})
         return res
 
-    # -- Windows: download + verify, then the tray starts the installer --------------------------------------------
-    def download(self):
+    # -- Windows: the tray app (running as the user) downloads to the user's Downloads, verifies and starts it --
+    def request_install(self):
         if sys.platform != "win32":
             raise NotImplementedError("on Linux install the release archive with install.sh")
         res = self.result
         if not res.get("newer") or not res.get("setup") or not res.get("sums"):
             raise ValueError("no newer release with a Windows installer")
-        threading.Thread(target=self._download, args=(res,), daemon=True, name="update-download").start()
-        return {"started": True}
+        if not self.svc.tray_clients:
+            return {"tray": False, "url": res.get("url")}
+        self.set_progress({"state": "requested"})
+        self.svc.emit("update_install", {"version": res["latest"], "setup": res["setup"], "sums": res["sums"]})
+        return {"tray": True}
 
-    def _download(self, res):
-        try:
-            from .win.winplat import acl_users_read, data_root
-            folder = os.path.join(data_root(), "updates")
-            os.makedirs(folder, exist_ok=True)
-            acl_users_read(folder)                       # users may read and run it, but not replace it
-            name = res["setup"].rsplit("/", 1)[1]
-            if not re.fullmatch(r"[\w.\-]+\.exe", name):
-                raise ValueError(f"unexpected file name {name}")
-            sums = {}
-            for line in _get(res["sums"]).decode("utf-8", "replace").splitlines():
-                m = re.match(r"([0-9a-fA-F]{64})\s+\*?(\S+)", line.strip())
-                if m:
-                    sums[m.group(2)] = m.group(1).lower()
-            if name not in sums:
-                raise ValueError(f"{name} is not listed in SHA256SUMS.txt")
-            data = _get(res["setup"], timeout=300)
-            digest = hashlib.sha256(data).hexdigest()
-            if digest != sums[name]:
-                raise ValueError("checksum mismatch — the download is damaged")
-            path = os.path.join(folder, name)
-            if os.path.exists(path):
-                os.remove(path)
-            with open(path, "wb") as f:
-                f.write(data)
-            with self.lock:
-                self.result = {**self.result, "download": {"path": path, "sha256": digest}}
-            log.info("update downloaded: %s", path)
-            self.svc.emit("update_ready", {"path": path, "sha256": digest, "version": res["latest"]})
-        except Exception as e:  # noqa: BLE001
-            log.warning("update download: %s", e)
-            self.svc.emit("update_error", {"error": str(e)})
+    def set_progress(self, b):
+        state = str(b.get("state", ""))
+        if state not in ("requested", "downloading", "verified", "started", "declined", "error"):
+            raise ValueError("state")
+        d = {"state": state, "path": b.get("path"), "error": b.get("error"), "percent": b.get("percent")}
+        with self.lock:
+            self.result = {**self.result, "download": d}
+        if state in ("error", "declined", "started", "verified"):
+            log.info("update: %s %s", state, b.get("path") or b.get("error") or "")
+        self.svc.emit("status", {})
+        return d
 
     def status(self):
         with self.lock:
-            return {**self.result, "enabled": self.enabled(), "can_install": sys.platform == "win32"}
+            return {**self.result, "enabled": self.enabled(), "can_install": sys.platform == "win32",
+                    "build": build_info(), "version_full": version_string(), "contact": CONTACT,
+                    "tray": bool(getattr(self.svc, "tray_clients", 0))}
+
+
+def parse_sums(text):
+    sums = {}
+    for line in text.splitlines():
+        m = re.match(r"([0-9a-fA-F]{64})\s+\*?(\S+)", line.strip())
+        if m:
+            sums[m.group(2)] = m.group(1).lower()
+    return sums
+
+
+def download_verified(setup_url, sums_url, folder, progress=None):
+    """Download the installer into `folder` (the user's Downloads), check it against SHA256SUMS.txt.
+    Returns the path; a file that does not match is deleted. Used by the Windows tray app."""
+    name = setup_url.rsplit("/", 1)[1]
+    if not re.fullmatch(r"[\w.\-]+\.exe", name):
+        raise ValueError(f"unexpected file name {name}")
+    sums = parse_sums(_get(sums_url).decode("utf-8", "replace"))
+    if name not in sums:
+        raise ValueError(f"{name} is not listed in SHA256SUMS.txt")
+    os.makedirs(folder, exist_ok=True)
+    path = os.path.join(folder, name)
+    part = path + ".part"
+    h = hashlib.sha256()
+    req = urllib.request.Request(setup_url, headers={"User-Agent": UA})
+    with urllib.request.urlopen(req, timeout=60) as r, open(part, "wb") as f:
+        total, done, last = int(r.headers.get("Content-Length") or 0), 0, -1
+        for chunk in iter(lambda: r.read(1 << 16), b""):
+            f.write(chunk)
+            h.update(chunk)
+            done += len(chunk)
+            pct = done * 100 // total if total else None
+            if progress and pct is not None and pct >= last + 10:
+                last = pct
+                progress(pct)
+    if h.hexdigest() != sums[name]:
+        os.remove(part)
+        raise ValueError("checksum mismatch — the download is damaged and was deleted")
+    if os.path.exists(path):
+        os.remove(path)
+    os.replace(part, path)
+    return path

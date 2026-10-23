@@ -12,6 +12,8 @@
   uwccctl debug on|off           verbose service log (for bug reports)
   uwccctl version                version of the service and the latest release
   uwccctl update [check|install] check GitHub for a new release (install: Windows only)
+  uwccctl report [FILE] [--private serial,uuid,mac,names,apps] [--sections system,ec,...]
+                                 diagnostic report (zip) for adding support / bug reports
   uwccctl export fans|all FILE   fan tables / full backup (profiles, settings, liquid cooler) to FILE
   uwccctl import FILE [fans,profiles,settings] [--force]   default: fans,profiles; --force ignores another project
   uwccctl lang en|ru             interface language (UI, notifications, this tool)
@@ -252,7 +254,7 @@ def main(a):
             sys.stdout.write(data.decode("utf-8-sig"))
     elif cmd in ("version", "update"):
         st = call("update/check", {}, timeout=40) if cmd == "update" or a[1:2] == ["check"] else call("update")
-        print("open-uniwill-cc", st.get("current"))
+        print("open-uniwill-cc", st.get("version_full") or st.get("current"))
         if st.get("error"):
             print("update check:", st["error"])
         elif st.get("latest"):
@@ -264,6 +266,24 @@ def main(a):
             print("downloading; the Control Center tray app starts the installer when it is verified")
         elif st.get("newer") and not IS_WIN:
             print("install: download " + str(st.get("linux") or st.get("url")) + ", unpack it and run: sudo bash install.sh")
+    elif cmd == "report":
+        opt = lambda k: next((a[i + 1] for i, x in enumerate(a) if x == k and i + 1 < len(a)), "")   # noqa: E731
+        flags = {"--private", "--sections"}
+        out = next((x for i, x in enumerate(a[1:], 1) if not x.startswith("--") and a[i - 1] not in flags), None)
+        q = f"report?private={opt('--private')}" + (f"&sections={opt('--sections')}" if opt("--sections") else "")
+        req = urllib.request.Request(f"http://127.0.0.1:{PORT}/api/{q}", headers={"X-UWCC-Token": tok()})
+        try:
+            r = urllib.request.urlopen(req, timeout=180)
+        except urllib.error.HTTPError as e:
+            sys.exit(f"{T('error')}: {json.load(e).get('error', e)}")
+        except urllib.error.URLError:
+            sys.exit(T("not_running_win" if IS_WIN else "not_running"))
+        name = out or r.headers.get("X-UWCC-Filename") or "uwcc-report.zip"
+        with open(name, "wb") as f:
+            f.write(r.read())
+        print(os.path.abspath(name))
+        print("Attach it to a GitHub issue (https://github.com/aspidovss/open-uniwill-cc/issues) "
+              "or send it to OUCC@aspidov.ru")
     elif cmd == "export":
         what = a[1] if a[1:] and a[1] in ("fans", "all") else sys.exit("uwccctl export fans|all FILE")
         data = call_raw(f"export?what={what}")
