@@ -136,7 +136,8 @@ cd open-uniwill-cc-<ver>
 sudo bash install.sh
 ```
 
-Then log out and in (your user joins the `uwcc` group) and start **Control Center** from the menu or run `uwcc`.
+The installer shows the [user agreement](uwccd/web/eula.en.txt) and asks you to accept it (`--accept-agreement`
+for unattended installs). Then log out and in (your user joins the `uwcc` group) and start **Control Center** from the menu or run `uwcc`.
 The installer builds the `uwcc` kernel module with DKMS (falls back to `acpi_call` if it cannot load).
 
 **Secure Boot:** if `modprobe uwcc` says *Key was rejected*, run
@@ -199,3 +200,7 @@ debug logging, where the logs are, what to attach to a bug report.
 MIT — see [LICENSE](LICENSE), **except** `kernel/` (GPL-2.0), and `proprietary/` and `uwccd/lighting/oem/`
 (OEM files and OEM-derived code, all rights reserved by their owners, included for interoperability).
 Credits and the projects that helped: [NOTICE.md](NOTICE.md).
+
+**User agreement** ([English](uwccd/web/eula.en.txt) · [Русский](uwccd/web/eula.ru.txt)) — shown by the installers and
+at the first start of the window: the program is provided *as is*, you are responsible for using it, and you confirm
+that you may use the bundled OEM components or replace them yourself.

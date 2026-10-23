@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Control Center for Linux — installer for Ubuntu 22.04 / 24.04 (and Debian-based distributions)
 # Usage:  sudo bash install.sh [--cc /path/to/ControlCenter_5.52.49.6_MBB] [--no-module] [--no-bluetooth]
+#                                [--accept-agreement]   (non-interactive: you accept uwccd/web/eula.*.txt)
 set -euo pipefail
 
 VERSION=1.5.0   # DKMS module version (1.5.0: PWUP ioctl)
@@ -9,12 +10,14 @@ PREFIX=/opt/uwcc
 CC_DIR=""
 WITH_MODULE=1
 WITH_BT=1
+ACCEPT=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --cc) CC_DIR="$2"; shift 2 ;;
     --no-module) WITH_MODULE=0; shift ;;
     --no-bluetooth) WITH_BT=0; shift ;;
+    --accept-agreement) ACCEPT=1; shift ;;
     -h|--help) sed -n '2,4p' "$0"; exit 0 ;;
     *) echo "unknown option $1"; exit 1 ;;
   esac
@@ -24,6 +27,19 @@ say()  { printf '\033[1;36m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[!]\033[0m %s\n' "$*"; }
 
 [ "$(id -u)" -eq 0 ] || { echo "Run with sudo: sudo bash install.sh"; exit 1; }
+
+# --- 0. user agreement ----------------------------------------------------------
+case "${LANG:-}${LC_ALL:-}" in *ru*|*RU*) AGR=ru ;; *) AGR=en ;; esac
+if [ "$ACCEPT" != 1 ]; then
+  echo
+  sed -e '1s/^\xEF\xBB\xBF//' -e 's/\r$//' "$HERE/uwccd/web/eula.$AGR.txt" | fold -s -w "${COLUMNS:-100}"
+  echo
+  if [ "$AGR" = ru ]; then Q="Принять пользовательское соглашение? [y/N] "; NO="Соглашение не принято — установка отменена."
+  else Q="Do you accept the user agreement? [y/N] "; NO="Agreement not accepted — installation cancelled."; fi
+  ANS="" TTY=0
+  if { exec 3</dev/tty; } 2>/dev/null; then TTY=1; read -r -p "$Q" ANS <&3 || ANS=""; exec 3<&-; fi
+  case "$ANS" in y|Y|yes|YES|д|Д|да|Да) ;; *) echo "$NO"; [ "$TTY" = 1 ] || echo "(no terminal: run with --accept-agreement)"; exit 1 ;; esac
+fi
 TARGET_USER="${SUDO_USER:-}"
 
 # --- 1. packages -------------------------------------------------------------

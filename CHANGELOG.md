@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.5.2
+
+- **User agreement** (English / Russian, `uwccd/web/eula.*.txt`): the Windows installer shows it on a licence page, the
+  Linux `install.sh` asks to accept it (`--accept-agreement` for unattended installs), and the window shows it at the
+  first start until it is accepted (also for the portable build). Main points: MIT, *as is*; the user is responsible
+  for using the program; the bundled OEM components (ACPI driver, factory fan tables, lighting code) were added by hand
+  to demonstrate compatibility — you confirm you may use them or replace them yourself. A new edition of the agreement
+  asks again.
+
 ## 1.5.1
 
 - **Restart the service by hand** when it has not answered for a minute: the tray menu gets *Restart service*

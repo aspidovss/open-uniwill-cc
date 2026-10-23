@@ -42,8 +42,8 @@ CloseApplications=no
 MinVersion=10.0
 
 [Languages]
-Name: "en"; MessagesFile: "compiler:Default.isl"
-Name: "ru"; MessagesFile: "compiler:Languages\Russian.isl"
+Name: "en"; MessagesFile: "compiler:Default.isl"; LicenseFile: "..\uwccd\web\eula.en.txt"
+Name: "ru"; MessagesFile: "compiler:Languages\Russian.isl"; LicenseFile: "..\uwccd\web\eula.ru.txt"
 
 [CustomMessages]
 en.TaskOEM=Disable the original Control Center service (GCUService) — recommended, two programs must not drive the same EC

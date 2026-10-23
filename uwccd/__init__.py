@@ -6,8 +6,10 @@ of the ACPI device INOU0000, exactly like the Windows UWACPIDriver.sys does.
 """
 import os
 
-__version__ = "1.5.1"
+__version__ = "1.5.2"
 CONTACT = "OUCC@aspidov.ru"
+# Edition of the user agreement (uwccd/web/eula.*.txt); a higher number asks for acceptance again.
+EULA_VERSION = 1
 _build = None
 
 

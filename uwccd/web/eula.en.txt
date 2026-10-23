@@ -1,0 +1,25 @@
+﻿open-uniwill-cc USER AGREEMENT
+
+Version 1. By installing or using open-uniwill-cc (the "Program") you confirm that you have read and accept this agreement. If you do not accept it, do not install or use the Program.
+
+1. Licence and no warranty
+The Program is distributed under the MIT licence (file LICENSE) "AS IS", without warranty of any kind, express or implied, including warranties that it works, is fit for a particular purpose or is free of errors. The Linux kernel module (kernel/) is distributed under GPL-2.0.
+
+2. Responsibility
+The Program writes to the embedded controller (EC) of the laptop and changes operating modes, power limits, fan curves, battery and liquid cooling settings. The user bears all responsibility for using the Program and its consequences, including overheating, damage to hardware, loss of data and loss of the manufacturer's warranty. In no event shall the authors or contributors be liable for any damage related to the Program.
+
+3. Third-party (proprietary) components
+The Program contains proprietary components of the manufacturer that are not covered by the MIT licence and were added by hand to demonstrate compatibility:
+  • the UWACPIDriver driver (Windows) from the manufacturer's Control Center package;
+  • factory fan tables from the same package;
+  • keyboard lighting effect code derived from the manufacturer's program (uwccd/lighting/oem).
+All rights to these components belong to Uniwill Technology Inc. and/or the laptop manufacturer.
+By accepting this agreement you confirm that you have the right to use these components (for example, they came with your laptop), or you undertake to obtain them yourself from the manufacturer of your laptop and replace the bundled ones with them, or to remove them. The Program also works without them; build_windows.ps1 -Public builds a package without the driver and the tables.
+
+4. Unofficial program
+The Program is not affiliated with or supported by Uniwill, laptop manufacturers or cooler manufacturers. Names and trademarks mentioned belong to their owners.
+
+5. Data
+The Program does not collect or send information about you or your computer. The update check contacts GitHub only and can be turned off in the settings. A diagnostic report is created only on your command and sent only by you.
+
+Contact: OUCC@aspidov.ru · https://github.com/aspidovss/open-uniwill-cc

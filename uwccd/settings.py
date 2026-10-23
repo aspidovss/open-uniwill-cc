@@ -5,6 +5,7 @@ import os
 import subprocess
 import sys
 
+from . import EULA_VERSION
 from . import regs as R
 
 IS_WIN = sys.platform == "win32"
@@ -223,6 +224,7 @@ class SettingsManager:
             "update_check": bool(self.st.get("update_check", True)),
             "history_record": bool(self.st.get("history_record", True)),
             "lc_hwoc": bool(self.st.get("lc_hwoc", False)),
+            "eula_accepted": int(self.st.get("eula_accepted", 0) or 0), "eula_version": EULA_VERSION,
             "lang": self.st.get("lang", "en"),
             "webcam": self.webcam(),
         }

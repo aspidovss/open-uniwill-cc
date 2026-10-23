@@ -7,4 +7,5 @@
 *.cat binary
 *.ico binary
 *.png binary
+uwccd/web/eula.*.txt text eol=crlf
 uwccd/_gitinfo.txt export-subst

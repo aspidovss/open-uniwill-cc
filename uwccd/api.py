@@ -427,6 +427,12 @@ class Handler(BaseHTTPRequestHandler):
         elif key == "lc_hwoc":
             s.settings_store.set("lc_hwoc", bool(value))
             s.hwoc.wake.set()
+        elif key == "eula_accepted":
+            from . import EULA_VERSION
+            if int(value) != EULA_VERSION:
+                raise ValueError(f"agreement edition is {EULA_VERSION}")
+            s.settings_store.set("eula_accepted", EULA_VERSION)
+            log.info("user agreement %d accepted in the window", EULA_VERSION)
         elif key == "history_record":
             s.settings_store.set("history_record", bool(value))
         elif key == "update_check":

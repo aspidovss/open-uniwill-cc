@@ -129,6 +129,20 @@ class MockService(unittest.TestCase):
         self.assertEqual(self.post("setting", {"key": "lang", "value": "de"})[0], 400)
         self.post("setting", {"key": "lang", "value": "en"})
 
+    def test_user_agreement(self):
+        from uwccd import EULA_VERSION
+        st = self.get("state")["settings"]
+        self.assertEqual(st["eula_version"], EULA_VERSION)
+        self.assertEqual(self.post("setting", {"key": "eula_accepted", "value": EULA_VERSION + 1})[0], 400)
+        self.assertEqual(self.post("setting", {"key": "eula_accepted", "value": EULA_VERSION})[0], 200)
+        self.assertEqual(self.get("state")["settings"]["eula_accepted"], EULA_VERSION)
+        web = os.path.join(os.path.dirname(__file__), "..", "uwccd", "web")
+        for lang in ("en", "ru"):
+            with open(os.path.join(web, f"eula.{lang}.txt"), "rb") as f:
+                data = f.read()
+            self.assertTrue(data.startswith(b"\xef\xbb\xbf"), lang)            # BOM: Inno Setup reads it as UTF-8
+            self.assertIn(b"MIT", data)
+
     def test_liquid_cooler_api(self):
         lc = self.get("state")["liquid"]
         self.assertTrue(lc["available"])

@@ -1437,5 +1437,43 @@ function connect() {
     return;
   }
   try { await refresh(); } catch (e) { toast(t("Service unavailable: {0}", e.message), true); }
+  if (S && S.settings && (S.settings.eula_accepted || 0) < (S.settings.eula_version || 1)) await showAgreement();
   connect();
 })();
+
+// ---------------------------------------------------------------- user agreement (first start)
+function showAgreement() {
+  return new Promise(resolve => {
+    const text = h("pre", { class: "eula-text" }), chk = h("input", { type: "checkbox", id: "eula-chk" });
+    const accept = h("button", { class: "btn", disabled: "" }), decline = h("button", { class: "btn ghost" });
+    const title = h("h2"), lbl = h("label", { for: "eula-chk" }), langs = h("div", { class: "seg" });
+    const load = async () => {
+      title.textContent = t("User agreement"); lbl.textContent = t("I have read the agreement and accept it");
+      accept.textContent = t("Accept"); decline.textContent = t("Decline");
+      try {
+        const r = await fetch(`eula.${LANG}.txt`, { cache: "no-cache" });
+        text.textContent = (await r.text()).replace(/^\uFEFF/, "").replace(/\r/g, "");
+      } catch (e) { text.textContent = t("Service unavailable: {0}", e.message); }
+      text.scrollTop = 0;
+      langs.querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.lang === LANG));
+    };
+    for (const l of ["en", "ru"]) langs.append(h("button", { "data-lang": l, onclick: () => { setLang(l, true); load(); } }, l.toUpperCase()));
+    chk.addEventListener("change", () => { accept.disabled = !chk.checked; });
+    const box = h("div", { class: "eula", role: "dialog", "aria-modal": "true" },
+      h("div", { class: "eula-card" },
+        h("div", { class: "row between" }, title, langs), text,
+        h("div", { class: "eula-foot" }, h("div", { class: "eula-check" }, chk, lbl), h("div", { class: "row" }, decline, accept))));
+    accept.addEventListener("click", async () => {
+      accept.disabled = true;
+      try { await api("setting", { key: "eula_accepted", value: S.settings.eula_version || 1 }); box.remove(); resolve(); }
+      catch (e) { accept.disabled = false; toast(t("Service unavailable: {0}", e.message), true); }
+    });
+    decline.addEventListener("click", () => {
+      box.querySelector(".eula-card").replaceChildren(h("h2", {}, t("User agreement")),
+        h("p", { class: "muted" }, t("The agreement was not accepted. Control Center cannot be used without it — close this window or uninstall the program.")),
+        h("div", { class: "row" }, h("button", { class: "btn", onclick: () => { box.remove(); showAgreement().then(resolve); } }, t("Read again"))));
+      try { window.close(); } catch (_) {}
+    });
+    document.body.append(box); load();
+  });
+}
