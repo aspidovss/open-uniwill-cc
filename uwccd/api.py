@@ -427,6 +427,12 @@ class Handler(BaseHTTPRequestHandler):
         elif key == "lc_hwoc":
             s.settings_store.set("lc_hwoc", bool(value))
             s.hwoc.wake.set()
+        elif key == "mem_oc":
+            s.settings.set_mem_oc(bool(value))
+        elif key == "super_performance":
+            if not hasattr(s.power, "user_set_super"):
+                raise ValueError("super performance is not available on this laptop")
+            s.power.user_set_super(bool(value))
         elif key == "eula_accepted":
             from . import EULA_VERSION
             if int(value) != EULA_VERSION:

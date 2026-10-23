@@ -2,14 +2,15 @@
 
 ## 1.5.3
 
-- **Super performance in Custom mode** (per Custom slot, *Mode selection → Custom → slot settings*), as
-  `OverClockingSwitch` / `LoadOverClockingValue` of the original: the EC runs the Turbo fan mode with the factory Turbo
-  fan curve and the graphics card gets the maximum power (cTGP + Dynamic Boost); the slot's PL1 / PL2 / PL4 and
-  temperature limit stay. GPU clock offsets and the CPU voltage offset of the original are not applied.
-- **RAM overclocking** with super performance on, when the BIOS reports support (`MemoryOverClockSupport` in the UEFI
-  variable `UniWillVariable`): the switch is written to `MemoryOverClockSwitch` and the BIOS applies it at the next
-  start (the window says *Restart to apply*). Like the original it is written only on your actions and set back to
-  off in other modes or with super performance off. Uninstalling switches it off too (as the original does).
+- **Performance boost** card (*Mode selection*), independent of the mode — both switches stay on when you change
+  modes:
+  - **Super performance** (`LoadOverClockingValue` of the original, there a switch of the Custom slots): the EC runs
+    the Turbo fan mode with the factory Turbo fan curve and the graphics card gets the maximum power (cTGP + Dynamic
+    Boost); the power limits of the current mode stay. GPU clock offsets and the CPU voltage offset of the original are
+    not applied.
+  - **RAM overclocking**, when the BIOS reports support (`MemoryOverClockSupport` in the UEFI variable
+    `UniWillVariable`): the switch is written to `MemoryOverClockSwitch` and the BIOS applies it at the next start (the
+    window says *Restart to apply*). Uninstalling switches it off (as the original does).
 - The liquid-cooling option of 1.5.0 is now called *Power boost with liquid cooling* (original: CoolingOC), so the two
   are not confused.
 - Fixed: switching Dynamic Boost on or off in a profile did not redraw the cTGP range until the page was reloaded.

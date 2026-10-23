@@ -135,6 +135,19 @@
         <div><h3 data-i>Fan Boost</h3><p class="muted" data-i>Fans run at maximum speed</p></div>
         <label class="sw"><input type="checkbox" id="fanboost"><span></span></label>
       </div>
+      <div class="card hidden" id="perf-card">
+        <h3 data-i>Performance boost</h3>
+        <p class="muted tiny" data-i>Works in any mode and stays on when you switch modes.</p>
+        <div class="row between perf-row" id="sp-row">
+          <div><b data-i>Super performance</b><p class="muted tiny" data-i>Turbo fan mode with the factory Turbo fan curve and the maximum graphics power (cTGP + Dynamic Boost). The power limits of the current mode stay; its fan curve and graphics settings are not used while it is on.</p></div>
+          <label class="sw"><input type="checkbox" id="super-perf"><span></span></label>
+        </div>
+        <div class="row between perf-row" id="mem-row">
+          <div><b data-i>RAM overclocking</b><p class="muted tiny" data-i>The BIOS raises the memory frequency at the next start of the laptop. Unstable memory can keep the laptop from starting — then reset the BIOS settings to defaults.</p>
+            <span id="mem-oc-state"></span></div>
+          <label class="sw"><input type="checkbox" id="mem-oc"><span></span></label>
+        </div>
+      </div>
       <div class="row end"><button class="btn ghost" id="btn-restore" data-i>Restore default settings</button></div>
     </section>
 

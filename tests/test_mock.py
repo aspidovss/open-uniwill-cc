@@ -370,31 +370,32 @@ class CustomModeService(MockService):
         self.assertFalse(self.ec(0x726) & 0x80)
 
     def test_super_performance_and_ram_oc(self):
-        self.assertTrue(self.get("state")["power"]["mem_oc"]["support"])
-        self.assertEqual(self.post("profiles/Mode2_Profile1",
-                                   {"OverClockingEnabled": 1}, "PUT")[0], 400)          # Custom slots only
-        self.assertEqual(self.post("mode", {"mode": 3})[0], 200)
-        self.assertEqual(self.post("profile", {"mode": 3, "index": 0})[0], 200)
-        self.assertEqual(self.post("mode", {"mode": 3})[0], 200)
-        code, _ = self.post("profiles/Mode4_Profile1", {"OverClockingEnabled": 1, "MEM": {"MemoryOverClockSwitch": 1}}, "PUT")
-        self.assertEqual(code, 200)
-        self.assertEqual(self.ec(0x751) & 0xBF, 0x10)              # Turbo fan mode
-        self.assertFalse(self.ec(0x726) & 0x80)                    # SetFanMode(2) clears the Custom flag
-        st = self.get("state")["power"]
-        self.assertTrue(st["overclocking"])
-        self.assertEqual((st["mem_oc"]["on"], st["mem_oc"]["pending"]), (True, True))
-        self.assertEqual(self.get("nvram")["MemoryOverClockSwitch"], 1)
-        # super performance off -> RAM overclocking off in the BIOS variable
-        self.assertEqual(self.post("profiles/Mode4_Profile1", {"OverClockingEnabled": 0}, "PUT")[0], 200)
-        self.assertEqual(self.get("nvram")["MemoryOverClockSwitch"], 0)
-        self.assertTrue(self.ec(0x726) & 0x80)
-        self.assertFalse(self.get("state")["power"]["mem_oc"]["pending"])
-        # on again, then another mode -> 0
-        self.post("profiles/Mode4_Profile1", {"OverClockingEnabled": 1}, "PUT")
-        self.assertEqual(self.get("nvram")["MemoryOverClockSwitch"], 1)
+        st = self.get("state")
+        self.assertTrue(st["settings"]["mem_oc_support"])
+        self.assertFalse(st["power"]["super_performance"])
+        # super performance works in any mode and survives mode changes
         self.assertEqual(self.post("mode", {"mode": 1})[0], 200)
+        self.assertEqual(self.post("setting", {"key": "super_performance", "value": True})[0], 200)
+        self.assertEqual(self.ec(0x751) & 0xBF, 0x10)              # Turbo fan mode
+        self.assertFalse(self.ec(0x726) & 0x80)
+        self.assertEqual(self.post("mode", {"mode": 3})[0], 200)
+        self.assertTrue(self.get("state")["power"]["super_performance"])
+        self.assertEqual(self.ec(0x751) & 0xBF, 0x10)
+        self.assertFalse(self.ec(0x726) & 0x80)                    # SetFanMode(2) clears the Custom flag
+        self.assertEqual(self.post("setting", {"key": "super_performance", "value": False})[0], 200)
+        self.assertTrue(self.ec(0x726) & 0x80)                     # back to Custom
+        self.assertEqual(self.post("mode", {"mode": 0})[0], 200)
+        self.assertEqual(self.ec(0x751) & 0xBF, 0xA0)              # Office
+        # RAM overclocking: its own switch, independent of modes and super performance
+        self.assertEqual(self.post("setting", {"key": "mem_oc", "value": True})[0], 200)
+        self.assertEqual(self.get("nvram")["MemoryOverClockSwitch"], 1)
+        st = self.get("state")["settings"]
+        self.assertEqual((st["mem_oc"], st["mem_oc_pending"]), (True, True))
+        self.assertEqual(self.post("mode", {"mode": 1})[0], 200)
+        self.assertEqual(self.get("nvram")["MemoryOverClockSwitch"], 1)      # mode change leaves it alone
+        self.assertEqual(self.post("setting", {"key": "mem_oc", "value": False})[0], 200)
         self.assertEqual(self.get("nvram")["MemoryOverClockSwitch"], 0)
-        self.assertEqual(self.post("profile-reset/Mode4_Profile1", {})[0], 200)
+        self.assertFalse(self.get("state")["settings"]["mem_oc_pending"])
 
     def test_automation_settings(self):
         self.assertEqual(self.post("setting", {"key": "mode_on_battery", "value": 0})[0], 200)

@@ -220,6 +220,7 @@ function fanDisabledNote(el) {
     h("p", { class: "muted" }, t("This laptop's controller does not report RamFan 1.5 support, and the original software uses a different algorithm on such machines. To avoid writing wrong values to the EC, modes and fan curves are disabled. Monitoring, lighting and switches work."))));
 }
 function renderModes() {
+  renderPerf();
   const box = $("#mode-cards"); box.innerHTML = "";
   if (!S.platform.fan_control) { fanDisabledNote(box); box.style.display = "block"; return; }
   box.style.display = "";
@@ -303,20 +304,6 @@ function renderProfileEditor(force) {
     const inp = h("input", { type: "text", maxlength: 24, value: slotName(prof, +name.slice(-1)) });
     inp.addEventListener("input", () => { pe.CustomizeName = inp.value; });
     row(t("Slot name"), t("Shown here, on the fan page and in notifications"), inp);
-    // LoadOverClockingValue of the original: Turbo fan mode + factory Turbo curve, maximum graphics power, RAM OC
-    const M = S.power.mem_oc || {};
-    pe.MEM = pe.MEM || { MemoryOverClockSwitch: 0 };
-    row(t("Super performance"), t("Turbo fan mode with the factory Turbo fan curve and the maximum graphics power (cTGP + Dynamic Boost). The slot's fan curve and graphics settings are not used while it is on."),
-      toggle("", "OverClockingEnabled", () => renderProfileEditor(true)));
-    if (M.support) {
-      const sw = toggle("MEM", "MemoryOverClockSwitch");
-      if (!pe.OverClockingEnabled) { sw.querySelector("input").disabled = true; sw.classList.add("off"); }
-      row(t("RAM overclocking"), (pe.OverClockingEnabled ? "" : t("Needs super performance. ")) +
-        t("The BIOS raises the memory frequency at the next start of the laptop. Unstable memory can keep the laptop from starting — then reset the BIOS settings to defaults."), sw,
-        h("small", { class: M.pending ? "warn-text" : "muted" }, M.pending ? t("Restart to apply") : (M.on ? t("on") : t("off"))));
-    } else if (pe.OverClockingEnabled) {
-      rows.append(h("div", { class: "pe-row" }, h("div", { class: "lbl" }, h("small", { class: "muted" }, t("RAM overclocking: the BIOS of this laptop does not report support for it."))), h("span"), h("span")));
-    }
   }
   const W = t("W");
   // PL1 <= PL2 <= PL4: raising a lower limit pushes the higher ones up, a higher one cannot go below the lower one
@@ -386,11 +373,7 @@ $("#pe-apply").addEventListener("click", () => {
       DynamicBoostSwitch: pe.GPU.DynamicBoostSwitch, DynamicBoost: pe.GPU.DynamicBoost } };
   if (L.gpu_temp && S.platform.nv_gpu) Object.assign(body.GPU, { TargetTemperatureSwitch: pe.GPU.TargetTemperatureSwitch ? 1 : 0, TargetTemperature: pe.GPU.TargetTemperature });
   if (!S.platform.nv_gpu) delete body.GPU;
-  if (pe.Name.startsWith("Mode4")) {
-    body.CustomizeName = pe.CustomizeName;
-    body.OverClockingEnabled = pe.OverClockingEnabled ? 1 : 0;
-    if ((S.power.mem_oc || {}).support) body.MEM = { MemoryOverClockSwitch: pe.OverClockingEnabled && pe.MEM && pe.MEM.MemoryOverClockSwitch ? 1 : 0 };
-  }
+  if (pe.Name.startsWith("Mode4")) body.CustomizeName = pe.CustomizeName;
   act(async () => { await api("profiles/" + pe.Name, body, "PUT"); pe = null; }, t("Profile applied"));
 });
 $("#pe-reset").addEventListener("click", () => {
@@ -398,6 +381,22 @@ $("#pe-reset").addEventListener("click", () => {
   act(async () => { await api("profile-reset/" + pe.Name, {}); pe = null; edit = null; }, t("Factory values restored"));
 });
 
+// ---------------------------------------------------------------- super performance + RAM overclocking (any mode)
+function renderPerf() {
+  const st = S.settings || {}, sp = S.power.super_performance !== undefined;
+  $("#perf-card").classList.toggle("hidden", !sp && !st.mem_oc_support);
+  $("#sp-row").classList.toggle("hidden", !sp);
+  $("#super-perf").checked = !!S.power.super_performance;
+  $("#mem-row").classList.toggle("hidden", !st.mem_oc_support);
+  $("#mem-oc").checked = !!st.mem_oc;
+  const ms = $("#mem-oc-state");
+  ms.textContent = st.mem_oc_pending ? t("Restart to apply") : "";
+  ms.className = "tiny warn-text";
+}
+$("#super-perf").addEventListener("change", e => act(() => api("setting", { key: "super_performance", value: e.target.checked }),
+  e.target.checked ? t("Super performance on") : t("Super performance off")));
+$("#mem-oc").addEventListener("change", e => act(() => api("setting", { key: "mem_oc", value: e.target.checked }),
+  e.target.checked ? t("RAM overclocking is applied after a restart") : t("RAM overclocking is switched off after a restart")));
 $("#fanboost").addEventListener("change", e => act(() => api("fanboost", { on: e.target.checked }), e.target.checked ? t("Fan Boost on") : t("Fan Boost off")));
 $("#btn-restore").addEventListener("click", () => { if (confirm(t("Reset modes and profiles to factory values?"))) act(() => api("restore", {}), t("Settings restored")); });
 
@@ -1442,7 +1441,6 @@ function connect() {
     if (m.type === "monitor") return onMonitor(m.data);
     if (m.type === "mode" && m.data.osd) osd(m.data.mode === 3 ? `Custom · ${slotName(S?.profiles?.["Mode4_Profile" + ((m.data.slot || 0) + 1)], (m.data.slot || 0) + 1)}` : (MODES[m.data.mode]?.osd || ""));
     if (m.type === "overheat") toast(t("{0} at {1} °C for 30 seconds", m.data.sensor === "gpu" ? t("GPU") : t("CPU"), m.data.temp), true);
-    if (m.type === "mem_oc") toast(m.data.on ? t("RAM overclocking is applied after a restart") : t("RAM overclocking is switched off after a restart"));
     if (m.type === "overheat_boost") toast(t("Fan Boost turned on because of overheating"), true);
     if (m.type === "fanboost" && m.data.osd) osd(m.data.on ? "FanBoostOn" : "FanBoostOff");
     if (m.type === "lc" && m.data.event === "flow_fault") toast(t("Liquid cooler: no coolant flow! Check the tubes and the coolant level."), true);

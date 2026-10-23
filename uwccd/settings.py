@@ -22,6 +22,25 @@ class SettingsManager:
         self.bios_fn = 0xFF
         self.ac_recovery_bios = False
         self.dgpu_direct_support = False
+        # RAM overclocking (MemorySettings.MemoryOverClockSwitch of the original): the BIOS publishes support in
+        # UniWillVariable.MemoryOverClockSupport and applies MemoryOverClockSwitch at the next start
+        self.mem_oc_support = bool(nvram and nvram.verified and nvram.get("MemoryOverClockSupport") == 1)
+        self.mem_oc_boot = nvram.get("MemoryOverClockSwitch") if self.mem_oc_support else None
+
+    # -- RAM overclocking -------------------------------------------------------------
+    def mem_oc(self):
+        return bool(self.nvram.get("MemoryOverClockSwitch")) if self.mem_oc_support else False
+
+    def mem_oc_pending(self):
+        return self.mem_oc_support and self.nvram.get("MemoryOverClockSwitch") != self.mem_oc_boot
+
+    def set_mem_oc(self, on):
+        if not self.mem_oc_support:
+            raise ValueError("the BIOS of this laptop does not report RAM overclocking support")
+        if not self.nvram.set("MemoryOverClockSwitch", 1 if on else 0):
+            raise ValueError("the BIOS variable could not be written")
+        log.info("RAM overclocking %s in the BIOS variable — applied at the next start", "on" if on else "off")
+        self.notify("mem_oc", {"on": bool(on), "pending": self.mem_oc_pending()})
 
     # -- startup (MySettingManager.Init) ------------------------------------------
     def start(self):
@@ -225,6 +244,7 @@ class SettingsManager:
             "history_record": bool(self.st.get("history_record", True)),
             "lc_hwoc": bool(self.st.get("lc_hwoc", False)),
             "eula_accepted": int(self.st.get("eula_accepted", 0) or 0), "eula_version": EULA_VERSION,
+            "mem_oc_support": self.mem_oc_support, "mem_oc": self.mem_oc(), "mem_oc_pending": self.mem_oc_pending(),
             "lang": self.st.get("lang", "en"),
             "webcam": self.webcam(),
         }
