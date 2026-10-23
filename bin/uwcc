@@ -38,6 +38,34 @@ def token():
     sys.exit(1)
 
 
+def _handle_download(win, download, GLib, Gtk):
+    """Chart exports (CSV / JSON / PNG): save to ~/Downloads and say where."""
+    state = {}
+
+    def decide(dl, suggested):
+        folder = GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_DOWNLOAD) or os.path.expanduser("~")
+        os.makedirs(folder, exist_ok=True)
+        name = os.path.basename(suggested or "uwcc-export")
+        base, ext = os.path.splitext(name)
+        path, n = os.path.join(folder, name), 1
+        while os.path.exists(path):
+            path, n = os.path.join(folder, f"{base}-{n}{ext}"), n + 1
+        state["path"] = path
+        dl.set_destination(GLib.filename_to_uri(path, None))
+        return True
+
+    def finished(_dl):
+        if "path" in state:
+            d = Gtk.MessageDialog(transient_for=win, modal=True, message_type=Gtk.MessageType.INFO,
+                                  buttons=Gtk.ButtonsType.OK, text="Saved / Сохранено")
+            d.format_secondary_text(state["path"])
+            d.run()
+            d.destroy()
+
+    download.connect("decide-destination", decide)
+    download.connect("finished", finished)
+
+
 def webkit_window(url):
     try:
         import gi
@@ -46,7 +74,7 @@ def webkit_window(url):
             gi.require_version("WebKit2", "4.1")
         except ValueError:
             gi.require_version("WebKit2", "4.0")
-        from gi.repository import Gtk, WebKit2
+        from gi.repository import GLib, Gtk, WebKit2
     except (ImportError, ValueError):
         return False
     win = Gtk.Window(title="Control Center")
@@ -57,6 +85,7 @@ def webkit_window(url):
     view = WebKit2.WebView()
     view.get_settings().set_enable_developer_extras(False)
     view.load_uri(url)
+    view.get_context().connect("download-started", lambda _c, dl: _handle_download(win, dl, GLib, Gtk))
     win.add(view)
     win.connect("destroy", Gtk.main_quit)
     win.show_all()

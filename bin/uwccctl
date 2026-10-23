@@ -6,6 +6,8 @@
   uwccctl profile <N>            profile of the current mode (0..2; RamFan1p5 platforms: 0..1, custom slots 0..4)
   uwccctl boost on|off           FanBoost
   uwccctl kb off|on|effect N     keyboard backlight
+  uwccctl lighting               keyboard / light bar devices (diagnostics)
+  uwccctl history [csv|csv-excel|json] [FILE]   last hour of sensors (stdout or FILE)
   uwccctl debug on|off           verbose service log (for bug reports)
   uwccctl lang en|ru             interface language (UI, notifications, this tool)
   uwccctl lc status              liquid cooler (Bluetooth)
@@ -93,6 +95,16 @@ def tok():
         sys.exit(T("no_access_win" if IS_WIN else "no_access"))
     except FileNotFoundError:
         LANG = guess_lang()
+        sys.exit(T("not_running_win" if IS_WIN else "not_running"))
+
+
+def call_raw(path, timeout=30):
+    req = urllib.request.Request(f"http://127.0.0.1:{PORT}/api/{path}", headers={"X-UWCC-Token": tok()})
+    try:
+        return urllib.request.urlopen(req, timeout=timeout).read()
+    except urllib.error.HTTPError as e:
+        sys.exit(f"{T('error')}: {json.load(e).get('error', e)}")
+    except urllib.error.URLError:
         sys.exit(T("not_running_win" if IS_WIN else "not_running"))
 
 
@@ -202,6 +214,18 @@ def main(a):
             call("setting", {"key": "lang", "value": a[1]})
             LANG = a[1]
         print(T("lang_set"))
+    elif cmd == "lighting":
+        print(json.dumps(call("lighting/devices"), indent=2, ensure_ascii=False))
+    elif cmd == "history":
+        fmt = a[1] if a[1:] and a[1] in ("csv", "csv-excel", "json") else "csv"
+        out = next((x for x in a[1:] if x not in ("csv", "csv-excel", "json")), None)
+        data = call_raw(f"history/export?format={fmt}")
+        if out:
+            with open(out, "wb") as f:
+                f.write(data)
+            print(out)
+        else:
+            sys.stdout.write(data.decode("utf-8-sig"))
     elif cmd == "debug":
         if a[1:] and a[1] in ("on", "off"):
             call("setting", {"key": "debug", "value": a[1] == "on"})

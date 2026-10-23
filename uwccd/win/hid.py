@@ -104,7 +104,7 @@ def enumerate_devices(vid, pids):
                 attrs.Size = ctypes.sizeof(HIDD_ATTRIBUTES)
                 if not hid.HidD_GetAttributes(h, ctypes.byref(attrs)):
                     continue
-                if attrs.VendorID != vid or attrs.ProductID not in pids:
+                if attrs.VendorID != vid or (pids is not None and attrs.ProductID not in pids):
                     continue
                 caps = _caps(h)
                 out.append({"node": path, "pid": attrs.ProductID,

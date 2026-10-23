@@ -9,6 +9,7 @@ import mimetypes
 import os
 import queue
 import secrets
+import time
 import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -121,6 +122,31 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(200, s.sampler.snapshot())
             if u.path == "/api/history":
                 return self._json(200, list(s.sampler.history))
+            if u.path == "/api/lighting/devices":
+                from .lighting import ite
+                kb = s.keyboard
+                return self._json(200, {
+                    "devices": [] if s.mock else ite.list_devices(),
+                    "keyboard": {"kind": kb.kind, **(kb.rgb.info() if kb.rgb else {}),
+                                 "effect": kb.rgb.saved if kb.rgb else None},
+                    "ec": {"caps_78e": f"{s.ec.read(0x78E):02X}", "caps_742": f"{s.ec.read(0x742):02X}",
+                           "kb_id_73c": f"{s.ec.read(0x73C):02X}", "status_768": f"{s.ec.read(0x768):02X}",
+                           "rgb_lightbar": s.pf.rgb_lightbar}})
+            if u.path == "/api/history/export":
+                from .automation import export_history
+                fmt = parse_qs(u.query).get("format", ["csv"])[0]
+                if fmt not in ("csv", "csv-excel", "json"):
+                    return self._json(400, {"error": "format: csv | csv-excel | json"})
+                data, mime, ext = export_history(list(s.sampler.history), fmt)
+                name = time.strftime(f"uwcc-history-%Y%m%d-%H%M%S.{ext}")
+                self.send_response(200)
+                self.send_header("Content-Type", f"{mime}; charset=utf-8")
+                self.send_header("Content-Disposition", f'attachment; filename="{name}"')
+                self.send_header("Content-Length", str(len(data)))
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(data)
+                return None
             if u.path == "/api/gpu":
                 from .monitor import dgpu_state, dgpu_users
                 st = dgpu_state()

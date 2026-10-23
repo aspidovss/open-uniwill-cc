@@ -738,7 +738,12 @@ for (const [id, key] of [["lc-guard", "flow_guard"], ["lc-notify", "notify_flow"
 const HIST = {
   temp: { name: "Temperature", unit: "°C", max: 100, lines: [["ct", "CPU", "var(--cpu)"], ["gt", "GPU", "var(--gpu)"]] },
   load: { name: "Load", unit: "%", max: 100, lines: [["cl", "CPU", "var(--cpu)"], ["gl", "GPU", "var(--gpu)"]] },
-  power: { name: "Power", unit: "W", max: 0, lines: [["cp", "CPU", "var(--cpu)"], ["gp", "GPU", "var(--gpu)"]] },
+  cpow: { name: "CPU power", unit: "W", max: 0, lines: [["cp", "CPU package", "var(--cpu)"]], nodata: "CPU package power is not available on this computer",
+    marks: [["pl1", "PL1", "#f5a524"], ["pl2", "PL2", "#ff6b6b"], ["pl4", "PL4", "#c084fc"]] },
+  gpow: { name: "GPU power", unit: "W", max: 0, lines: [["gp", "NVIDIA GPU", "var(--gpu)"]], nodata: "GPU power is not available (no NVIDIA GPU, or it is asleep)",
+    marks: [["gpl", "GPU power limit", "#f5a524"]] },
+  total: { name: "Total power", unit: "W", max: 0, lines: [["tp", "CPU + GPU", "var(--acc)"], ["bp", "From battery", "#f5a524"]],
+    nodata: "no data", marks: [["adapter", "Power adapter", "#ff6b6b"]] },
   fans: { name: "Fans", unit: "rpm", max: 0, lines: [["cf", "CPU", "var(--cpu)"], ["gf", "GPU", "var(--gpu)"]] },
   cooler: { name: "Cooler", unit: "%", max: 100, lines: [["lf", "Cooler fan", "var(--acc)"], ["lpx", "Pump (V × 8)", "var(--warn)"]] },
 };
@@ -756,7 +761,15 @@ function drawHistory() {
   const svg = $("#hist-chart"), W = 800, H = 180, d = HIST[histKey];
   const now = Date.now() / 1000, t0 = now - 3600;
   let max = d.max;
-  if (!max) { max = 10; for (const p of histData) for (const [k] of d.lines) if (p[k] > max) max = p[k]; max = Math.ceil(max * 1.1 / 10) * 10; }
+  const marks = d.marks || [];
+  if (histKey === "total") histData.forEach(p => { p.adapter = S && S.platform && S.platform.adapter_watt || null; });
+  if (!max) {
+    max = 10;
+    for (const p of histData) for (const [k] of d.lines) if (p[k] > max) max = p[k];
+    // keep the limit marks in view, but not a 330 W adapter line over a 20 W curve
+    for (const p of histData) for (const [k] of marks) if (p[k] > max && p[k] < max * 3) max = p[k];
+    max = Math.ceil(max * 1.1 / 10) * 10;
+  }
   let g = "";
   for (const f of [0.25, 0.5, 0.75]) { const y = H - f * H; g += `<line x1="0" x2="${W}" y1="${y}" y2="${y}" stroke="#1f2830"/><text x="4" y="${y - 3}" fill="#55636e" font-size="10">${Math.round(max * f)} ${t(d.unit)}</text>`; }
   for (let m = 0; m <= 60; m += 15) { const x = m === 60 ? W - 4 : (m / 60) * W + 2; g += `<text x="${x}" y="${H - 3}" fill="#55636e" font-size="10" text-anchor="${m === 60 ? "end" : "start"}">${m === 60 ? t("now") : "−" + (60 - m) + " " + t("min")}</text>`; }
@@ -772,10 +785,67 @@ function drawHistory() {
     }
     if (path) g += `<path d="${path}" fill="none" stroke="${color}" stroke-width="1.8"/>`;
   }
-  svg.innerHTML = histData.length ? g : g + `<text x="${W / 2 - 40}" y="${H / 2}" fill="#55636e" font-size="13">${t("collecting data…")}</text>`;
+  for (const [k, n, color] of marks) {            // limits: dashed step line + label at the latest value
+    let path = "", last = null, lastX = 0;
+    for (const p of histData) {
+      const v = p[k]; if (v == null || v > max) { last = null; continue; }
+      const x = Math.max(0, (p.t - t0) / 3600 * W), y = H - v / max * H;
+      path += (last == null ? " M" : ` L${x.toFixed(1)},${(H - last / max * H).toFixed(1)} L`) + x.toFixed(1) + "," + y.toFixed(1);
+      last = v; lastX = x;
+    }
+    if (path) g += `<path d="${path}" fill="none" stroke="${color}" stroke-width="1.2" stroke-dasharray="6 4" opacity=".9"/>` +
+      `<text x="${Math.min(lastX, W - 4)}" y="${H - last / max * H - 4}" fill="${color}" font-size="10" text-anchor="end">${t(n)} ${last} ${t("W")}</text>`;
+  }
+  const hasData = histData.some(p => d.lines.some(([k]) => p[k] != null));
+  const msg = !histData.length ? t("collecting data…") : !hasData ? t(d.nodata || "no data") : "";
+  svg.innerHTML = msg ? g + `<text x="${W / 2}" y="${H / 2}" fill="#55636e" font-size="13" text-anchor="middle">${msg}</text>` : g;
+  if (hasData) {                                  // latest / average / max of the visible series
+    const st = d.lines.map(([k, n]) => {
+      const v = histData.map(p => p[k]).filter(x => x != null);
+      if (!v.length) return "";
+      const avg = v.reduce((a, b) => a + b, 0) / v.length;
+      return `${t(n)}: ${t("now")} ${v[v.length - 1]} · ${t("avg")} ${Math.round(avg * 10) / 10} · ${t("max")} ${Math.max(...v)} ${t(d.unit)}`;
+    }).filter(Boolean);
+    for (const [k, n] of marks) {
+      const v = histData.map(p => p[k]).filter(x => x != null);
+      if (v.length) st.push(`${t(n)}: ${v[v.length - 1]} ${t("W")}`);
+    }
+    $("#hist-stats").textContent = st.join("  |  ");
+  } else $("#hist-stats").textContent = "";
   const lg = $("#hist-legend"); lg.innerHTML = "";
   for (const [, n, color] of d.lines) lg.append(h("span", { class: "lg", style: `--c:${color}` }, t(n)));
+  for (const [k, n, color] of marks) if (histData.some(p => p[k] != null)) lg.append(h("span", { class: "lg dash", style: `--c:${color}` }, t(n)));
 }
+
+function downloadHistory(fmt) {
+  // served by uwccd with Content-Disposition: works in Edge (Windows) and in the WebKitGTK window (Linux)
+  const a = h("a", { href: `/api/history/export?format=${fmt}&token=${encodeURIComponent(TOKEN)}`, download: "" });
+  document.body.append(a); a.click(); a.remove();
+  toast(t("Export started — the file goes to your Downloads folder"));
+}
+function downloadChartPng() {
+  const svg = $("#hist-chart"), W = 1600, H = 360, d = HIST[histKey];
+  const xml = new XMLSerializer().serializeToString(svg).replace(/var\(--cpu\)/g, getComputedStyle(document.body).getPropertyValue("--cpu").trim() || "#2fd3b5")
+    .replace(/var\(--gpu\)/g, getComputedStyle(document.body).getPropertyValue("--gpu").trim() || "#7aa2ff")
+    .replace(/var\(--acc\)/g, "#2fd3b5").replace(/var\(--warn\)/g, "#f5a524");
+  const img = new Image();
+  img.onload = () => {
+    const c = document.createElement("canvas"); c.width = W; c.height = H + 40;
+    const x = c.getContext("2d"); x.fillStyle = "#0e1215"; x.fillRect(0, 0, c.width, c.height);
+    x.fillStyle = "#c9d3da"; x.font = "16px sans-serif";
+    x.fillText(`${t(d.name)} — ${t("Last hour")} — ${new Date().toLocaleString()}`, 12, 26);
+    x.drawImage(img, 0, 40, W, H);
+    c.toBlob(b => {
+      const a = h("a", { href: URL.createObjectURL(b), download: `uwcc-${histKey}-${Date.now()}.png` });
+      document.body.append(a); a.click(); a.remove();
+    }, "image/png");
+  };
+  img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(xml.replace("<svg", `<svg width="${W}" height="${H}"`));
+}
+$("#hist-export").addEventListener("change", e => {
+  const v = e.target.value; e.target.value = "";
+  if (v === "png") downloadChartPng(); else if (v) downloadHistory(v);
+});
 
 // ---------------------------------------------------------------- automation page
 function renderAuto() {

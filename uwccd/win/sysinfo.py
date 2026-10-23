@@ -13,6 +13,7 @@ import psutil
 
 from ..monitor import Monitor, _num
 from . import winapi, winplat
+from .pdhpower import EnergyMeterPower
 
 NVSMI = [r"C:\Windows\System32\nvidia-smi.exe", r"C:\Program Files\NVIDIA Corporation\NVSMI\nvidia-smi.exe"]
 
@@ -24,6 +25,7 @@ class WinMonitor(Monitor):
         self._temp_cache = (0.0, None)
         self._bat_cache = (0.0, {})
         psutil.cpu_percent(None)
+        self.rapl = EnergyMeterPower()        # CPU package power (W) for the sampler, like Rapl on Linux
 
     def cpu_temp(self):
         t, v = self._temp_cache
@@ -61,13 +63,14 @@ class WinMonitor(Monitor):
         if exe:
             try:
                 out = subprocess.run([exe, "--query-gpu=name,temperature.gpu,utilization.gpu,clocks.gr,clocks.mem,"
-                                      "pstate,memory.total,power.draw", "--format=csv,noheader,nounits"],
+                                      "pstate,memory.total,power.draw,power.limit", "--format=csv,noheader,nounits"],
                                      capture_output=True, text=True, timeout=4, check=False,
                                      creationflags=winplat.CREATE_NO_WINDOW).stdout.strip().splitlines()
                 if out:
                     p = [x.strip() for x in out[0].split(",")]
                     val = {"name": p[0], "temp": _num(p[1]), "usage": _num(p[2]), "core_mhz": _num(p[3]),
-                           "mem_mhz": _num(p[4]), "pstate": p[5], "vram_mb": _num(p[6]), "power_w": _num(p[7])}
+                           "mem_mhz": _num(p[4]), "pstate": p[5], "vram_mb": _num(p[6]), "power_w": _num(p[7]),
+                           "power_limit_w": _num(p[8]) if len(p) > 8 else None}
             except (OSError, subprocess.SubprocessError):
                 val = None
         self._nv_cache = (time.time(), val)
@@ -99,7 +102,21 @@ class WinMonitor(Monitor):
         remaining = b.secsleft // 60 if isinstance(b.secsleft, int) and b.secsleft > 0 else None
         return {"present": True, "status": status, "percent": round(b.percent), "health": extra.get("health"),
                 "remaining_min": remaining if status == "Discharging" else None, "model": None, "vendor": None,
-                "cycle_count": extra.get("cycle_count")}
+                "cycle_count": extra.get("cycle_count"), "power_w": self.battery_power()}
+
+    def battery_power(self):
+        """W drawn from / charged into the battery (WMI BatteryStatus, mW), cached 4 s."""
+        t, v = getattr(self, "_bp_cache", (0.0, None))
+        if time.time() - t < 4:
+            return v
+        v = None
+        for r in winplat.wmi_query("SELECT DischargeRate, ChargeRate, Discharging FROM BatteryStatus", r"root\WMI"):
+            rate = r.DischargeRate if r.Discharging else r.ChargeRate
+            if rate and 0 < rate < 1_000_000:
+                v = round(rate / 1000.0, 1)
+            break
+        self._bp_cache = (time.time(), v)
+        return v
 
     @staticmethod
     def ac_online():

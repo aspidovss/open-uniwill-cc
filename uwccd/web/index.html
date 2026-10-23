@@ -58,9 +58,16 @@
         </div>
       </div>
       <div class="card">
-        <div class="row between wrap"><h3 data-i>Last hour</h3><div class="seg" id="hist-seg"></div></div>
+        <div class="row between wrap"><h3 data-i>Last hour</h3><div class="row wrap"><div class="seg" id="hist-seg"></div>
+          <select id="hist-export" title="Export">
+            <option value="" data-i>Export…</option>
+            <option value="csv" data-i>CSV (all sensors)</option>
+            <option value="csv-excel" data-i>CSV for Excel (; and decimal comma)</option>
+            <option value="json">JSON</option>
+            <option value="png" data-i>PNG (this chart)</option>
+          </select></div></div>
         <svg id="hist-chart" viewBox="0 0 800 180" preserveAspectRatio="none" class="chart hist"></svg>
-        <div class="legend" id="hist-legend"></div>
+        <div class="row between wrap"><div class="legend" id="hist-legend"></div><div class="muted tiny" id="hist-stats" style="margin:0"></div></div>
       </div>
       <div class="grid g3">
         <div class="card stat" id="st-mem"></div>

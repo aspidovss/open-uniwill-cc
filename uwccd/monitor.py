@@ -159,12 +159,13 @@ class Monitor:
             try:
                 out = subprocess.run(
                     ["nvidia-smi", "--query-gpu=name,temperature.gpu,utilization.gpu,clocks.gr,clocks.mem,"
-                     "pstate,memory.total,power.draw", "--format=csv,noheader,nounits"],
+                     "pstate,memory.total,power.draw,power.limit", "--format=csv,noheader,nounits"],
                     capture_output=True, text=True, timeout=3, check=False).stdout.strip().splitlines()
                 if out:
                     p = [x.strip() for x in out[0].split(",")]
                     val = {"name": p[0], "temp": _num(p[1]), "usage": _num(p[2]), "core_mhz": _num(p[3]),
-                           "mem_mhz": _num(p[4]), "pstate": p[5], "vram_mb": _num(p[6]), "power_w": _num(p[7])}
+                           "mem_mhz": _num(p[4]), "pstate": p[5], "vram_mb": _num(p[6]), "power_w": _num(p[7]),
+                           "power_limit_w": _num(p[8]) if len(p) > 8 else None}
             except (OSError, subprocess.SubprocessError):
                 val = None
         self._nv_cache = (time.time(), val)
@@ -200,9 +201,18 @@ class Monitor:
                     remaining = int(int(d["charge_now"]) / int(d["current_now"]) * 60)
             except ValueError:
                 pass
+            power = None                      # W drawn from (or charged into) the battery
+            try:
+                if d["power_now"]:
+                    power = int(d["power_now"]) / 1e6
+                elif d["current_now"] and d["voltage_now"]:
+                    power = int(d["current_now"]) * int(d["voltage_now"]) / 1e12
+            except ValueError:
+                pass
             return {"present": True, "status": d["status"], "percent": cap, "health": health,
                     "remaining_min": remaining, "model": d["model_name"], "vendor": d["manufacturer"],
-                    "cycle_count": _num(d["cycle_count"])}
+                    "cycle_count": _num(d["cycle_count"]),
+                    "power_w": round(abs(power), 1) if power is not None else None}
         return {"present": False}
 
     @staticmethod

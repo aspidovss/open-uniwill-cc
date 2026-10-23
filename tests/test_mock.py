@@ -307,6 +307,15 @@ class CustomModeService(MockService):
         self.assertIsInstance(self.get("history"), list)
         self.assertIn("present", self.get("gpu"))
 
+    def test_history_export(self):
+        r = urllib.request.Request(f"http://127.0.0.1:{self.port}/api/history/export?format=csv", headers={"X-UWCC-Token": TOKEN})
+        resp = urllib.request.urlopen(r, timeout=10)
+        self.assertIn("attachment", resp.headers["Content-Disposition"])
+        self.assertTrue(resp.read().decode("utf-8-sig").startswith("time,cpu_temp_c,"))
+        r = urllib.request.Request(f"http://127.0.0.1:{self.port}/api/history/export?format=xml", headers={"X-UWCC-Token": TOKEN})
+        with self.assertRaises(urllib.error.HTTPError):
+            urllib.request.urlopen(r, timeout=10)
+
 
 class FanTableUnit(unittest.TestCase):
     def test_zero_filled_tail_is_unused(self):

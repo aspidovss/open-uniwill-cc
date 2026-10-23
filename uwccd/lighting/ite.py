@@ -126,7 +126,7 @@ def find_devices(pids):
         if len(parts) != 3:
             continue
         vid, pid = int(parts[1], 16), int(parts[2], 16)
-        if vid != VID or pid not in pids:
+        if vid != VID or (pids is not None and pid not in pids):
             continue
         try:
             desc = open(os.path.join(hr, "device", "report_descriptor"), "rb").read()
@@ -191,6 +191,8 @@ class ITEKeyboard:
     # -- low level -------------------------------------------------------------------
     def feature(self, data):
         buf = bytes(data) + bytes(max(0, 9 - len(data)))
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("HID %04x feature %s", self.pid, buf.hex(" "))
         with self.lock:
             self.io.feature(buf)
         time.sleep(0.001)
@@ -200,6 +202,8 @@ class ITEKeyboard:
             return self.io.get_feature(9)
 
     def output(self, data):
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("HID %04x output %d bytes %s…", self.pid, len(data), bytes(data[:16]).hex(" "))
         with self.lock:
             self.io.output(data)
 
@@ -463,6 +467,16 @@ class MockITE(ITEKeyboard):
 
     def close(self):
         pass
+
+
+def list_devices():
+    """All ITE (VID 048D) HID collections with their role — for diagnostics (uwccctl lighting)."""
+    out = []
+    for d in find_devices(None):
+        role = "keyboard" if d["pid"] in KB_PIDS else "lightbar" if d["pid"] in LB_PIDS else "other"
+        out.append({"node": d["node"], "pid": f"{d['pid']:04X}", "usage_page": f"{d['usage_page']:04X}" if d.get("usage_page") else None,
+                    "role": role, "feature_len": d.get("feature_len"), "output_len": d.get("output_len")})
+    return out
 
 
 def open_keyboard(ec, mock=False):

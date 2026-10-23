@@ -8,6 +8,9 @@
                    backlight off on battery, follow the mode with power-profiles-daemon.
 """
 import collections
+import csv
+import io
+import json
 import logging
 import shutil
 import subprocess
@@ -70,11 +73,39 @@ class Sampler(threading.Thread):
             except Exception:  # noqa: BLE001
                 log.exception("sampler")
 
+    def _limits(self):
+        """Current CPU power limits for the chart marks: what the service wrote to the EC (0x783/84/85);
+        0 there means "the controller's own limits" — then the factory values of the current mode."""
+        ec = self.svc.ec
+        try:
+            pl = [ec.read(a) for a in (0x783, 0x784, 0x785)]
+            if not any(pl):
+                mode = self.svc.power.option.get("OperatingMode")
+                base = {0: 0x734, 1: 0x730, 2: 0x7A7}.get(self._mode_index(mode))
+                if base is not None:
+                    pl = [ec.read(base + i) for i in range(3)]
+        except Exception:  # noqa: BLE001
+            return None, None, None
+        if getattr(self.svc.power, "manager", "cml") != "std":
+            pl[2] = 0                          # PL4 is managed only on RamFan1p5 (Custom mode) platforms
+        return tuple(v if v else None for v in pl)
+
+    @staticmethod
+    def _mode_index(mode):
+        from . import regs as R
+        return {R.MODE_OFFICE: 0, R.MODE_GAMING: 1, R.MODE_TURBO: 2}.get(mode)
+
     def _point(self, m):
         g = m.get("gpu") or {}
         lc = self.svc.liquid.status() if self.svc.liquid.available else {}
-        return {"t": round(m["t"]), "ct": m["cpu"]["temp"], "cl": m["cpu"]["usage"], "cp": m["cpu"].get("power_w"),
-                "gt": g.get("temp"), "gl": g.get("usage"), "gp": g.get("power_w"),
+        pl1, pl2, pl4 = self._limits()
+        cp, gp = m["cpu"].get("power_w"), g.get("power_w")
+        bat = m.get("battery") or {}
+        return {"t": round(m["t"]), "ct": m["cpu"]["temp"], "cl": m["cpu"]["usage"], "cp": cp,
+                "gt": g.get("temp"), "gl": g.get("usage"), "gp": gp,
+                "pl1": pl1, "pl2": pl2, "pl4": pl4, "gpl": g.get("power_limit_w"),
+                "tp": round((cp or 0) + (gp or 0), 1) if cp is not None or gp is not None else None,
+                "bp": bat.get("power_w") if bat.get("status") == "Discharging" else None,
                 "cf": m["fans"].get("cpu_rpm"), "gf": m["fans"].get("gpu_rpm"),
                 "lf": lc.get("fan") if lc.get("connected") else None,
                 "lp": lc.get("pump") if lc.get("connected") else None}
@@ -106,6 +137,40 @@ class Sampler(threading.Thread):
                 log.warning("still overheating — Fan Boost on")
                 self.svc.power.set_fan_boost(True)
                 self.svc.emit("overheat_boost", {"sensor": sensor, "temp": t})
+
+
+EXPORT_COLUMNS = [("t", "time"), ("ct", "cpu_temp_c"), ("gt", "gpu_temp_c"), ("cl", "cpu_load_pct"),
+                  ("gl", "gpu_load_pct"), ("cp", "cpu_power_w"), ("gp", "gpu_power_w"), ("tp", "cpu_gpu_power_w"),
+                  ("bp", "battery_discharge_w"), ("pl1", "cpu_pl1_w"), ("pl2", "cpu_pl2_w"), ("pl4", "cpu_pl4_w"),
+                  ("gpl", "gpu_power_limit_w"), ("cf", "cpu_fan_rpm"),
+                  ("gf", "gpu_fan_rpm"), ("lf", "cooler_fan_pct"), ("lp", "cooler_pump_v")]
+
+
+def export_history(points, fmt="csv"):
+    """The last hour of samples as CSV (UTF-8 with BOM, ISO local time) or JSON. Returns (bytes, mime, ext)."""
+    rows = []
+    for p in points:
+        r = {}
+        for k, name in EXPORT_COLUMNS:
+            v = p.get(k)
+            r[name] = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(v)) if k == "t" and v else v
+        rows.append(r)
+    if fmt == "json":
+        return json.dumps(rows, ensure_ascii=False, indent=1).encode(), "application/json", "json"
+    buf = io.StringIO()
+    w = csv.writer(buf, delimiter=";" if fmt == "csv-excel" else ",", lineterminator="\r\n")
+    w.writerow([name for _, name in EXPORT_COLUMNS])
+    for r in rows:
+        line = []
+        for _, name in EXPORT_COLUMNS:
+            v = r[name]
+            if v is None:
+                v = ""
+            elif fmt == "csv-excel" and isinstance(v, float):
+                v = str(v).replace(".", ",")          # Excel with a comma decimal separator (ru, de, ...)
+            line.append(v)
+        w.writerow(line)
+    return ("\ufeff" + buf.getvalue()).encode("utf-8"), "text/csv", "csv"
 
 
 class PowerSourceRules:

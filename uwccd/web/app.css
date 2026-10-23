@@ -78,6 +78,7 @@ dl.kv dt{color:var(--muted)}dl.kv dd{margin:0;word-break:break-word}
 .mode .badge{position:absolute;top:14px;right:14px;font-size:11px;padding:3px 8px;border-radius:99px;background:var(--acc);color:#002b25;font-weight:700;display:none}
 .mode.on .badge{display:block}
 .mode .glyph{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;background:var(--bg3);font-size:22px}
+.lg.dash::before{background:repeating-linear-gradient(90deg,var(--c) 0 5px,transparent 5px 8px)!important}
 .seg{display:inline-flex;background:var(--bg1);border:1px solid var(--line);border-radius:10px;padding:3px;gap:3px;flex-wrap:wrap}
 .seg button{background:none;border:0;padding:7px 14px;border-radius:8px;cursor:pointer;color:var(--muted)}
 .seg button.on{background:var(--bg3);color:#fff;box-shadow:0 0 0 1px var(--acc) inset}

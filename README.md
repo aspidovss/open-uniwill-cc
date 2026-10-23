@@ -28,7 +28,8 @@ hardware switches — plus Bluetooth control of the **XMG Oasis** liquid cooler 
 - **Keyboard lighting**: 17 hardware effects, per-key colours, gaming zones, software effects, auto-off
 - **Battery**: protection modes, custom charge limits, USB-C charging priority
 - **Switches**: Win-key lock, Fn lock, touchpad, USB power in sleep, power-on with AC, MUX (dGPU direct), webcam
-- **Monitoring**: temperatures, load, clocks, fans, power, memory, drives, battery, one-hour history
+- **Monitoring**: temperatures, load, clocks, fans, CPU and GPU power, memory, drives, battery; one-hour history
+  with export to CSV / JSON / PNG
 - **Automation**: mode per power source, overheating alerts (with optional Fan Boost), app → mode binding
 - **Liquid cooler** XMG Oasis (LCT21001 Mk1 / LCT22002 Mk2), Eluktronics Liquid Pad Pro, PCS Liquid Series,
   TUXEDO Aquaris: automatic temperature tiers, follow-the-laptop mode, lighting, coolant flow guard, filling cycle
@@ -116,6 +117,7 @@ uwccctl kb off|on|effect N       keyboard backlight
 uwccctl lc scan / connect ADDR   liquid cooler: find / connect
 uwccctl lc mode auto|ec|low|medium|high|off
 uwccctl lang en|ru
+uwccctl history csv out.csv      last hour of sensors to a file
 uwccctl debug on|off             verbose service log
 ```
 

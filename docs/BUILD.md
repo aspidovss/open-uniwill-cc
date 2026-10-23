@@ -108,6 +108,8 @@ sc.exe start uwccd
 uwccctl status                        project, EC backend, mode, fans, battery
 uwccctl ec read 0x751                 one EC register through the service
 uwccctl nvram                         UniWillVariable fields
+uwccctl lighting                      keyboard / light bar HID devices, keyboard type, firmware
+uwccctl history csv h.csv             last hour of sensors
 sudo uwccctl ec-direct dump 0x700     256 EC bytes without the service (Linux: root, Windows: admin)
 ```
 
@@ -230,6 +232,8 @@ sc.exe start uwccd
 uwccctl status                        проект, доступ к EC, режим, вентиляторы, батарея
 uwccctl ec read 0x751                 один регистр EC через службу
 uwccctl nvram                         поля UniWillVariable
+uwccctl lighting                      HID-устройства клавиатуры / световой полосы, тип клавиатуры, прошивка
+uwccctl history csv h.csv             последний час датчиков
 sudo uwccctl ec-direct dump 0x700     256 байт EC без службы (Linux: root, Windows: администратор)
 ```
 

@@ -2,6 +2,13 @@
 
 ## 1.3.2
 
+- Monitor → Last hour: separate **CPU power** and **GPU power** charts with now / average / max; CPU package power on
+  Windows from the Energy Meter counters (Linux: RAPL). Dashed marks for the current limits: PL1 / PL2 (PL4 on Custom-mode
+  platforms) and the NVIDIA power limit.
+- **Total power** chart: CPU + GPU, power drawn from the battery when unplugged, the adapter rating as a mark.
+- **Export** of the last hour: CSV, CSV for Excel (`;` and decimal comma), JSON, PNG of the chart;
+  `uwccctl history [csv|csv-excel|json] [FILE]`. The Linux window saves downloads to ~/Downloads.
+- Lighting diagnostics: `uwccctl lighting` (all ITE HID devices, keyboard type, firmware); HID traffic in the debug log.
 - Fan curves: two levels may start at the same temperature — factory tables do that (e.g. 55/55 °C on project
   0x10), which made saving fail with "level temperatures must increase". Decreasing temperatures are still refused.
 - Fan curves: levels after the first unused one are ignored; ECs that pad unused levels with zeros are handled.
