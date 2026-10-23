@@ -137,6 +137,7 @@ uwccctl export all backup.json   fan curves, profiles and settings to a file
 uwccctl import backup.json       fan curves and profiles back (add fans,profiles,settings to choose)
 uwccctl update                   check for a new release
 uwccctl report                   diagnostic report (zip) for bug reports and new laptops
+uwccctl restart                  restart the service (administrator / root)
 ```
 
 ## Uninstall / back to the original

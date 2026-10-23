@@ -8,6 +8,8 @@
  *       methods the Windows UWACPIDriver.sys calls for GCUService.
  *   ioctl UWCC_IOC_SMRW : evaluates \_SB.INOU.SMRW(Buffer{0xBB, key, 0, 0}) — the "Smart APC"
  *       limit table (PL1/PL2/PL4/TCC/cTGP/Dynamic Boost), UWACPIDriver IOCTL 0x9C40A500.
+ *   ioctl UWCC_IOC_PWUP : evaluates \_SB.INOU.PWUP(level) — the OC power level for liquid cooling
+ *       (GCUService LiquidHWOC.SetOCLevel, UWACPIDriver IOCTL 0x9C40A504 with the name "PUWP").
  *   read()/poll() : 32-bit event codes from the WMI event "AcpiTest_EventULong"
  *       (0xB0 mode key, 0xA7 fan boost, 0x40/0x41 Win-lock, 0xB8 Fn-lock, ...).
  */
@@ -40,6 +42,7 @@ struct uwcc_smrw {
 #define UWCC_IOC_READ  _IOWR('u', 1, struct uwcc_ec)
 #define UWCC_IOC_WRITE _IOW('u', 2, struct uwcc_ec)
 #define UWCC_IOC_SMRW  _IOWR('u', 3, struct uwcc_smrw)
+#define UWCC_IOC_PWUP  _IOW('u', 4, __u32)
 
 static acpi_handle inou_handle;
 static DEFINE_MUTEX(ec_lock);
@@ -120,6 +123,20 @@ static int uwcc_smrw(struct uwcc_smrw *r)
 	}
 	kfree(out.pointer);
 	return ret;
+}
+
+static int uwcc_pwup(u32 level)
+{
+	union acpi_object arg = { .integer = { .type = ACPI_TYPE_INTEGER, .value = level & 7 } };
+	struct acpi_object_list args = { .count = 1, .pointer = &arg };
+	acpi_status st;
+
+	if (!inou_handle || !acpi_has_method(inou_handle, "PWUP"))
+		return -ENODEV;
+	mutex_lock(&ec_lock);
+	st = acpi_evaluate_object(inou_handle, "PWUP", &args, NULL);
+	mutex_unlock(&ec_lock);
+	return ACPI_FAILURE(st) ? -EIO : 0;
 }
 
 static acpi_status uwcc_find_cb(acpi_handle handle, u32 level, void *ctx, void **ret)
@@ -241,6 +258,13 @@ static long uwcc_ioctl(struct file *f, unsigned int cmd, unsigned long arg)
 		if (ret)
 			return ret;
 		return copy_to_user((void __user *)arg, &sm, sizeof(sm)) ? -EFAULT : 0;
+	}
+	if (cmd == UWCC_IOC_PWUP) {
+		u32 level;
+
+		if (copy_from_user(&level, (void __user *)arg, sizeof(level)))
+			return -EFAULT;
+		return uwcc_pwup(level);
 	}
 	if (copy_from_user(&req, (void __user *)arg, sizeof(req)))
 		return -EFAULT;

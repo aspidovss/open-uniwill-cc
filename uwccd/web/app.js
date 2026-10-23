@@ -150,7 +150,7 @@ function render() {
   if (!S) return;
   const mode = S.power.mode;
   const pill = $("#modepill"); pill.textContent = MODES[mode] ? t(MODES[mode].name) : "—"; pill.className = "modepill m" + mode;
-  $("#brand-sub").textContent = S.platform.project_name;
+  $("#brand-sub").textContent = S.platform.display_name || S.platform.project_name;
   renderModes(); renderFanPage(); renderLiquid(); renderLight(); renderBattery(); renderSwitches(); renderBinding(); renderInfo(); renderAuto(); renderAbout(); renderReportCard();
   renderHistSeg(); drawHistory();
 }
@@ -715,7 +715,7 @@ function renderInfo() {
   const lc = S.liquid || {};
   dl($("#info-dev"), [[t("Manufacturer"), i.vendor], [t("Model"), i.product], [t("Board"), i.board], ["BIOS", i.bios ? `${i.bios}${i.bios_date ? ` (${i.bios_date})` : ""}` : null], ["EC", i.ec],
     [t("Processor"), i.cpu], [t("Memory"), `${(i.memory.total_mb / 1024).toFixed(1)} ${t("GB")}`], [t(p.os === "windows" ? "Operating system" : "Linux kernel"), i.kernel]]);
-  dl($("#info-svc"), [[t("Project (Project ID)"), `${p.project_name} (0x${p.project_id.toString(16).toUpperCase()})`], [t("EC access"), p.ec_backend],
+  dl($("#info-svc"), [[t("Project (Project ID)"), `${p.display_name || p.project_name} (0x${p.project_id.toString(16).toUpperCase()})`], [t("Support"), t({ tested: "tested", known: "known platform", experimental: "experimental" }[p.support] || "—")], [t("EC access"), p.ec_backend],
     [t("Hotkeys"), p.hotkeys ? (p.os === "windows" ? "WMI (AcpiTest_EventULong)" : t("uwcc kernel module")) : t("EC polling (no module)")], ["NVRAM (UniWillVariable)", p.nvram ? t("available") : t("unavailable")],
     ["RamFan 1.5", p.ramfan15 ? t("yes") : t("no")], [t("Turbo mode"), p.turbo_support ? t("supported") : t("no")], [t("NVIDIA graphics"), p.nv_gpu ? t("yes") : t("no")],
     [t("Platform"), p.amd ? "AMD" : "Intel"], [t("Power adapter"), `${p.adapter_watt} ${t("W")}`],
@@ -724,6 +724,7 @@ function renderInfo() {
   for (const x of i.disks.devices) d.append(h("div", { class: "row between", style: "padding:6px 0;border-bottom:1px solid var(--line)" },
     h("span", {}, `${x.name} · ${x.model || ""}`), h("span", { class: "muted" }, `${x.size_gb} ${t("GB")}${x.temp != null ? ` · ${x.temp}°C` : ""}${x.rotational ? " · HDD" : " · SSD"}`)));
   const w = []; if (!p.ramfan15) w.push(t("The controller does not report RamFan 1.5 support — fan control may not work on this model."));
+  if (p.support === "experimental") w.push(t("This laptop has not been tested with Open Uniwill CC yet. Modes and fans usually work the same way, but please check them carefully and send a diagnostic report (below on this page) — it helps to mark the model as supported."));
   if (p.ec_backend === "mock") w.push(t("The service runs in simulation mode (--mock): changes are not applied to hardware."));
   $("#info-warn").classList.toggle("hidden", !w.length); $("#info-warn").innerHTML = ""; for (const x of w) $("#info-warn").append(h("p", {}, "⚠ " + x));
 }
@@ -828,6 +829,14 @@ function renderLiquid() {
   $("#lc-prime").textContent = pr != null ? t("Stop ({0}/8)", pr) : t("Start");
   $("#lc-prime").disabled = dim;
   $("#lc-guard").checked = c.flow_guard !== false;
+  const hw = S.hwoc || {};
+  $("#lc-hwoc-box").classList.toggle("hidden", !hw.supported);
+  $("#lc-hwoc").checked = !!hw.enabled;
+  const reason = { "off": "", "cooler not connected": t("waiting for the cooler"), "waiting for coolant flow": t("waiting for coolant flow"),
+    "no coolant flow": t("no coolant flow — off"), "not supported on this laptop": "" }[hw.reason] ?? (hw.reason || "");
+  $("#lc-hwoc-state").textContent = !hw.enabled ? "" : hw.active
+    ? t("Active: EC liquid-cooling table{0}, power level {1}", hw.table_loaded === false ? " " + t("(the EC did not confirm it)") : "", hw.level ?? "—")
+    : reason;
   $("#lc-notify").checked = !!c.notify_flow; $("#lc-bfan").checked = !!c.boost_fan; $("#lc-bpump").checked = !!c.boost_pump;
 }
 function drawTiers(L) {
@@ -906,6 +915,8 @@ $("#lc-prime").addEventListener("click", () => {
   if (S.liquid.priming != null) return lcPost("prime", { stop: true });
   if (confirm(t("Start the coolant filling cycle (about 70 seconds)?"))) lcPost("prime", {});
 });
+$("#lc-hwoc").addEventListener("change", e => act(() => api("setting", { key: "lc_hwoc", value: e.target.checked }),
+  e.target.checked ? t("Super performance on") : t("Super performance off")));
 for (const [id, key] of [["lc-guard", "flow_guard"], ["lc-notify", "notify_flow"], ["lc-bfan", "boost_fan"], ["lc-bpump", "boost_pump"]])
   $("#" + id).addEventListener("change", e => lcPost("config", { [key]: e.target.checked }));
 
@@ -1193,8 +1204,15 @@ $("#upd-install").addEventListener("click", () => act(async () => {
 // ---------------------------------------------------------------- diagnostic report
 const REP_SECTIONS = [["system", "System, BIOS and EC versions"], ["platform", "Platform, modes, fan tables and profiles"],
   ["ec", "EC registers (read only)"], ["bios", "BIOS settings: UniWillVariable, SmartAPC limits"],
+  ["acpi", "ACPI tables of the firmware (without the Windows licence tables)"],
+  ["firmware", "EC interface devices (ACPI / WMI) and their drivers"],
+  ["oem_registry", "Settings and feature flags of the original Control Center (registry, Windows)"],
+  ["oem_software", "Services, packages and versions of the original Control Center (Windows)"],
+  ["oem_files", "Settings files, tables and logs of the original Control Center (Windows)"],
+  ["oem_files_full", "Original Control Center folders complete, programs included (large, up to 400 MB)", false],
+  ["power", "Power plans / power profiles"],
   ["lighting", "Keyboard and light bar devices (HID)"], ["nvidia", "NVIDIA: driver, limits, Dynamic Boost"],
-  ["sensors", "Sensors and the last 15 minutes of history"], ["original", "Original Control Center files"],
+  ["sensors", "Sensors and the last 15 minutes of history"], ["original", "Fan tables and profiles of the original Control Center"],
   ["cooler", "Liquid cooler"], ["log", "Service log"], ["settings", "Program settings"]];
 const REP_PRIVATE = [["serial", "Serial numbers of the laptop and the board", "to tell firmware batches of one model apart"],
   ["uuid", "System UUID", "to match several reports from one laptop"],
@@ -1209,37 +1227,58 @@ function renderReportCard() {                      // rebuilt only when the lang
   const was = Object.fromEntries($$("#report-card input[data-k]").map(i => [i.dataset.k, i.checked]));
   const box = (k, def) => { const i = h("input", { type: "checkbox", "data-k": k }); i.checked = k in was ? was[k] : def; return i; };
   sec.innerHTML = ""; pri.innerHTML = "";
-  for (const [k, n] of REP_SECTIONS) sec.append(h("label", { class: "chk" }, box(k, true), " ", h("span", {}, t(n))));
+  for (const [k, n, def = true] of REP_SECTIONS) sec.append(h("label", { class: "chk" }, box(k, def), " ", h("span", {}, t(n))));
   for (const [k, n, why] of REP_PRIVATE) pri.append(h("label", { class: "chk" }, box(k, false), " ",
     h("span", {}, t(n), h("small", { class: "muted" }, " — " + t(why)))));
 }
 async function makeReport() {
-  const pick = sel => $$(sel + " input:checked").map(i => i.dataset.k).join(",");
+  // the report is built in the background (it can take a minute on Windows); the file is downloaded with a click
+  // on a link, so the browser treats every download as one the user asked for
+  const pick = sel => $$(sel + " input:checked").map(i => i.dataset.k);
   let sum = {};
   try { sum = await api("report/summary"); } catch (_) {}
   const d = new Date(), z = n => String(n).padStart(2, "0");
   const stamp = `${d.getFullYear()}${z(d.getMonth() + 1)}${z(d.getDate())}-${z(d.getHours())}${z(d.getMinutes())}${z(d.getSeconds())}`;
   const name = `uwcc-report-${String(sum.model || sum.project || "laptop").replace(/[^\w.-]+/g, "-").slice(0, 40)}-${stamp}.zip`;
-  // served with Content-Disposition, like the history export: works in Edge (Windows) and in the WebKitGTK window
-  const a = h("a", { href: `/api/report?sections=${pick("#rep-sections")}&private=${pick("#rep-private")}&name=${encodeURIComponent(name)}&token=${encodeURIComponent(TOKEN)}`, download: name });
-  document.body.append(a); a.click(); a.remove();
+  const sections = pick("#rep-sections");
+  let st = await api("report/start", { sections, private: pick("#rep-private"), name });
+  const box = $("#rep-done"); box.classList.remove("hidden");
+  const btn = $("#rep-make"); btn.disabled = true;
+  try {
+    while (st.state === "running") {
+      box.innerHTML = "";
+      box.append(h("p", {}, h("b", {}, t("Collecting the report… {0} s", Math.round(st.elapsed || 0)))),
+        h("p", { class: "muted tiny" }, t("On Windows this takes up to a minute or two. You can leave this page.")));
+      await new Promise(r => setTimeout(r, 1000));
+      st = await api("report/status");
+    }
+  } finally { btn.disabled = false; }
+  if (st.state !== "done") throw new Error(st.error || "report failed");
+  showReport(st, sum);
+}
+function showReport(st, sum) {
+  const name = st.name;
   const repo = (S.update && S.update.repo) || "https://github.com/aspidovss/open-uniwill-cc";
   const mail = (S.update && S.update.contact) || "OUCC@aspidov.ru";
-  const lines = Object.entries(sum).map(([k, v]) => `- ${k}: ${v}`).join("\n");
+  const lines = Object.entries(sum || {}).filter(([, v]) => typeof v !== "object").map(([k, v]) => `- ${k}: ${v}`).join("\n");
   const title = `Report: ${sum.vendor || ""} ${sum.model || sum.project || ""}`.replace(/\s+/g, " ").trim();
   const body = `${t("Describe the problem or the laptop here.")}\n\n${lines}\n\n${t("Attached: {0}", name)}\n`;
-  const box = $("#rep-done"); box.innerHTML = ""; box.classList.remove("hidden");
   const issue = `${repo}/issues/new?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`;
   const mailto = `mailto:${mail}?subject=${encodeURIComponent("open-uniwill-cc: " + title)}&body=${encodeURIComponent(body)}`;
   const reveal = async () => { try { const x = await api("reveal", { name }); if (!x.tray) toast(t("The file is in your Downloads folder: {0}", name)); } catch (_) {} };
-  box.append(h("p", {}, h("b", {}, "✓ " + t("Report saved: {0}", name))),
-    h("p", { class: "muted tiny" }, t("It is in your Downloads folder. GitHub and e-mail cannot attach files by themselves: drag the file into the issue or the letter.")),
+  const mb = !st.size ? "?" : st.size < 1048576 ? (st.size / 1048576).toFixed(2) : (st.size / 1048576).toFixed(1);
+  const box = $("#rep-done"); box.innerHTML = ""; box.classList.remove("hidden");
+  const dl = h("a", { class: "btn", href: `/api/report/file?id=${encodeURIComponent(st.id)}&token=${encodeURIComponent(TOKEN)}`, download: name },
+    "⤓ " + t("Download the report ({0} MB)", mb));
+  box.append(h("p", {}, h("b", {}, "✓ " + t("The report is ready: {0}", name)), " ", h("span", { class: "muted tiny" }, t("collected in {0} s", st.elapsed))),
+    h("div", { class: "row wrap" }, dl),
+    h("p", { class: "muted tiny", style: "margin-top:10px" }, t("It is saved to your Downloads folder. GitHub and e-mail cannot attach files by themselves: drag the file into the issue or the letter.")),
     h("div", { class: "row wrap" },
-      h("button", { class: "btn", onclick: () => { window.open(issue, "_blank"); reveal(); } }, t("Create a GitHub issue")),
+      h("button", { class: "btn ghost", onclick: () => { window.open(issue, "_blank"); reveal(); } }, t("Create a GitHub issue")),
       h("button", { class: "btn ghost", onclick: () => { location.href = mailto; reveal(); } }, t("Send by e-mail")),
       h("button", { class: "btn ghost", onclick: reveal }, t("Show the file"))));
 }
-$("#rep-make").addEventListener("click", () => act(makeReport, t("Report saved")));
+$("#rep-make").addEventListener("click", () => act(makeReport, t("Report ready")));
 
 // ---------------------------------------------------------------- export / import
 function download(url) {
@@ -1352,10 +1391,28 @@ $$("#nav a").forEach(a => a.addEventListener("click", () => {
 
 // ---------------------------------------------------------------- live events
 let connState = "wait";
+let connLostAt = null, connTimer = null;
 function paintConn() {
   $("#conn").className = "conn" + (connState === "ok" ? " ok" : "");
   $("#conn span:last-child").textContent = t({ ok: "Service connected", err: "No connection to the service" }[connState] || "Connecting…");
+  // after a minute without the service: how to restart it (the window cannot do it without the service)
+  if (connState === "ok") { connLostAt = null; clearTimeout(connTimer); $("#svc-down").classList.add("hidden"); return; }
+  connLostAt = connLostAt || Date.now();
+  clearTimeout(connTimer);
+  connTimer = setTimeout(() => {
+    if (connState === "ok") return;
+    const win = /Windows/.test(navigator.userAgent);
+    $("#svc-down").textContent = win
+      ? t("The service has not answered for a minute. Restart it: right-click the Control Center icon in the tray → “Restart the service”.")
+      : t("The service has not answered for a minute. Restart it from the notification of the Control Center agent or with: sudo systemctl restart uwccd");
+    $("#svc-down").classList.remove("hidden");
+  }, Math.max(0, 60000 - (Date.now() - connLostAt)));
 }
+$("#svc-restart").addEventListener("click", () => act(async () => {
+  if (!confirm(t("Restart the Control Center service? Fan control is handed to the laptop for a few seconds."))) return;
+  await api("service/restart", {});
+  toast(t("The service is restarting…"));
+}));
 function connect() {
   const es = new EventSource("/api/events?token=" + encodeURIComponent(TOKEN));
   es.onopen = () => { connState = "ok"; paintConn(); };

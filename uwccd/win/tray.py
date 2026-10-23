@@ -204,7 +204,9 @@ class Tray:
         st, T, I = self.state, self.T, pystray.MenuItem
         items = [I(T("open"), self.open_window, default=True), pystray.Menu.SEPARATOR]
         if not st:
-            items.append(I(T("offline"), None, enabled=False))
+            items.append(I(self.offline_text(), None, enabled=False))
+            if self.offline_since and time.time() - self.offline_since >= 60:
+                items.append(I(T("svc_restart"), self.restart_service))
         else:
             p = st["power"]
             if st["platform"].get("fan_control"):
@@ -268,6 +270,49 @@ class Tray:
                     self.offline_notified = True
                     self.icon.notify(self.T("svc_down_body"), self.T("svc_down"))
                 time.sleep(3)
+
+    @staticmethod
+    def service_state():
+        """State of the uwccd service from the SCM (users may query it)."""
+        try:
+            import win32serviceutil
+            return {1: "stopped", 2: "starting", 3: "stopping", 4: "running"}.get(win32serviceutil.QueryServiceStatus("uwccd")[1], "unknown")
+        except Exception:  # noqa: BLE001
+            return "missing"
+
+    def offline_text(self):
+        st = self.service_state()
+        return self.T({"stopped": "svc_stopped", "starting": "svc_starting", "missing": "svc_missing"}.get(st, "offline"))
+
+    RESTART_PS = (
+        "$n='uwccd'; $s=Get-Service $n -ErrorAction SilentlyContinue; if (-not $s) { exit 2 }; "
+        "if ($s.Status -ne 'Stopped') { & sc.exe stop $n | Out-Null; "
+        "for ($i=0; $i -lt 15 -and (Get-Service $n).Status -ne 'Stopped'; $i++) { Start-Sleep 1 }; "
+        "if ((Get-Service $n).Status -ne 'Stopped') { $p = ((& sc.exe queryex $n | Select-String 'PID') -split ':')[-1].Trim(); "
+        "if ($p -and $p -ne '0') { Stop-Process -Id ([int]$p) -Force }; Start-Sleep 2 } }; "
+        "Start-Service $n")
+
+    def restart_service(self, *_):
+        """Restart uwccd with administrator rights (UAC prompt): stop, kill if it hangs, start; then wait for it."""
+        def run():
+            rc = ctypes.windll.shell32.ShellExecuteW(None, "runas", "powershell.exe",
+                                                     f'-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command "{self.RESTART_PS}"',
+                                                     None, 0)
+            if rc <= 32:                 # 5: the UAC prompt was declined
+                self.icon.notify(" ", self.T("svc_restart_cancel"))
+                return
+            self.icon.notify(" ", self.T("svc_restarting"))
+            for _ in range(45):
+                time.sleep(1)
+                try:
+                    self.api.call("state", timeout=3)
+                    self.icon.notify(" ", self.T("svc_restarted"))
+                    self.refresh()
+                    return
+                except Exception:  # noqa: BLE001
+                    continue
+            self.icon.notify(self.T("svc_restart_fail_body"), self.T("svc_restart_fail"))
+        threading.Thread(target=run, daemon=True).start()
 
     def check_updates(self, *_):
         def run():

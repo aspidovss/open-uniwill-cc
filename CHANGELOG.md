@@ -1,5 +1,39 @@
 # Changelog
 
+## 1.5.1
+
+- **Restart the service by hand** when it has not answered for a minute: the tray menu gets *Restart service*
+  (Windows asks for administrator rights; a hung process is ended after 15 s), the window shows a banner with
+  instructions and *Settings → About* has a *Restart service* button; on Linux the agent offers a notification with a
+  *Restart* action (polkit rule for the `uwcc` group, installed by `install.sh`). New command: `uwccctl restart`.
+- **Platforms of the newer official service (GCUService 1.2)**, e.g. MECHREVO Kuangshi / Jiguang …B2 (project 0x1A):
+  recognised and run with the same RamFan 1.5 control, marked *experimental*. The code of service 1.2 is protected, so
+  nothing laptop-specific could be taken over from it — reports from owners decide what to add.
+- The Info page shows the support level (*tested* / *known platform* / *experimental*) and the model name for projects
+  missing from the original tables (0x10 MAIBENBEN Tsunami — tested); untested laptops get a request for a report.
+
+## 1.5.0
+
+- **Super performance with liquid cooling** (*Liquid cooling → Options*, off by default; laptops whose EC supports
+  liquid-cooling fan tables, 0x7C8 bit5): while the cooler runs with normal coolant flow, the EC loads its own
+  liquid-cooling fan table for the mode (Office / Gaming / Turbo / Custom) and the program passes the EC's OC power level
+  to the firmware method `INOU.PWUP` (also on WMI event 0xC2), as `LiquidHWOC` of the original service does. User fan
+  curves are kept but not written meanwhile; everything returns when the cooler disconnects or the flow fails.
+  The original's GPU clock offsets in Turbo are not applied.
+- Linux kernel module 1.5.0: ioctl for `PWUP` (DKMS version bump; older module versions are removed on install).
+
+## 1.4.3
+
+- **Diagnostic report, more for new laptops:** ACPI tables (DSDT, SSDT… — without MSDM / SLIC, which hold the Windows
+  licence); the EC interface devices (ACPI INOU0000 / UNIW / PNP0C14, WMI) and their drivers; on Windows the whole
+  `HKLM\SOFTWARE\OEM` registry of the original Control Center with its feature flags decoded (ItemSupport, Support,
+  MySetting, SMAPCTable) and its brand (`CustomizeTarget`); its services, packages, scheduled tasks and file versions /
+  signatures; its settings files, fan tables, profiles and logs of the last 14 days (text only, redacted) with a list of
+  all files; power plans. *Original Control Center folders complete* (programs included, large) is a separate option,
+  off by default (`uwccctl report --full`). The summary notes boards known to run the same official service.
+- The report is collected in the background with a progress line (up to a minute or two on Windows), then downloaded
+  with a button — a second report works too (the window blocked automatic downloads after the first one).
+
 ## 1.4.2
 
 - **Updates (Windows):** the tray app downloads the installer to your **Downloads** folder, checks it against

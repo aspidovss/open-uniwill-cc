@@ -222,6 +222,7 @@ class SettingsManager:
             "tcc_extended": bool(self.st.get("tcc_extended", False)),
             "update_check": bool(self.st.get("update_check", True)),
             "history_record": bool(self.st.get("history_record", True)),
+            "lc_hwoc": bool(self.st.get("lc_hwoc", False)),
             "lang": self.st.get("lang", "en"),
             "webcam": self.webcam(),
         }

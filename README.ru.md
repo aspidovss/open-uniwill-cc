@@ -139,6 +139,7 @@ uwccctl export all backup.json   кривые, профили и настрой�
 uwccctl import backup.json       вернуть кривые и профили (fans,profiles,settings — выбор разделов)
 uwccctl update                   проверить новый релиз
 uwccctl report                   диагностический отчёт (zip) для сообщений об ошибках и новых ноутбуков
+uwccctl restart                  перезапустить службу (администратор / root)
 ```
 
 ## Удаление / возврат к оригиналу

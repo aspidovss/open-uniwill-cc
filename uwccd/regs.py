@@ -105,3 +105,4 @@ LC_EC_FAN = 0x7E6          # bit7 valid, bits0-6 fan duty %
 LC_EC_PUMP = 0x7E7         # bit7 valid, bits0-6 pump voltage (0/7/8/11/12)
 EV_LC_FAN_BOOST = 0xCD     # Fn key: cooler fan boost toggle
 EV_LC_PUMP_BOOST = 0xCE    # Fn key: cooler pump boost toggle
+EV_HWOC = 0xC2             # EC changed the liquid-cooling OC power level (0x7C7 bits 2..4)

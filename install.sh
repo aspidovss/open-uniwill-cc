@@ -3,7 +3,7 @@
 # Usage:  sudo bash install.sh [--cc /path/to/ControlCenter_5.52.49.6_MBB] [--no-module] [--no-bluetooth]
 set -euo pipefail
 
-VERSION=1.0.0   # DKMS module version (kernel code unchanged since 1.0.0)
+VERSION=1.5.0   # DKMS module version (1.5.0: PWUP ioctl)
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PREFIX=/opt/uwcc
 CC_DIR=""
@@ -92,6 +92,8 @@ ln -sf "$PREFIX/bin/uwccctl" /usr/local/bin/uwccctl
 ln -sf "$PREFIX/bin/uwcc-agent" /usr/local/bin/uwcc-agent
 install -Dm644 "$HERE/packaging/uwcc.desktop" /usr/share/applications/uwcc.desktop
 install -Dm644 "$HERE/packaging/uwcc-agent.desktop" /etc/xdg/autostart/uwcc-agent.desktop
+# group uwcc may restart the service without a password (the agent's "Restart the service" button)
+[ -d /etc/polkit-1 ] && install -Dm644 "$HERE/packaging/50-uwcc.rules" /etc/polkit-1/rules.d/50-uwcc.rules
 install -Dm644 "$HERE/uwccd/web/icon.svg" /usr/share/icons/hicolor/scalable/apps/uwcc.svg
 gtk-update-icon-cache -q /usr/share/icons/hicolor 2>/dev/null || true
 install -Dm755 "$HERE/packaging/system-sleep-uwcc" /usr/lib/systemd/system-sleep/uwcc
@@ -99,6 +101,9 @@ install -Dm755 "$HERE/packaging/system-sleep-uwcc" /usr/lib/systemd/system-sleep
 # --- 4. kernel module (DKMS) -----------------------------------------------------
 if [ "$WITH_MODULE" = 1 ]; then
   say "Building the uwcc kernel module with DKMS"
+  for old in $(dkms status -m uwcc 2>/dev/null | sed -n 's|^uwcc/\([^,: ]*\).*|\1|p' | sort -u); do
+    dkms remove -m uwcc -v "$old" --all >/dev/null 2>&1 || true; rm -rf "/usr/src/uwcc-$old"
+  done
   dkms remove -m uwcc -v "$VERSION" --all >/dev/null 2>&1 || true
   rm -rf "/usr/src/uwcc-$VERSION"
   cp -r "$HERE/kernel" "/usr/src/uwcc-$VERSION"

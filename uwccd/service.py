@@ -109,6 +109,8 @@ class Service:
     def emit(self, kind, data):
         if kind == "mode":
             threading.Thread(target=self.rules.sync_ppd, args=(data.get("mode"),), daemon=True).start()
+        if kind == "lc" and data.get("event") != "hwoc" and getattr(self, "hwoc", None):
+            self.hwoc.wake.set()                 # cooler connected / flow changed
         msg = json.dumps({"type": kind, "data": data, "t": time.time()})
         with self.llock:
             for q in list(self.listeners):
@@ -154,6 +156,9 @@ class Service:
         self.threads.append(AppBinding(lambda: self.settings_store.get("app_binding", []),
                                        self.power.user_set_mode, lambda: self.power.option["OperatingMode"]))
         self.threads.append(self.sampler)
+        from .hwoc import LiquidHWOC
+        self.hwoc = LiquidHWOC(self)
+        self.threads.append(self.hwoc)
         if not self.mock:
             self.threads.append(self.updater)
         for t in self.threads:
@@ -198,6 +203,8 @@ class Service:
             self.emit("setting", {"lightbar_on": code == R.EV_LIGHTBAR_ON})
         elif code == R.EV_PROTECT and self.pf.balanced_protect:
             self.power.set_user_profile(self.power.option["OperatingMode"])
+        elif code == R.EV_HWOC:
+            self.hwoc.on_wmi(code)
         elif code in (R.EV_LC_FAN_BOOST, R.EV_LC_PUMP_BOOST):
             if self.liquid.status()["connected"]:
                 self.liquid.toggle_boost("fan" if code == R.EV_LC_FAN_BOOST else "pump")
@@ -259,6 +266,7 @@ class Service:
             "keyboard": self.keyboard.status(),
             "app_binding": self.settings_store.get("app_binding", []),
             "liquid": self.liquid.status(),
+            "hwoc": self.hwoc.status() if getattr(self, "hwoc", None) else None,
             "automation": {k: auto_setting(self.settings_store, k) for k in AUTO_DEFAULTS},
             "info": self.monitor.info(),
         }

@@ -77,6 +77,14 @@ class ECBase:
     def _smrw(self, key):
         raise ECError("SMRW not supported by this backend")
 
+    def _pwup(self, level):
+        raise ECError("PWUP not supported by this backend")
+
+    def pwup(self, level):
+        """Firmware method INOU.PWUP(level): OC power level for liquid cooling (LiquidHWOC.SetOCLevel)."""
+        with self.lock:
+            return self._pwup(int(level) & 0x07)
+
     def smart_apc_table(self):
         """SmartApcTableCtrl.GetTableByDriver: SMRW(Buffer{0xBB, key}) for key 0..11, first byte of each
         reply -> SMAPCTABLE_STRUCT {PL1, PL2, PL4, TccOffset, ConfigurableTGP, DynamicBoost,
@@ -102,6 +110,8 @@ class KernelModuleEC(ECBase):
     IOC_WRITE = (1 << 30) | (4 << 16) | (ord("u") << 8) | 2
     # struct uwcc_smrw { __u8 in[4]; __u8 out[4]; } — _IOWR('u', 3, ...)
     IOC_SMRW = (3 << 30) | (8 << 16) | (ord("u") << 8) | 3
+    # __u32 level — _IOW('u', 4, __u32)
+    IOC_PWUP = (1 << 30) | (4 << 16) | (ord("u") << 8) | 4
 
     def __init__(self):
         super().__init__()
@@ -122,6 +132,12 @@ class KernelModuleEC(ECBase):
         except OSError as e:          # ENOTTY: module from 1.0 without SMRW; ENODEV: no such method
             raise ECError(f"SMRW: {e}") from e
         return buf[4]
+
+    def _pwup(self, level):
+        try:
+            fcntl.ioctl(self.fd, self.IOC_PWUP, struct.pack("<I", level))
+        except OSError as e:          # ENOTTY: module older than 1.5.0; ENODEV: no PWUP in this firmware
+            raise ECError(f"PWUP: {e}") from e
 
     def close(self):
         try:
@@ -177,6 +193,9 @@ class AcpiCallEC(ECBase):
         if not nums:
             raise ECError(f"SMRW: unexpected reply {out!r}")
         return nums[0] & 0xFF
+
+    def _pwup(self, level):
+        self._call(f"{self.path}.PWUP 0x{level:x}")
 
 
 class MockEC(ECBase):
@@ -245,6 +264,9 @@ class MockEC(ECBase):
 
     def _smrw(self, key):
         return self.SMAPC[key]
+
+    def _pwup(self, level):
+        self.pwup_calls = getattr(self, "pwup_calls", []) + [level]
 
     def _write(self, addr, val):
         self.mem[addr] = val

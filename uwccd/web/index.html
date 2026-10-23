@@ -96,7 +96,7 @@
       <div class="card warn hidden" id="info-warn"></div>
       <div class="card" id="about-card">
         <div class="row between wrap"><h3 data-i>About</h3>
-          <div class="row"><button class="btn ghost" id="upd-check" data-i>Check for updates</button>
+          <div class="row"><button class="btn ghost" id="svc-restart" data-i>Restart the service</button><button class="btn ghost" id="upd-check" data-i>Check for updates</button>
             <button class="btn hidden" id="upd-install" data-i>Download and install</button></div></div>
         <dl class="kv" id="about-kv"></dl>
         <p class="muted tiny" id="upd-text"></p>
@@ -244,6 +244,11 @@
             <label class="chk"><input type="checkbox" id="lc-guard"> <span data-i>Flow guard: with no flow raise the pump to 11 V and the fan to 60 %</span></label>
             <label class="chk"><input type="checkbox" id="lc-bfan"> <span data-i>Fan boost (at least 60 %)</span></label>
             <label class="chk"><input type="checkbox" id="lc-bpump"> <span data-i>Pump boost (at least 8 V)</span></label>
+            <div id="lc-hwoc-box" class="hidden" style="margin-top:10px">
+              <label class="chk"><input type="checkbox" id="lc-hwoc"> <b data-i>Super performance with liquid cooling</b></label>
+              <p class="muted tiny" style="margin:4px 0 0 26px" data-i>While the cooler runs with normal coolant flow, the laptop's controller uses its own fan table for liquid cooling and the firmware raises the power level (as "Super performance" in the original Control Center). Your fan curves are not used meanwhile; it switches off by itself when the cooler disconnects or the flow fails.</p>
+              <p class="muted tiny" style="margin:4px 0 0 26px" id="lc-hwoc-state"></p>
+            </div>
             <p class="muted tiny" style="margin-top:8px" data-i>Firmware updates (DFU) are not performed by Control Center.</p>
           </div>
         </div>
@@ -392,6 +397,7 @@
     </section>
   </main>
 </div>
+<div id="svc-down" class="svc-down hidden"></div>
 <div id="toast"></div>
 <div id="osd"></div>
 <script src="i18n.js"></script>

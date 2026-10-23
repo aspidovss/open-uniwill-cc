@@ -317,7 +317,9 @@ class PowerManagerStd(PowerManager):
             if not p:
                 return
             self.fan_safety = bool(self.ec.read(REG_FAN_SAFETY) & 0x08)
-            if self.fan_safety:
+            if getattr(self, "lc_override", None):          # LiquidHWOC: the EC table for liquid cooling
+                self.lc_override(mode)
+            elif self.fan_safety:
                 self.save_option(FanSafetyProtectNotify=1)
                 self.tables.apply_default(MODE_DEFAULT_TABLE[mode])
             else:

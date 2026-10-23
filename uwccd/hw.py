@@ -13,6 +13,15 @@ PROJECT_NAMES = {
     0x1805: "PH6PRxx", 0x1806: "PH6PGEx", 0x1807: "PH6PG0x", 0x1808: "PH6PG3x", 0x1809: "PH6PG7x",
     0x180A: "PH4AQE3", 0x180B: "PH6PG0x150W", 0x180C: "PH6PG3x150W", 0x180D: "PH6PG7x150W",
 }
+# Names for the window only, for projects that are not in the tables of GCUService 1.0.2.70. project_name stays the
+# raw "0x.." for them: it names the folder of the saved fan curves and the backup check.
+DISPLAY_NAMES = {0x10: "MAIBENBEN Tsunami", 0x1A: "MECHREVO Kuangshi / Jiguang B2"}
+# Support level shown in the window: "tested" — checked on real hardware with this program; "known" — in the
+# platform tables of the original service this program was ported from; anything else is "experimental".
+TESTED_IDS = {0x10}
+# Platforms of the newer official service 1.2 (its code is protected, so nothing could be taken over from it):
+# they report RamFan 1.5 like the others and run with the same port, but are untested.
+SERVICE_1_2_IDS = {0x1A}
 # ProjectIdExtensions.CommercialProjectIDs — all of them select the "_CML" fan manager
 COMMERCIAL_IDS = {9, 0xE, 0x11, 0x12, 0x13, 0x14, 0x15, 0x17, 0x1701, 0x1702, 0x1703, 0x1704, 0x1705,
                   0x1707, 0x18, 0x1801, 0x1802, 0x1803, 0x1804, 0x1805, 0x1806, 0x1807, 0x1808,
@@ -121,6 +130,9 @@ class Platform:
         self.rgb_lightbar = bool(ec.bit(R.EC_CAPS_78E, 4))
         self.commercial = self.project_id in COMMERCIAL_IDS
         self.balanced_protect = self.project_id in (0x1807, 0x1808, 0x1809)
+        self.display_name = DISPLAY_NAMES.get(self.project_id, self.project_name)
+        self.support = ("tested" if self.project_id in TESTED_IDS else
+                        "experimental" if self.project_id in SERVICE_1_2_IDS or self.project_id not in PROJECT_NAMES else "known")
 
     def as_dict(self):
         return {k: v for k, v in self.__dict__.items() if k != "ec"}

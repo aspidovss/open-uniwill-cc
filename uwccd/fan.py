@@ -233,6 +233,9 @@ class FanTables:
 
     def apply_table(self, t):
         name = t.get("Name")
+        if getattr(self, "blocked", False):     # liquid-cooling super performance: the EC runs its own table
+            log.info("fan table %s not applied: the EC liquid-cooling table is active", name)
+            return
         with self.lock:
             self.set_control_by_ramfan(False)
             self.set_respective(t.get("FanControlRespective", False))

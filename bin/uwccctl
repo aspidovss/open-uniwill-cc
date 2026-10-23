@@ -11,9 +11,11 @@
   uwccctl history [csv|csv-excel|json] [1m|5m|15m|1h|24h] [FILE]   sensor history (default 1h; stdout or FILE)
   uwccctl debug on|off           verbose service log (for bug reports)
   uwccctl version                version of the service and the latest release
+  uwccctl restart                restart the service (Linux: systemctl, group uwcc; Windows: administrator console)
   uwccctl update [check|install] check GitHub for a new release (install: Windows only)
-  uwccctl report [FILE] [--private serial,uuid,mac,names,apps] [--sections system,ec,...]
-                                 diagnostic report (zip) for adding support / bug reports
+  uwccctl report [FILE] [--private serial,uuid,mac,names,apps] [--sections system,ec,...] [--full]
+                                 diagnostic report (zip) for adding support / bug reports;
+                                 --full adds the original Control Center folders complete (large)
   uwccctl export fans|all FILE   fan tables / full backup (profiles, settings, liquid cooler) to FILE
   uwccctl import FILE [fans,profiles,settings] [--force]   default: fans,profiles; --force ignores another project
   uwccctl lang en|ru             interface language (UI, notifications, this tool)
@@ -37,6 +39,7 @@ import json
 import locale
 import os
 import sys
+import time
 import urllib.error
 import urllib.request
 
@@ -194,6 +197,13 @@ def main(a):
         print(__doc__)
         return
     cmd = a[0]
+    if cmd == "restart":
+        import subprocess
+        if IS_WIN:
+            subprocess.run(["sc.exe", "stop", "uwccd"], check=False)
+            time.sleep(3)
+            sys.exit(subprocess.run(["sc.exe", "start", "uwccd"], check=False).returncode)
+        sys.exit(subprocess.run(["systemctl", "restart", "uwccd.service"], check=False).returncode)
     if cmd not in ("ec-direct", "release"):
         LANG = call("state")["settings"].get("lang", "en") if cmd in ("status", "lc", "lang") else LANG
     if cmd == "status":
@@ -270,7 +280,8 @@ def main(a):
         opt = lambda k: next((a[i + 1] for i, x in enumerate(a) if x == k and i + 1 < len(a)), "")   # noqa: E731
         flags = {"--private", "--sections"}
         out = next((x for i, x in enumerate(a[1:], 1) if not x.startswith("--") and a[i - 1] not in flags), None)
-        q = f"report?private={opt('--private')}" + (f"&sections={opt('--sections')}" if opt("--sections") else "")
+        q = f"report?private={opt('--private')}" + (f"&sections={opt('--sections')}" if opt("--sections") else "") \
+            + ("&full=1" if "--full" in a else "")
         req = urllib.request.Request(f"http://127.0.0.1:{PORT}/api/{q}", headers={"X-UWCC-Token": tok()})
         try:
             r = urllib.request.urlopen(req, timeout=180)

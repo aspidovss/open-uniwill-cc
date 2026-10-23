@@ -185,11 +185,31 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == "/api/report/summary":
                 from . import report
                 return self._json(200, report.summary(s))
+            if u.path == "/api/report/status":
+                from . import report
+                j = report.Job.current
+                return self._json(200, j.status() if j else {"state": "none"})
+            if u.path == "/api/report/file":
+                from . import report
+                j = report.Job.current
+                if not j or j.state != "done" or (parse_qs(u.query).get("id") or [""])[0] != j.id:
+                    return self._json(404, {"error": "the report is not ready"})
+                self.send_response(200)
+                self.send_header("Content-Type", "application/zip")
+                self.send_header("Content-Disposition", f'attachment; filename="{j.name}"')
+                self.send_header("Content-Length", str(len(j.data)))
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(j.data)
+                return None
             if u.path == "/api/report":
                 from . import report
                 q = parse_qs(u.query)
                 split = lambda k, d: [x for x in (q.get(k) or [d])[0].split(",") if x]   # noqa: E731
-                data, name = report.build(s, split("sections", ",".join(report.SECTIONS)), split("private", ""))
+                secs = split("sections", ",".join(report.DEFAULT_SECTIONS))
+                if (q.get("full") or ["0"])[0] == "1" and "oem_files_full" not in secs:
+                    secs.append("oem_files_full")
+                data, name = report.build(s, secs, split("private", ""))
                 want = (q.get("name") or [""])[0]
                 if re.fullmatch(r"uwcc-report-[\w.-]{1,80}\.zip", want):
                     name = want
@@ -298,6 +318,20 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(200, s.updater.status())
             elif path == "/api/update/download":
                 return self._json(200, s.updater.request_install())
+            elif path == "/api/service/restart":
+                log.info("restart requested from the window")
+                if not s.mock:
+                    threading.Timer(0.8, lambda: os._exit(3)).start()   # Restart=on-failure / SCM failure actions
+                return self._json(200, {"restarting": not s.mock})
+            elif path == "/api/report/start":
+                from . import report
+                secs = [x for x in (b.get("sections") or list(report.DEFAULT_SECTIONS)) if x in report.SECTIONS]
+                if b.get("full") and "oem_files_full" not in secs:
+                    secs.append("oem_files_full")
+                want = str(b.get("name") or "")
+                name = want if re.fullmatch(r"uwcc-report-[\w.-]{1,80}\.zip", want) else None
+                return self._json(200, report.Job.start(s, secs, [x for x in (b.get("private") or []) if x in report.PRIVATE],
+                                                        name).status())
             elif path == "/api/reveal":                    # the tray shows a downloaded file in Explorer
                 name = os.path.basename(str(b.get("name", "")))
                 if not name.startswith("uwcc-") or not s.tray_clients:
@@ -390,6 +424,9 @@ class Handler(BaseHTTPRequestHandler):
             s.settings_store.set("kb_timeout", v)
         elif key == "osd":
             s.settings_store.set("osd", bool(value))
+        elif key == "lc_hwoc":
+            s.settings_store.set("lc_hwoc", bool(value))
+            s.hwoc.wake.set()
         elif key == "history_record":
             s.settings_store.set("history_record", bool(value))
         elif key == "update_check":

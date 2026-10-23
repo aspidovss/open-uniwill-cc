@@ -6,7 +6,7 @@ of the ACPI device INOU0000, exactly like the Windows UWACPIDriver.sys does.
 """
 import os
 
-__version__ = "1.4.2"
+__version__ = "1.5.1"
 CONTACT = "OUCC@aspidov.ru"
 _build = None
 

@@ -14,7 +14,10 @@ import urllib.request
 PORT = int(os.environ.get("UWCC_PORT", "47321"))
 TOKEN_FILE = "/run/uwcc/token"
 TEXT = {
-    "en": {"mode0": "Office mode", "mode1": "Gaming mode", "mode2": "Turbo mode", "mode3": "Custom mode · {}",
+    "en": {"svc_down": "The Control Center service is not answering", "svc_down_body": "It has not answered for a minute.",
+           "svc_restart": "Restart the service", "svc_restarted": "The Control Center service is running again",
+           "svc_fail": "The service did not start", "svc_fail_body": "See: journalctl -u uwccd -b",
+           "mode0": "Office mode", "mode1": "Gaming mode", "mode2": "Turbo mode", "mode3": "Custom mode · {}",
            "hot_cpu": "CPU at {} °C", "hot_gpu": "GPU at {} °C",
            "hot_body": "It has stayed at or above {} °C for 30 seconds.",
            "hot_body_boost": "It has stayed at or above {} °C for 30 seconds. If it does not cool down within 30 seconds, Fan Boost turns on.",
@@ -32,7 +35,10 @@ TEXT = {
                            "Check the tubes and the coolant level, or run the filling cycle.",
            "lc_fan_boost": "Cooler fan boost {}", "lc_pump_boost": "Cooler pump boost {}", "on": "on", "off": "off",
            "lc_primed": "Liquid cooler: filling cycle finished"},
-    "ru": {"mode0": "Офисный режим", "mode1": "Игровой режим", "mode2": "Турборежим", "mode3": "Пользовательский режим · {}",
+    "ru": {"svc_down": "Служба Control Center не отвечает", "svc_down_body": "Она не отвечает уже минуту.",
+           "svc_restart": "Перезапустить службу", "svc_restarted": "Служба Control Center снова работает",
+           "svc_fail": "Служба не запустилась", "svc_fail_body": "Журнал: journalctl -u uwccd -b",
+           "mode0": "Офисный режим", "mode1": "Игровой режим", "mode2": "Турборежим", "mode3": "Пользовательский режим · {}",
            "hot_cpu": "ЦП нагрелся до {} °C", "hot_gpu": "ГП нагрелся до {} °C",
            "hot_body": "Температура держится на уровне {} °C и выше уже 30 секунд.",
            "hot_body_boost": "Температура держится на уровне {} °C и выше уже 30 секунд. Если за 30 секунд не остынет, включится турбовентиляция.",
@@ -150,9 +156,49 @@ def handle(ev, osd_enabled):
         subprocess.Popen(["uwcc"])
 
 
+def _service_answers(timeout=3):
+    try:
+        req = urllib.request.Request(f"http://127.0.0.1:{PORT}/api/state", headers={"X-UWCC-Token": token()})
+        urllib.request.urlopen(req, timeout=timeout).read()
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def offer_restart():
+    """After a minute without the service: a notification with a "Restart the service" button. systemctl asks polkit;
+    the rule /etc/polkit-1/rules.d/50-uwcc.rules lets members of group uwcc restart uwccd without a password."""
+    if not shutil.which("notify-send"):
+        return
+    try:
+        has_actions = "--action" in subprocess.run(["notify-send", "--help"], capture_output=True, text=True, timeout=3).stdout
+    except (OSError, subprocess.SubprocessError):
+        has_actions = False
+    if not has_actions:              # old libnotify: just tell the command
+        notify(T("svc_down"), T("svc_down_body") + "\nsudo systemctl restart uwccd", icon="dialog-warning", critical=True)
+        return
+    try:
+        r = subprocess.run(["notify-send", "-a", "Control Center", "-i", "dialog-warning", "-u", "critical", "--wait",
+                            f"--action=restart={T('svc_restart')}", T("svc_down"), T("svc_down_body")],
+                           capture_output=True, text=True, timeout=3600)
+    except (OSError, subprocess.SubprocessError):
+        return
+    if r.stdout.strip() != "restart":
+        return
+    subprocess.run(["systemctl", "restart", "uwccd.service"], check=False, timeout=120)
+    for _ in range(45):
+        time.sleep(1)
+        if _service_answers():
+            notify(T("svc_restarted"), icon="emblem-ok-symbolic")
+            return
+    notify(T("svc_fail"), T("svc_fail_body"), icon="dialog-error", critical=True)
+
+
 def main():
+    import threading
     osd_enabled = True
     last_state = 0
+    offline = {"since": None, "offered": False}
     while True:
         try:
             tok = token()
@@ -163,6 +209,7 @@ def main():
                 LANG["v"] = st["settings"].get("lang", "en")
                 set_touchpad(st["settings"].get("touchpad_enabled", True))
                 last_state = time.time()
+            offline.update(since=None, offered=False)
             req = urllib.request.Request(f"http://127.0.0.1:{PORT}/api/events?token={tok}")
             with urllib.request.urlopen(req, timeout=60) as r:
                 for raw in r:
@@ -187,6 +234,10 @@ def main():
             time.sleep(60)
         except Exception as e:  # noqa: BLE001
             print("uwcc-agent:", e, file=sys.stderr)
+            offline["since"] = offline["since"] or time.time()
+            if time.time() - offline["since"] >= 60 and not offline["offered"]:
+                offline["offered"] = True
+                threading.Thread(target=offer_restart, daemon=True).start()
             time.sleep(3)
 
 

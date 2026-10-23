@@ -456,7 +456,8 @@ class CustomModeService(MockService):
         resp = urllib.request.urlopen(r, timeout=60)
         self.assertEqual(resp.headers["X-UWCC-Filename"], "uwcc-report-test-1.zip")
         z = zipfile.ZipFile(_io.BytesIO(resp.read()))
-        self.assertEqual(sorted(z.namelist()), ["report.json", "report.txt", "uwccd.log"])
+        self.assertTrue({"report.json", "report.txt", "uwccd.log"} <= set(z.namelist()))
+        self.assertTrue(all(n.startswith(("report.", "uwccd.log", "acpi/", "oem/")) for n in z.namelist()))
         rep = json.loads(z.read("report.json"))
         self.assertEqual(rep["private_included"], ["mac"])
         self.assertIn("0700-07FF", rep["ec"]["dump"])
@@ -465,6 +466,21 @@ class CustomModeService(MockService):
         self.assertIn("project_id", self.get("report/summary"))
         self.assertEqual(self.post("reveal", {"name": "uwcc-report-test-1.zip"})[1], {"tray": False})
         self.assertIn("build", self.get("update"))
+        self.assertIn("acpi", rep)
+        self.assertIn("timings_s", rep)
+        st = self.post("report/start", {"sections": ["system", "ec"], "name": "uwcc-report-job-1.zip"})[1]
+        for _ in range(100):
+            if st["state"] != "running":
+                break
+            time.sleep(0.1)
+            st = self.get("report/status")
+        self.assertEqual((st["state"], st["name"]), ("done", "uwcc-report-job-1.zip"))
+        r = urllib.request.Request(f"http://127.0.0.1:{self.port}/api/report/file?id={st['id']}", headers={"X-UWCC-Token": TOKEN})
+        self.assertTrue(zipfile.ZipFile(_io.BytesIO(urllib.request.urlopen(r, timeout=30).read())).namelist())
+        self.assertNotIn("oem_files_full", rep["sections"])
+        from uwccd import report_oem
+        red = report_oem._redact_bytes("C:\\Users\\Иван\\x".encode("utf-16"), lambda t: t.replace("Иван", "<user>"))
+        self.assertEqual(red.decode("utf-16"), "C:\\Users\\<user>\\x")
 
     def test_history_export(self):
         r = urllib.request.Request(f"http://127.0.0.1:{self.port}/api/history/export?format=csv", headers={"X-UWCC-Token": TOKEN})
@@ -521,6 +537,53 @@ class UpdateAndBuildUnit(unittest.TestCase):
             uwccd._build = None
 
 
+class HwocUnit(unittest.TestCase):
+    def test_super_performance_flow(self):
+        sys.path.insert(0, ROOT)
+        from uwccd import hwoc
+        from uwccd.ec import MockEC
+        ec = MockEC(os.path.join(tempfile.mkdtemp(), "ec.json"))
+        ec.write(0x7C7, 0x12)                                   # level 4 (bits 2..4), cooler flag
+        lc_state = {"connected": False, "flow": "idle"}
+        calls = []
+
+        class O:
+            pass
+        svc = O()
+        svc.ec, svc.fan_control, svc.emit = ec, True, lambda *a: calls.append(a[0])
+        svc.settings_store = {"lc_hwoc": True}
+        svc.liquid = O()
+        svc.liquid.available, svc.liquid.ec_table, svc.liquid.status = True, True, lambda: lc_state
+        svc.power = O()
+        svc.power.manager, svc.power.option, svc.power.tables = "std", {"OperatingMode": 2}, O()
+        svc.power.set_user_profile = lambda m: calls.append(("profile", m))
+        h = hwoc.LiquidHWOC(svc)
+        hwoc.FLOW_STABLE = 0
+        h.update()
+        self.assertEqual((h.active, h.reason), (False, "cooler not connected"))
+        lc_state.update(connected=True, flow="ok")
+        h.update()
+        self.assertTrue(h.active)
+        self.assertEqual(ec.read(0xF5F), 5)                     # Turbo -> EC liquid-cooling table 5
+        self.assertTrue(h.table_loaded)
+        self.assertEqual((ec.pwup_calls, h.level), ([4], 4))
+        self.assertTrue(svc.power.tables.blocked)
+        svc.power.lc_override(0)                                # mode change while active -> Office table 7
+        self.assertEqual(ec.read(0xF5F), 7)
+        h.on_wmi(0xC2)
+        self.assertEqual(ec.pwup_calls[-1], 4)
+        lc_state.update(flow="fault")
+        h.update()
+        self.assertFalse(h.active)
+        self.assertFalse(svc.power.tables.blocked)
+        self.assertIsNone(svc.power.lc_override)
+        self.assertIn(("profile", 2), calls)
+        svc.settings_store["lc_hwoc"] = False
+        lc_state.update(flow="ok")
+        h.update()
+        self.assertEqual((h.active, h.reason), (False, "off"))
+
+
 class FanTableUnit(unittest.TestCase):
     def test_zero_filled_tail_is_unused(self):
         from uwccd.fan import normalize_points
@@ -541,6 +604,31 @@ class FanTableUnit(unittest.TestCase):
         t["GPU"][2]["UpT"] = 50
         with self.assertRaises(ValueError):
             ft.update("M2T1", {"GPU": t["GPU"]})
+
+
+class PlatformSupportUnit(unittest.TestCase):
+    def _pf(self, pid):
+        from uwccd import hw
+        class E:
+            def read(self, a): return pid if a == hw.R.PROJECT_ID else 0
+            def bit(self, a, b): return 0
+        orig = hw.project2ex_id
+        hw.project2ex_id = lambda ec, raw: raw
+        try:
+            return hw.Platform(E())
+        finally:
+            hw.project2ex_id = orig
+
+    def test_levels(self):
+        p = self._pf(0x10)
+        self.assertEqual((p.support, p.project_name, p.display_name), ("tested", "0x10", "MAIBENBEN Tsunami"))
+        p = self._pf(0x1A)
+        self.assertEqual((p.support, p.project_name), ("experimental", "0x1A"))
+        self.assertIn("Kuangshi", p.display_name)
+        self.assertEqual(self._pf(0x99).support, "experimental")
+        from uwccd import hw
+        known = next(k for k in hw.PROJECT_NAMES if k not in hw.TESTED_IDS)
+        self.assertEqual(self._pf(known).support, "known")
 
 
 if __name__ == "__main__":

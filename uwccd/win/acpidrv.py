@@ -3,6 +3,8 @@
   Read : DeviceIoControl(0x9C40A488, in = int32 addr,            out = 4 bytes, value = out & 0xFF)
   Write: DeviceIoControl(0x9C40A48C, in = int32 addr, int32 data, out = 4 bytes)
   SMRW : DeviceIoControl(0x9C40A500, in = {0xBB, key},           out = 4 bytes, value = out[0])
+  Method: DeviceIoControl(0x9C40A504, in = {char[4] name, int32 arg}, out = 4 bytes) — MyEcCtrl.SetHWOC("PUWP", level)
+          (the driver evaluates the INOU method; GCUService passes the name "PUWP" for the firmware's PWUP)
 """
 import struct
 import threading
@@ -14,6 +16,7 @@ DEVICE = r"\\.\ACPIDriver"
 IOCTL_EC_READ = 0x9C40A488
 IOCTL_EC_WRITE = 0x9C40A48C
 IOCTL_SMAPC = 0x9C40A500
+IOCTL_METHOD = 0x9C40A504
 
 
 class WinAcpiDriverEC(ECBase):
@@ -37,6 +40,13 @@ class WinAcpiDriverEC(ECBase):
     def _write(self, addr, val):
         with self.io:
             winapi.ioctl(self.h, IOCTL_EC_WRITE, struct.pack("<ii", addr, val), 4)
+
+    def _pwup(self, level):
+        with self.io:
+            try:
+                winapi.ioctl(self.h, IOCTL_METHOD, b"PUWP" + struct.pack("<i", level), 4)
+            except OSError as e:
+                raise ECError(f"PWUP: {e}") from e
 
     def _smrw(self, key):
         with self.io:

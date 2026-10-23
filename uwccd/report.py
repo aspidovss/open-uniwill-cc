@@ -18,6 +18,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import threading
 import time
 import zipfile
 
@@ -26,9 +27,11 @@ from . import regs as R
 
 log = logging.getLogger("uwccd.report")
 
-SECTIONS = ("system", "platform", "ec", "bios", "lighting", "nvidia", "sensors", "original", "cooler", "log", "settings")
+SECTIONS = ("system", "platform", "ec", "bios", "acpi", "firmware", "oem_registry", "oem_software", "oem_files", "oem_files_full",
+            "power", "lighting", "nvidia", "sensors", "original", "cooler", "log", "settings")
+DEFAULT_SECTIONS = tuple(s for s in SECTIONS if s != "oem_files_full")      # the complete OEM folders are large
 PRIVATE = ("serial", "uuid", "mac", "names", "apps")
-EC_AREAS = ((0x400, 0x100), (0x700, 0x100), (0xF00, 0x80))     # what the program reads during normal work
+EC_AREAS = ((0x400, 0x100), (0x700, 0x100), (0xD40, 0x10), (0xF00, 0x80))  # areas GCUService reads (0xD48: LC HWOC support)
 HIDDEN = "<hidden>"
 MAC_RE = re.compile(r"\b[0-9A-Fa-f]{2}(?:[:-][0-9A-Fa-f]{2}){5}\b")
 USER_PATH_RE = re.compile(r"(?i)([A-Z]:\\{1,2}Users\\{1,2})([^\\/\"'\s]+)|(/home/)([^/\"'\s]+)")
@@ -166,29 +169,7 @@ def bios_info(svc):
                                    "verified": _safe(lambda: nv.verify(svc.pf.project_id))}
     p = getattr(svc, "power", None)
     out["firmware_limits"] = _safe(lambda: (p.status() or {}).get("limits")) if p is not None else None
-    if sys.platform == "win32":
-        out["registry"] = _safe(_win_registry)
     return out
-
-
-def _win_registry():
-    import winreg
-    res = {}
-    for path in (r"SOFTWARE\OEM\GamingCenter2", r"SOFTWARE\OEM\GamingCenter", r"SOFTWARE\OEM"):
-        try:
-            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, path) as k:
-                vals, i = {}, 0
-                while True:
-                    try:
-                        n, v, _t = winreg.EnumValue(k, i)
-                    except OSError:
-                        break
-                    vals[n] = v.hex(" ") if isinstance(v, bytes) else v
-                    i += 1
-                res[path] = vals
-        except OSError:
-            continue
-    return res
 
 
 def lighting_info(svc):
@@ -329,10 +310,43 @@ def summary(svc):
             "project_id": f"0x{svc.pf.project_id:X}", "cpu": getattr(svc.monitor, "cpu_model", None),
             "os": platform_mod.platform(), "nvidia": svc.pf.nv_gpu,
             "keyboard": f"{kb.get('kind')} {dev.get('pid', '')} fw {dev.get('fw', '')}".strip(),
-            "fan_control": getattr(svc, "fan_control", None)}
+            "fan_control": getattr(svc, "fan_control", None), "support": getattr(svc.pf, "support", None)}
 
 
-def build(svc, sections=SECTIONS, private=()):
+class Job:
+    """One report at a time in the background: the window asks for it, polls, then downloads the ready file."""
+    lock = threading.Lock()
+    current = None
+
+    def __init__(self, svc, sections, private, name=None):
+        self.id = f"{int(time.time() * 1000):x}"
+        self.state, self.started, self.error, self.data, self.name, self.took = "running", time.time(), None, None, name, None
+        threading.Thread(target=self._run, args=(svc, sections, private), daemon=True, name="report").start()
+
+    def _run(self, svc, sections, private):
+        try:
+            data, name = build(svc, sections, private)
+            self.data, self.name = data, self.name or name
+            self.state = "done"
+        except Exception as e:  # noqa: BLE001
+            log.exception("diagnostic report")
+            self.state, self.error = "error", str(e)
+        self.took = round(time.time() - self.started, 1)
+
+    def status(self):
+        return {"id": self.id, "state": self.state, "error": self.error, "name": self.name,
+                "size": len(self.data) if self.data else None,
+                "elapsed": round((self.took if self.took is not None else time.time() - self.started), 1)}
+
+    @classmethod
+    def start(cls, svc, sections, private, name=None):
+        with cls.lock:
+            if cls.current is None or cls.current.state != "running":
+                cls.current = cls(svc, sections, private, name)
+            return cls.current
+
+
+def build(svc, sections=DEFAULT_SECTIONS, private=()):
     """-> (zip bytes, file name)."""
     sections = [s for s in sections if s in SECTIONS]
     private = [p for p in private if p in PRIVATE]
@@ -346,11 +360,45 @@ def build(svc, sections=SECTIONS, private=()):
         "original": original_info, "cooler": lambda: cooler_info(svc, private),
         "settings": lambda: settings_info(svc, private),
     }
-    for name in sections:
-        if name in collectors:
-            data[name] = _safe(collectors[name])
-    data["took_s"] = round(time.time() - t0, 1)
+    from . import report_oem as O
     secrets_ = _secrets(private)
+    extra = {}                                       # more files for the zip (ACPI tables, OEM files)
+
+    def with_files(fn):
+        def run():
+            summary_, files = fn()
+            extra.update(files)
+            return summary_
+        return run
+    redact_text = lambda t: _redact(t, private, secrets_)          # noqa: E731
+    collectors.update({
+        "acpi": with_files(O.acpi_tables), "firmware": O.firmware_info, "oem_registry": O.oem_registry,
+        "oem_software": O.oem_software, "power": O.power_info,
+        "oem_files": with_files(lambda: O.oem_files("oem_files_full" in sections, redact_text)),
+    })
+    if "oem_files_full" in sections and "oem_files" not in sections:
+        sections.insert(sections.index("oem_files_full"), "oem_files")
+    # collectors run in parallel: several of them wait for PowerShell / WMI on Windows
+    from concurrent.futures import ThreadPoolExecutor
+    timings = {}
+
+    def timed(name):
+        t1 = time.time()
+        try:
+            return _safe(collectors[name])
+        finally:
+            timings[name] = round(time.time() - t1, 1)
+    todo = [n for n in sections if n in collectors]
+    with ThreadPoolExecutor(max_workers=6, thread_name_prefix="report") as ex:
+        for name, res in zip(todo, ex.map(timed, todo)):
+            data[name] = res
+    data["timings_s"] = timings
+    if isinstance(data.get("summary"), dict):
+        data["summary"]["known_board_elsewhere"] = O.board_hint(data["summary"].get("board")).get("known_elsewhere")
+        reg = data.get("oem_registry")
+        if isinstance(reg, dict) and reg.get("official_program"):
+            data["summary"]["official_program"] = reg["official_program"]
+    data["took_s"] = round(time.time() - t0, 1)
     js = _redact(json.dumps(data, indent=1, ensure_ascii=False, default=str), private, secrets_)
     s = data["summary"] if isinstance(data["summary"], dict) else {}
     txt = ["open-uniwill-cc diagnostic report", "=" * 34] + [f"{k:12} {v}" for k, v in s.items()]
@@ -360,6 +408,8 @@ def build(svc, sections=SECTIONS, private=()):
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr("report.json", js)
         z.writestr("report.txt", _redact("\n".join(txt) + "\n", private, secrets_))
+        for path, blob in sorted(extra.items()):
+            z.writestr(path, blob)
         if "log" in sections:
             lt = _safe(log_tail)
             z.writestr("uwccd.log", _redact(lt, private, secrets_) if isinstance(lt, str) else json.dumps(lt))

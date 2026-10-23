@@ -1,0 +1,10 @@
+// open-uniwill-cc: members of group "uwcc" may start / stop / restart the uwccd service without a password
+// (used by the "Restart the service" button of the Control Center agent).
+polkit.addRule(function (action, subject) {
+    if (action.id == "org.freedesktop.systemd1.manage-units" &&
+        action.lookup("unit") == "uwccd.service" &&
+        ["start", "stop", "restart"].indexOf(action.lookup("verb")) >= 0 &&
+        subject.isInGroup("uwcc")) {
+        return polkit.Result.YES;
+    }
+});
