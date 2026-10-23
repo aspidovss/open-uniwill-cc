@@ -36,5 +36,5 @@ Thank you to all of them.
 ## Reverse-engineering note
 
 The analysis was done on legally obtained software, only to the extent needed to make open-uniwill-cc work with the
-hardware (see e.g. Art. 6 of Directive 2009/24/EC and Art. 1280 of the Civil Code of the Russian Federation).
+hardware (see e.g. Art. 6 of Directive 2009/24/EC).
 The analysis tools in [`tools/re/`](tools/re/) are our own (MIT) and contain no OEM code.

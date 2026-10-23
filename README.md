@@ -26,6 +26,11 @@ An open replacement for the **Uniwill "Control Center"** (5.52.x) of Uniwill-bas
 **Linux** and **Windows**: performance modes, fan curves, CPU/GPU power limits, RGB keyboard, battery care,
 hardware switches — plus Bluetooth control of the **XMG Oasis** liquid cooler and its twins.
 
+**Everything runs in a standalone background service** (`uwccd`, systemd on Linux, a Windows service): it applies
+your settings at boot and after sleep and keeps the fan curves, power limits and the liquid cooler working with no
+window open — without the original OEM service and its Microsoft Store app. The window, the tray app and
+the `uwccctl` command line are only remote controls for it.
+
 > **Unofficial.** Not affiliated with or supported by Uniwill or any laptop vendor. It writes to the embedded
 > controller (EC) of your laptop exactly like the original service does, but use it at your own risk.
 > The original Control Center can be restored at any time (see *Uninstall*).
