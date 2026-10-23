@@ -106,7 +106,7 @@ input[type=color]{width:42px;height:34px;border:1px solid var(--line);border-rad
 .slider output{text-align:right;color:var(--acc);font-weight:650}
 input[type=range]{accent-color:var(--acc);width:100%}
 /* fans */
-.curve{width:100%;height:auto;background:var(--bg1);border-radius:10px;margin:14px 0 6px;touch-action:none}
+.curve{width:100%;height:auto;background:var(--bg1);border-radius:10px;margin:14px 0 6px;touch-action:none;user-select:none;-webkit-user-select:none}
 .curve .grid line{stroke:#1f2830}.curve text{fill:#6d7c88;font-size:11px}
 .curve .pt{fill:var(--acc);stroke:#002b25;stroke-width:2;cursor:grab}
 .curve .pt.gpu{fill:var(--gpu)}

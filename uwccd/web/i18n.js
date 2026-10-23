@@ -61,7 +61,7 @@ const RU = {
   "start": "старт", "On, °C": "Вкл, °C", "Temperature to enter this level (255 — unused)": "Температура перехода на этот уровень (255 — не используется)",
   "Off, °C": "Выкл, °C", "Temperature to return to the previous level": "Температура возврата на предыдущий уровень", "Speed, %": "Скорость, %",
   "Fan speed (255 — level unused)": "Скорость вентилятора (255 — уровень не используется)",
-  "{0}: level temperatures must increase (level {1})": "{0}: температуры уровней должны возрастать (уровень {1})",
+  "{0}: level temperatures must increase (level {1})": "{0}: температуры уровней должны возрастать (уровень {1})", "{0}: level temperatures must not decrease (level {1})": "{0}: температуры уровней не должны убывать (уровень {1})",
   "Table saved": "Таблица сохранена", "Restore the factory curve for “{0}”?": "Вернуть заводскую кривую для «{0}»?",
   "Factory table restored": "Заводская таблица восстановлена", "PL1 on AC": "PL1 от сети", "PL2 on AC": "PL2 от сети",
   "PL1 on battery": "PL1 от батареи", "PL2 on battery": "PL2 от батареи", "Power limits applied": "Лимиты мощности применены",

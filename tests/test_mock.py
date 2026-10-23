@@ -317,6 +317,18 @@ class FanTableUnit(unittest.TestCase):
         self.assertEqual(pts[1]["UpT"], 50)
         self.assertTrue(all(p["UpT"] == 255 and p["Duty"] == 255 for p in pts[2:]))
 
+    def test_equal_level_temperatures_allowed(self):
+        from uwccd.fan import FanTables, empty_table
+        t = empty_table("M2T1")
+        for i, (u, d, du) in enumerate([(0, 48, 0), (55, 56, 30), (55, 58, 30), (57, 58, 30), (66, 255, 55)]):
+            t["GPU"][i].update(UpT=u, DownT=d, Duty=du)
+        ft = FanTables.__new__(FanTables)
+        ft.tables, ft.save = {"M2T1": t}, lambda _t: None
+        self.assertEqual(ft.update("M2T1", {"GPU": t["GPU"]})["GPU"][2]["UpT"], 55)   # factory 55/55 °C
+        t["GPU"][2]["UpT"] = 50
+        with self.assertRaises(ValueError):
+            ft.update("M2T1", {"GPU": t["GPU"]})
+
 
 if __name__ == "__main__":
     unittest.main()

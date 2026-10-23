@@ -2,8 +2,10 @@
 
 ## 1.3.2
 
-- Fan curves: levels after the first unused one are ignored; ECs that pad unused levels with zeros no longer
-  cause "level temperatures must increase" when saving a table (seen on project 0x10).
+- Fan curves: two levels may start at the same temperature — factory tables do that (e.g. 55/55 °C on project
+  0x10), which made saving fail with "level temperatures must increase". Decreasing temperatures are still refused.
+- Fan curves: levels after the first unused one are ignored; ECs that pad unused levels with zeros are handled.
+- Fan curve editor: dragging points works on Windows (no text selection; the drag no longer stops after the first move).
 
 ## 1.3.1 — 2026-10-23 — first public release
 

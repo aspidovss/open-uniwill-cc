@@ -265,8 +265,8 @@ class FanTables:
             normalize_points(pts)
             active = [p for i, p in enumerate(pts) if not level_unused(pts, i)]
             for a, b in zip(active, active[1:]):
-                if b["UpT"] <= a["UpT"]:
-                    raise ValueError(f"{kind}: level temperatures must increase")
+                if b["UpT"] < a["UpT"]:          # equal is fine: factory tables repeat temperatures
+                    raise ValueError(f"{kind}: level temperatures must not decrease")
             if len(active) > 1 and active[-1]["Duty"] < 40:
                 raise ValueError(f"{kind}: the highest level must run the fan at 40 % or more")
         if "FanControlRespective" in data:

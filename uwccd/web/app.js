@@ -341,6 +341,7 @@ $$("#fan-presets button").forEach(b => b.addEventListener("click", () => {
 $$("#fan-kind-seg button").forEach(b => b.addEventListener("click", () => { fanKind = b.dataset.k; $$("#fan-kind-seg button").forEach(x => x.classList.toggle("on", x === b)); drawCurve(); drawPts(); }));
 function activePts() { return edit[fanKind].map((p, i) => ({ ...p, i })).filter(p => p.Duty <= 100 && (p.i === 0 || p.UpT < 255)); }
 const CX = t => 50 + (t - 20) / 80 * 570, CY = d => 270 - d / 100 * 250, TX = x => Math.round(20 + (x - 50) / 570 * 80), DY = y => Math.round((270 - y) / 250 * 100);
+let curveDrag = null;
 function drawCurve() {
   const svg = $("#curve"); const pts = activePts();
   let g = '<g class="grid">';
@@ -357,22 +358,31 @@ function drawCurve() {
   let circles = "";
   pts.forEach(p => { circles += `<circle class="pt ${fanKind === "GPU" ? "gpu" : ""}" data-i="${p.i}" r="7" cx="${CX(Math.max(20, p.i === 0 ? 20 : p.UpT))}" cy="${CY(p.Duty)}"><title>${t("Level")} ${p.i}: ${p.i ? p.UpT + "°C" : t("start")} → ${p.Duty}%</title></circle>`; });
   svg.innerHTML = g + `<path d="${path}" fill="none" stroke="${col}" stroke-width="2.5"/>` + circles;
-  let drag = null;
-  svg.onpointerdown = e => { const c = e.target.closest(".pt"); if (c) { drag = +c.dataset.i; svg.setPointerCapture(e.pointerId); } };
+  // the drag state lives outside drawCurve(): the SVG is re-rendered on every move
+  svg.onpointerdown = e => {
+    e.preventDefault();                       // no text selection / native drag (Edge, WebKitGTK)
+    const c = e.target.closest(".pt"); if (c) { curveDrag = +c.dataset.i; svg.setPointerCapture(e.pointerId); }
+  };
   svg.onpointermove = e => {
+    const drag = curveDrag;
     if (drag == null) return;
+    e.preventDefault();
     const r = svg.getBoundingClientRect(), x = (e.clientX - r.left) / r.width * 640, y = (e.clientY - r.top) / r.height * 300;
     const P = edit[fanKind], p = P[drag];
     p.Duty = Math.max(0, Math.min(100, DY(y)));
     if (drag > 0) {
-      const lo = drag > 1 ? P[drag - 1].UpT + 1 : 21, hiP = P[drag + 1];
-      const hi = hiP && hiP.UpT < 255 ? hiP.UpT - 1 : 100;
+      // equal neighbours are allowed: factory tables use them (e.g. 55/55 °C)
+      const lo = drag > 1 ? P[drag - 1].UpT : 21, hiP = P[drag + 1];
+      const hi = hiP && hiP.Duty <= 100 && hiP.UpT > 0 && hiP.UpT < 255 ? hiP.UpT : 100;
       p.UpT = Math.max(lo, Math.min(hi, TX(x)));
       if (P[drag - 1].DownT >= p.UpT && drag - 1 >= 0) P[drag - 1].DownT = Math.max(0, p.UpT - 2);
     }
     drawCurve(); drawPts();
   };
-  svg.onpointerup = () => { drag = null; };
+  svg.onpointerup = svg.onpointercancel = e => {
+    if (curveDrag != null && svg.hasPointerCapture(e.pointerId)) svg.releasePointerCapture(e.pointerId);
+    curveDrag = null;
+  };
 }
 function drawPts() {
   const tb = $("#pts"); tb.innerHTML = "";
@@ -395,7 +405,7 @@ $("#btn-table-save").addEventListener("click", () => act(async () => {
     for (let i = 0; i < 16; i++) {
       const p = edit[k][i];
       if (p.Duty > 100 || (i > 0 && (p.UpT >= 255 || p.UpT === 0))) break;
-      if (prev !== null && p.UpT <= prev) throw new Error(t("{0}: level temperatures must increase (level {1})", k, i));
+      if (prev !== null && p.UpT < prev) throw new Error(t("{0}: level temperatures must not decrease (level {1})", k, i));
       prev = p.UpT;
     }
   }
