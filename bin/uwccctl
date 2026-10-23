@@ -358,6 +358,9 @@ def main(a):
         nv = Nvram()
         nv.verify(ec.read(0x740))
         nv.set("ApExistFlag", 0)
+        if nv.get("MemoryOverClockSupport") == 1 and nv.get("MemoryOverClockSwitch"):
+            nv.set("MemoryOverClockSwitch", 0)     # SetFwVarsForUninstall: no RAM overclocking without the program
+            print("RAM overclocking switched off (BIOS, next start)")
         print("fan control returned to the EC")
     else:
         sys.exit(__doc__)

@@ -15,6 +15,12 @@ The original service has two different mode managers and picks one by the projec
 | Limits | from the factory fan tables | from the firmware **Smart APC table** (ACPI `SMRW`) |
 
 In Custom mode the Fn mode key steps through the five slots. Each slot can be reset to the factory values (its curve too).
+
+**Super performance** (per Custom slot, `OverClockingEnabled` / `LoadOverClockingValue`): fan mode byte `0x751 = 0x10`
+(Turbo) with the Custom flag `0x726` bit 7 cleared, the factory `DefaultFanTable_Turbo`, cTGP = maximum + Dynamic Boost
+with Dynamic Boost off. **RAM overclocking** on top of it when `UniWillVariable.MemoryOverClockSupport = 1`: the slot's
+switch goes to `UniWillVariable.MemoryOverClockSwitch`, which the BIOS applies at the next boot; written only on user
+actions, 0 in other modes or with super performance off.
 `uwccctl status` shows which manager runs (`[cml]` / `[std]`). If the choice is wrong for your laptop it can be forced with
 `"fan_manager": "cml"` or `"std"` in `settings.json` (Linux `/var/lib/uwcc`, Windows `%ProgramData%\UWCC\data`), then restart the service.
 Not ported from the RamFan1p5 manager (Windows APIs): GPU core/memory clock offsets and target temperature (NVAPI),

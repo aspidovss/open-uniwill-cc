@@ -178,3 +178,27 @@ class Nvram:
         except OSError as e:
             if e.errno not in (errno.ENOTTY, errno.EINVAL):
                 log.debug("chattr -i: %s", e)
+
+
+class MockNvram(Nvram):
+    """UniWillVariable in memory for --mock and the tests (UWCC_MOCK_MEMOC=0: no RAM overclocking support)."""
+
+    def __init__(self, mem_oc=None):
+        super().__init__(allow_write=True)
+        if mem_oc is None:
+            mem_oc = os.environ.get("UWCC_MOCK_MEMOC", "1") != "0"
+        self.available = True
+        self._data = bytearray(self.size)
+        off = self.layout["MemoryOverClockSupport"][0]
+        self._data[off] = 1 if mem_oc else 0
+
+    def _raw(self):
+        return (7).to_bytes(4, "little"), bytearray(self._data)
+
+    def set(self, field, value):
+        if not (self.allow_write and self.verified):
+            return False
+        off, size, _ = self.layout[field]
+        self._data[off:off + size] = int(value).to_bytes(size, "little")
+        log.info("NVRAM (mock) %s=%s", field, value)
+        return True

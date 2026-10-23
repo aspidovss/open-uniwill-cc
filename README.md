@@ -51,7 +51,8 @@ the `uwccctl` command line are only remote controls for it.
 
 ## Features
 
-- **Modes** Office / Gaming / Turbo (and **Custom** with 5 named slots on platforms that have it), the Fn mode key, Fan Boost
+- **Modes** Office / Gaming / Turbo (and **Custom** with 5 named slots on platforms that have it), the Fn mode key, Fan Boost;
+  **super performance** in Custom slots (Turbo fans, maximum graphics power) with **RAM overclocking** where the BIOS supports it
 - **Power limits** PL1 / PL2 / PL4, NVIDIA cTGP and Dynamic Boost — within the limits the firmware reports
 - **Temperature limits** per mode / profile: CPU in °C (85–100 °C, optionally down to 60 °C) and NVIDIA GPU target
   temperature

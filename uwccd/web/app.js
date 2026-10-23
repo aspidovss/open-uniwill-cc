@@ -274,10 +274,10 @@ function renderModes() {
 // ---------------------------------------------------------------- profile editor (RamFan1p5 manager)
 let pe = null, dbStatus = null;
 (async () => { try { dbStatus = await api("dynamic-boost"); } catch (_) {} })();
-function renderProfileEditor() {
+function renderProfileEditor(force) {
   const name = S.power.current_profile, prof = S.profiles[name], L = S.power.limits || {};
   if (!prof) return;
-  if (pe && pe.Name === name && $("#pe-rows").contains(document.activeElement)) return;   // user is editing
+  if (!force && pe && pe.Name === name && $("#pe-rows").contains(document.activeElement)) return;   // user is editing
   if (!pe || pe.Name !== name) pe = JSON.parse(JSON.stringify(prof));
   const custom = name.startsWith("Mode4");
   $("#pe-title").textContent = custom ? t("Custom slot: {0}", slotName(prof, +name.slice(-1))) : t("Profile settings: {0}", tableLabel(prof.FAN.TableName));
@@ -294,14 +294,29 @@ function renderProfileEditor() {
     return [r, o];
   };
   const toggle = (sect, key, after) => {
-    const c = h("input", { type: "checkbox" }); c.checked = !!pe[sect][key];
-    c.addEventListener("change", () => { pe[sect][key] = c.checked ? 1 : 0; if (after) after(); });
+    const obj = sect ? pe[sect] : pe;
+    const c = h("input", { type: "checkbox" }); c.checked = !!obj[key];
+    c.addEventListener("change", () => { obj[key] = c.checked ? 1 : 0; if (after) after(); });
     return h("label", { class: "sw" }, c, h("span"));
   };
   if (custom) {
     const inp = h("input", { type: "text", maxlength: 24, value: slotName(prof, +name.slice(-1)) });
     inp.addEventListener("input", () => { pe.CustomizeName = inp.value; });
     row(t("Slot name"), t("Shown here, on the fan page and in notifications"), inp);
+    // LoadOverClockingValue of the original: Turbo fan mode + factory Turbo curve, maximum graphics power, RAM OC
+    const M = S.power.mem_oc || {};
+    pe.MEM = pe.MEM || { MemoryOverClockSwitch: 0 };
+    row(t("Super performance"), t("Turbo fan mode with the factory Turbo fan curve and the maximum graphics power (cTGP + Dynamic Boost). The slot's fan curve and graphics settings are not used while it is on."),
+      toggle("", "OverClockingEnabled", () => renderProfileEditor(true)));
+    if (M.support) {
+      const sw = toggle("MEM", "MemoryOverClockSwitch");
+      if (!pe.OverClockingEnabled) { sw.querySelector("input").disabled = true; sw.classList.add("off"); }
+      row(t("RAM overclocking"), (pe.OverClockingEnabled ? "" : t("Needs super performance. ")) +
+        t("The BIOS raises the memory frequency at the next start of the laptop. Unstable memory can keep the laptop from starting — then reset the BIOS settings to defaults."), sw,
+        h("small", { class: M.pending ? "warn-text" : "muted" }, M.pending ? t("Restart to apply") : (M.on ? t("on") : t("off"))));
+    } else if (pe.OverClockingEnabled) {
+      rows.append(h("div", { class: "pe-row" }, h("div", { class: "lbl" }, h("small", { class: "muted" }, t("RAM overclocking: the BIOS of this laptop does not report support for it."))), h("span"), h("span")));
+    }
   }
   const W = t("W");
   // PL1 <= PL2 <= PL4: raising a lower limit pushes the higher ones up, a higher one cannot go below the lower one
@@ -350,7 +365,7 @@ function renderProfileEditor() {
     }
     if (L.db_support) {
       [r, o] = slider("GPU", "DynamicBoost", 0, L.db_max, W);
-      row(t("Dynamic Boost"), t("Lets the graphics card take power from the processor"), h("div", { class: "row", style: "flex:1" }, toggle("GPU", "DynamicBoostSwitch", () => renderProfileEditor()), r), o);
+      row(t("Dynamic Boost"), t("Lets the graphics card take power from the processor"), h("div", { class: "row", style: "flex:1" }, toggle("GPU", "DynamicBoostSwitch", () => renderProfileEditor(true)), r), o);
       if (dbStatus && dbStatus.service && !dbStatus.active) {
         const msg = dbStatus.present ? t("{0} is not running — Dynamic Boost has no effect until it is started.", dbStatus.service)
           : t("{0} is not installed — Dynamic Boost has no effect. Install it with the NVIDIA driver.", dbStatus.service);
@@ -371,7 +386,11 @@ $("#pe-apply").addEventListener("click", () => {
       DynamicBoostSwitch: pe.GPU.DynamicBoostSwitch, DynamicBoost: pe.GPU.DynamicBoost } };
   if (L.gpu_temp && S.platform.nv_gpu) Object.assign(body.GPU, { TargetTemperatureSwitch: pe.GPU.TargetTemperatureSwitch ? 1 : 0, TargetTemperature: pe.GPU.TargetTemperature });
   if (!S.platform.nv_gpu) delete body.GPU;
-  if (pe.Name.startsWith("Mode4")) body.CustomizeName = pe.CustomizeName;
+  if (pe.Name.startsWith("Mode4")) {
+    body.CustomizeName = pe.CustomizeName;
+    body.OverClockingEnabled = pe.OverClockingEnabled ? 1 : 0;
+    if ((S.power.mem_oc || {}).support) body.MEM = { MemoryOverClockSwitch: pe.OverClockingEnabled && pe.MEM && pe.MEM.MemoryOverClockSwitch ? 1 : 0 };
+  }
   act(async () => { await api("profiles/" + pe.Name, body, "PUT"); pe = null; }, t("Profile applied"));
 });
 $("#pe-reset").addEventListener("click", () => {
@@ -916,7 +935,7 @@ $("#lc-prime").addEventListener("click", () => {
   if (confirm(t("Start the coolant filling cycle (about 70 seconds)?"))) lcPost("prime", {});
 });
 $("#lc-hwoc").addEventListener("change", e => act(() => api("setting", { key: "lc_hwoc", value: e.target.checked }),
-  e.target.checked ? t("Super performance on") : t("Super performance off")));
+  e.target.checked ? t("Liquid cooling power boost on") : t("Liquid cooling power boost off")));
 for (const [id, key] of [["lc-guard", "flow_guard"], ["lc-notify", "notify_flow"], ["lc-bfan", "boost_fan"], ["lc-bpump", "boost_pump"]])
   $("#" + id).addEventListener("change", e => lcPost("config", { [key]: e.target.checked }));
 
@@ -1423,6 +1442,7 @@ function connect() {
     if (m.type === "monitor") return onMonitor(m.data);
     if (m.type === "mode" && m.data.osd) osd(m.data.mode === 3 ? `Custom · ${slotName(S?.profiles?.["Mode4_Profile" + ((m.data.slot || 0) + 1)], (m.data.slot || 0) + 1)}` : (MODES[m.data.mode]?.osd || ""));
     if (m.type === "overheat") toast(t("{0} at {1} °C for 30 seconds", m.data.sensor === "gpu" ? t("GPU") : t("CPU"), m.data.temp), true);
+    if (m.type === "mem_oc") toast(m.data.on ? t("RAM overclocking is applied after a restart") : t("RAM overclocking is switched off after a restart"));
     if (m.type === "overheat_boost") toast(t("Fan Boost turned on because of overheating"), true);
     if (m.type === "fanboost" && m.data.osd) osd(m.data.on ? "FanBoostOn" : "FanBoostOff");
     if (m.type === "lc" && m.data.event === "flow_fault") toast(t("Liquid cooler: no coolant flow! Check the tubes and the coolant level."), true);

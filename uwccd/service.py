@@ -17,7 +17,7 @@ from .fan_std import PowerManagerStd
 from .hw import Platform
 from .lighting.keyboard import KeyboardManager
 from .monitor import Monitor
-from .nvram import Nvram
+from .nvram import MockNvram, Nvram
 from .settings import BatteryManager, SettingsManager
 from .watercooler import LiquidCooler
 
@@ -47,7 +47,7 @@ class Service:
         self.pf = Platform(self.ec)
         log.info("project %s (raw 0x%X), ramfan1.5=%s turbo=%s nv=%s amd=%s", self.pf.project_name,
                  self.pf.project_raw, self.pf.ramfan15, self.pf.turbo_support, self.pf.nv_gpu, self.pf.amd)
-        self.nvram = Nvram(allow_write=not mock)
+        self.nvram = MockNvram() if mock else Nvram()
         self.nvram.verify(self.pf.project_raw)
         self.settings_store = store.Settings()
         apply_debug(self.settings_store.get("debug", False) or os.environ.get("UWCC_DEBUG") == "1")

@@ -369,6 +369,33 @@ class CustomModeService(MockService):
         self.assertEqual(self.post("mode", {"mode": 1})[0], 200)
         self.assertFalse(self.ec(0x726) & 0x80)
 
+    def test_super_performance_and_ram_oc(self):
+        self.assertTrue(self.get("state")["power"]["mem_oc"]["support"])
+        self.assertEqual(self.post("profiles/Mode2_Profile1",
+                                   {"OverClockingEnabled": 1}, "PUT")[0], 400)          # Custom slots only
+        self.assertEqual(self.post("mode", {"mode": 3})[0], 200)
+        self.assertEqual(self.post("profile", {"mode": 3, "index": 0})[0], 200)
+        self.assertEqual(self.post("mode", {"mode": 3})[0], 200)
+        code, _ = self.post("profiles/Mode4_Profile1", {"OverClockingEnabled": 1, "MEM": {"MemoryOverClockSwitch": 1}}, "PUT")
+        self.assertEqual(code, 200)
+        self.assertEqual(self.ec(0x751) & 0xBF, 0x10)              # Turbo fan mode
+        self.assertFalse(self.ec(0x726) & 0x80)                    # SetFanMode(2) clears the Custom flag
+        st = self.get("state")["power"]
+        self.assertTrue(st["overclocking"])
+        self.assertEqual((st["mem_oc"]["on"], st["mem_oc"]["pending"]), (True, True))
+        self.assertEqual(self.get("nvram")["MemoryOverClockSwitch"], 1)
+        # super performance off -> RAM overclocking off in the BIOS variable
+        self.assertEqual(self.post("profiles/Mode4_Profile1", {"OverClockingEnabled": 0}, "PUT")[0], 200)
+        self.assertEqual(self.get("nvram")["MemoryOverClockSwitch"], 0)
+        self.assertTrue(self.ec(0x726) & 0x80)
+        self.assertFalse(self.get("state")["power"]["mem_oc"]["pending"])
+        # on again, then another mode -> 0
+        self.post("profiles/Mode4_Profile1", {"OverClockingEnabled": 1}, "PUT")
+        self.assertEqual(self.get("nvram")["MemoryOverClockSwitch"], 1)
+        self.assertEqual(self.post("mode", {"mode": 1})[0], 200)
+        self.assertEqual(self.get("nvram")["MemoryOverClockSwitch"], 0)
+        self.assertEqual(self.post("profile-reset/Mode4_Profile1", {})[0], 200)
+
     def test_automation_settings(self):
         self.assertEqual(self.post("setting", {"key": "mode_on_battery", "value": 0})[0], 200)
         self.assertEqual(self.post("setting", {"key": "mode_on_ac", "value": "previous"})[0], 200)

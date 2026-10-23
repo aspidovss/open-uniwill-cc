@@ -11,8 +11,13 @@ Compared with the commercial (_CML) manager it has:
   * limits from the firmware "Smart APC" table (ACPI method SMRW): PL1/PL2/PL4 maxima, TCC offset maximum,
     cTGP range above the default TGP, Dynamic Boost maximum;
   * an optional fan "switch speed" (0x787).
-Windows-only parts of the original are not ported: GPU core/memory clock offsets and target temperature
-(NVAPI), CPU core voltage offset (Intel OC SDK), WhisperMode (NVAPI), memory overclock (BIOS variable).
+Custom slots can switch on "super performance" (profile OverClockingEnabled, LoadOverClockingValue): the EC
+runs the Turbo fan mode with the factory Turbo fan table, the graphics card gets cTGP maximum + Dynamic Boost,
+and — when the BIOS reports MemoryOverClockSupport in UniWillVariable — the slot's RAM overclocking switch is
+written to the BIOS variable MemoryOverClockSwitch (applied by the BIOS at the next start). Like the original,
+the variable is only written on user actions, and it is set back to 0 in any other mode or with super
+performance off.
+Not ported: GPU core/memory clock offsets (NVAPI), CPU core voltage offset (Intel OC SDK), WhisperMode.
 """
 import copy
 import threading
@@ -158,6 +163,9 @@ class PowerManagerStd(PowerManager):
         self.fan_safety = False
         self.tcc_extended = False      # settings: allow a CPU temperature limit down to TJMAX - TCC_EXTENDED
         self.gputemp = None            # GpuTargetTemperature (set by the service)
+        # RAM overclocking: the BIOS publishes support in UniWillVariable and applies the switch at boot
+        self.mem_oc_support = bool(nvram and nvram.verified and nvram.get("MemoryOverClockSupport") == 1)
+        self.mem_oc_boot = nvram.get("MemoryOverClockSwitch") if self.mem_oc_support else None
 
     # The original UI let the per-profile "Temperature Limit" go past the Smart APC TccOffset (5 on MAIBENBEN
     # project 0x10): its saved profiles hold 10 and 15. So: at least 15 (Tjmax - 15 = 85 °C), 40 when extended.
@@ -293,9 +301,20 @@ class PowerManagerStd(PowerManager):
     def refresh_current_profile(self, mode):
         self.current = self.profiles[self.profile_name(mode)]
 
+    def overclocking(self, mode=None, p=None):
+        """Super performance is on: a Custom slot with OverClockingEnabled."""
+        mode = self.option.get("OperatingMode") if mode is None else mode
+        p = self.current if p is None else p
+        return mode == MODE_CUSTOM and (p or {}).get("OverClockingEnabled") == 1
+
     def set_fan_mode(self, mode):
         """MyFanManager_RamFan1p5.SetFanMode."""
         boost = 0x40 if self.option.get("FanBoostEnable") == 1 else 0
+        if mode == MODE_CUSTOM and self.overclocking(mode):
+            # LoadOverClockingValue(1) -> SetFanMode(2): Turbo fan mode, Custom flag cleared
+            self.ec.write(R.FAN_MODE, 0x10 | boost)
+            self.ec.set_bit(REG_CUSTOM_FLAG, 7, False)
+            return
         if mode == MODE_CUSTOM:
             base = 0x10 if (self.current or {}).get("OverClockingEnabled") == 1 else 0x00
         else:
@@ -310,15 +329,19 @@ class PowerManagerStd(PowerManager):
         v = int(speed) // 100
         self.ec.write(REG_FAN_SWITCH_SPEED, (v | 0x80) if (on and v > 0) else 0)
 
-    def set_user_profile(self, mode):
+    def set_user_profile(self, mode, user=False):
+        """user: a user action (mode change, slot edit) — only then the BIOS RAM overclocking switch is written."""
         with self.lock:
             self.set_fan_mode(mode)
             p = self.current
             if not p:
                 return
+            oc = self.overclocking(mode, p)
             self.fan_safety = bool(self.ec.read(REG_FAN_SAFETY) & 0x08)
             if getattr(self, "lc_override", None):          # LiquidHWOC: the EC table for liquid cooling
                 self.lc_override(mode)
+            elif oc:                                        # LoadOverClockingValue: the factory Turbo table
+                self.tables.apply_default("DefaultFanTable_Turbo")
             elif self.fan_safety:
                 self.save_option(FanSafetyProtectNotify=1)
                 self.tables.apply_default(MODE_DEFAULT_TABLE[mode])
@@ -347,7 +370,9 @@ class PowerManagerStd(PowerManager):
                     for reg in (R.PL1, R.PL2, R.PL4):
                         self.ec.write(reg, 0)
                 self.set_tcc(cpu["TccOffset"], cpu["TccOffsetSwitch"] == 1)
-            if self.pf.nv_gpu:
+            if self.pf.nv_gpu and oc and self.ac_online:
+                self.apply_gpu_oc(p["GPU"])
+            elif self.pf.nv_gpu:
                 self.apply_gpu_std(p["GPU"])
                 if self.gputemp:
                     g = p["GPU"]
@@ -355,7 +380,34 @@ class PowerManagerStd(PowerManager):
                                      args=(g.get("TargetTemperatureSwitch") == 1, g.get("TargetTemperature", 87))).start()
             f = p["FAN"]
             self.set_fan_switch_speed(f.get("FanSwitchSpeedEnabled") == 1, f.get("FanSwitchSpeed", 300))
-            log.info("profile applied: mode=%s %s table=%s", STD_MODE_NAMES.get(mode), p["Name"], f["TableName"])
+            if user:
+                self.apply_mem_oc(p if oc else None)
+            log.info("profile applied: mode=%s %s table=%s%s", STD_MODE_NAMES.get(mode), p["Name"],
+                     "DefaultFanTable_Turbo" if oc else f["TableName"], " (super performance)" if oc else "")
+
+    def apply_gpu_oc(self, g):
+        """LoadOverClockingValue(1), generic customer branch: cTGP maximum + Dynamic Boost as cTGP, DB off."""
+        lim, base = self.limits, self.smapc["DefaultTGP"]
+        if lim.get("ctgp_support"):
+            self.gpu.ctgp_fun_ctrl(1)
+            self.gpu.ctgp_target(lim["tgp_max"] + self.smapc.get("DynamicBoost", 0), base)
+        self.set_db_switch_std(g, False)
+        self.gpu.db_fun_ctrl(1)
+
+    def apply_mem_oc(self, p):
+        """SetMemoryOverClockSwitch: the slot's switch with super performance on, otherwise 0."""
+        if not self.mem_oc_support:
+            return
+        want = 1 if p and (p.get("MEM") or {}).get("MemoryOverClockSwitch") == 1 else 0
+        if self.nvram.get("MemoryOverClockSwitch") != want:
+            if self.nvram.set("MemoryOverClockSwitch", want):
+                log.info("RAM overclocking %s in the BIOS variable — applied at the next start", "on" if want else "off")
+            self.notify("mem_oc", {"on": bool(want), "pending": self.mem_oc_pending()})
+
+    def mem_oc_pending(self):
+        if not self.mem_oc_support:
+            return False
+        return self.nvram.get("MemoryOverClockSwitch") != self.mem_oc_boot
 
     def apply_gpu_std(self, g):
         lim, base = self.limits, self.smapc["DefaultTGP"]
@@ -398,7 +450,7 @@ class PowerManagerStd(PowerManager):
                 self.option["FanBoostEnable"] = 0          # UserSet_ModeN -> UserSet_FanBoost(0)
             self.option["OperatingMode"] = mode
             self.refresh_current_profile(mode)
-            self.set_user_profile(mode)
+            self.set_user_profile(mode, user=True)
             self.save_option(OperatingMode=mode)
             if mode != MODE_CUSTOM:
                 self.nvram.set("PowerMode", mode)
@@ -484,13 +536,23 @@ class PowerManagerStd(PowerManager):
         if "CustomizeName" in data:
             n = str(data["CustomizeName"]).strip()[:24]
             p["CustomizeName"] = n or name[-1]
+        if "OverClockingEnabled" in data:
+            if not name.startswith("Mode4") and data["OverClockingEnabled"]:
+                raise ValueError("super performance is only available in Custom slots")
+            p["OverClockingEnabled"] = 1 if data["OverClockingEnabled"] else 0
+        m = data.get("MEM") or {}
+        if "MemoryOverClockSwitch" in m:
+            on = 1 if m["MemoryOverClockSwitch"] else 0
+            if on and not (name.startswith("Mode4") and self.mem_oc_support):
+                raise ValueError("RAM overclocking is not supported here")
+            p.setdefault("MEM", {})["MemoryOverClockSwitch"] = on
         p["Activated"] = True
         with self.lock:
             self.profiles[name] = p
             store.save_json(self._pfile(name), p)
             if self.current and self.current["Name"] == name:
                 self.current = p
-                self.set_user_profile(self.option["OperatingMode"])
+                self.set_user_profile(self.option["OperatingMode"], user=True)
         return p
 
     def restore_profile(self, name):
@@ -550,4 +612,8 @@ class PowerManagerStd(PowerManager):
                        "tcc_extended": self.tcc_extended},
             "fan_safety": self.fan_safety,
             "table_names": self.TABLE_NAMES,
+            "overclocking": self.overclocking(),
+            "mem_oc": {"support": self.mem_oc_support,
+                       "on": bool(self.nvram.get("MemoryOverClockSwitch")) if self.mem_oc_support else False,
+                       "pending": self.mem_oc_pending()},
         }
