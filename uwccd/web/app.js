@@ -379,7 +379,7 @@ function drawPts() {
   const P = edit[fanKind];
   const head = h("tr", {}, h("th", {}, t("Level")), ...P.map((_, i) => h("th", {}, i)));
   const row = (label, f, help) => h("tr", {}, h("th", { title: help }, label), ...P.map((p, i) => {
-    const unused = p.Duty > 100 || (i > 0 && p.UpT >= 255);
+    const unused = p.Duty > 100 || (i > 0 && (p.UpT >= 255 || p.UpT === 0));
     const inp = h("input", { type: "number", min: 0, max: 255, value: p[f], disabled: f === "UpT" && i === 0 });
     inp.addEventListener("change", () => { p[f] = Math.max(0, Math.min(255, parseInt(inp.value || "0", 10))); drawCurve(); drawPts(); });
     return h("td", { class: unused ? "na" : "" }, inp);
@@ -390,9 +390,14 @@ function drawPts() {
 }
 $("#respective").addEventListener("change", e => { if (edit) edit.FanControlRespective = e.target.checked; });
 $("#btn-table-save").addEventListener("click", () => act(async () => {
-  for (const k of ["CPU", "GPU"]) for (let i = 1; i < 16; i++) {
-    const p = edit[k][i], q = edit[k][i - 1];
-    if (p.UpT < 255 && p.Duty <= 100 && p.UpT <= (i > 1 ? q.UpT : 0)) throw new Error(t("{0}: level temperatures must increase (level {1})", k, i));
+  for (const k of ["CPU", "GPU"]) {
+    let prev = null;                       // previous active level; levels after the first unused one are ignored
+    for (let i = 0; i < 16; i++) {
+      const p = edit[k][i];
+      if (p.Duty > 100 || (i > 0 && (p.UpT >= 255 || p.UpT === 0))) break;
+      if (prev !== null && p.UpT <= prev) throw new Error(t("{0}: level temperatures must increase (level {1})", k, i));
+      prev = p.UpT;
+    }
   }
   await api("table/" + curTable, { CPU: edit.CPU, GPU: edit.GPU, FanControlRespective: edit.FanControlRespective }, "PUT"); edit = null;
 }, t("Table saved")));

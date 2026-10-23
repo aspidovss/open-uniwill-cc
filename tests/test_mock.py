@@ -308,5 +308,15 @@ class CustomModeService(MockService):
         self.assertIn("present", self.get("gpu"))
 
 
+class FanTableUnit(unittest.TestCase):
+    def test_zero_filled_tail_is_unused(self):
+        from uwccd.fan import normalize_points
+        pts = [{"UpT": 0, "DownT": 40, "Duty": 20}, {"UpT": 50, "DownT": 45, "Duty": 40}]
+        pts += [{"UpT": 0, "DownT": 0, "Duty": 0} for _ in range(14)]      # EC that pads with zeros
+        normalize_points(pts)
+        self.assertEqual(pts[1]["UpT"], 50)
+        self.assertTrue(all(p["UpT"] == 255 and p["Duty"] == 255 for p in pts[2:]))
+
+
 if __name__ == "__main__":
     unittest.main()

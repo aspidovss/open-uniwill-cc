@@ -71,6 +71,21 @@ def generate_duty(src, factor, name):
     return t
 
 
+def level_unused(points, i):
+    """A level is unused when its duty is the 0xFF marker or (above level 0) its entry temperature is 0 or 255."""
+    p = points[i]
+    return p["Duty"] > 100 or (i > 0 and p["UpT"] in (0, 255))
+
+
+def normalize_points(points):
+    """Everything after the first unused level is unused too (the EC stops there). Some ECs fill the
+    tail with zeros instead of 0xFF; such levels used to look like 'active, 0 °C' and broke validation."""
+    end = next((i for i in range(1, 16) if level_unused(points, i)), 16)
+    for p in points[end:]:
+        p["UpT"] = p["DownT"] = p["Duty"] = 255
+    return points
+
+
 def max_level(points):
     lvl = 10
     for i in range(1, 16):
@@ -103,6 +118,9 @@ class FanTables:
         if not t:
             return None
         t.setdefault("Name", name)
+        for k in ("CPU", "GPU"):
+            if len(t.get(k) or []) == 16:
+                normalize_points(t[k])
         return t
 
     def seed_from_share(self):
@@ -181,6 +199,7 @@ class FanTables:
                 p["UpT"] = 0 if i == 0 else self.ec.read(up + i - 1)
                 p["DownT"] = self.ec.read(down + i + 1) if i < 15 else self.ec.read(down + i)
                 p["Duty"] = self.ec.read(duty + i) // 2
+            normalize_points(t[kind])
 
     def write_ec_table(self, t):
         for kind, up, down, duty, enabled in (("CPU", R.FT_CPU_UP, R.FT_CPU_DOWN, R.FT_CPU_DUTY, True),
@@ -243,7 +262,8 @@ class FanTables:
                         t[kind][i][f] = v
         for kind in ("CPU", "GPU"):
             pts = t[kind]
-            active = [p for i, p in enumerate(pts) if p["Duty"] <= 100 and (i == 0 or p["UpT"] < 255)]
+            normalize_points(pts)
+            active = [p for i, p in enumerate(pts) if not level_unused(pts, i)]
             for a, b in zip(active, active[1:]):
                 if b["UpT"] <= a["UpT"]:
                     raise ValueError(f"{kind}: level temperatures must increase")
