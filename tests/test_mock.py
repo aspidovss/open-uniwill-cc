@@ -307,6 +307,17 @@ class CustomModeService(MockService):
         self.assertIsInstance(self.get("history"), list)
         self.assertIn("present", self.get("gpu"))
 
+    def test_lightbar(self):
+        lb = self.get("state")["keyboard"]["lightbar"]
+        self.assertEqual(sorted(lb["zones"]), ["base", "hinge", "logo"])
+        self.assertEqual(self.post("lightbar", {"zone": "hinge", "effect": "static", "colors": [[255, 0, 0]], "light": 3})[0], 200)
+        self.assertEqual(self.get("state")["keyboard"]["lightbar"]["zones"]["hinge"]["colors"], [[255, 0, 0]])
+        self.assertEqual(self.post("lightbar", {"zone": "hinge", "power": False})[0], 200)
+        self.assertFalse(self.get("state")["keyboard"]["lightbar"]["zones"]["hinge"]["power"])
+        self.assertEqual(self.post("lightbar", {"zone": "hinge", "power": True})[0], 200)
+        self.assertEqual(self.post("lightbar", {"zone": "nope", "power": True})[0], 400)
+        self.assertEqual(self.post("lightbar", {"zone": "base", "effect": "disco"})[0], 400)
+
     def test_history_export(self):
         r = urllib.request.Request(f"http://127.0.0.1:{self.port}/api/history/export?format=csv", headers={"X-UWCC-Token": TOKEN})
         resp = urllib.request.urlopen(r, timeout=10)

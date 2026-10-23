@@ -39,7 +39,15 @@ $Version = (Select-String -Path "uwccd\__init__.py" -Pattern '__version__\s*=\s*
 Say "UWCC Control Center $Version for Windows"
 
 if ($Clean) {
-    foreach ($d in ".venv-win", "build", "dist") { if (Test-Path $d) { Remove-Item -Recurse -Force $d } }
+    # programs started from dist\ (a test run of uwccd.exe / ControlCenter.exe, setup.exe) lock the folder
+    Get-Process uwccd, ControlCenter, uwccctl -ErrorAction SilentlyContinue |
+        Where-Object { $_.Path -like "$Root\dist\*" } | Stop-Process -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Milliseconds 500
+    foreach ($d in ".venv-win", "build", "dist") {
+        if (-not (Test-Path $d)) { continue }
+        try { Remove-Item -Recurse -Force $d -ErrorAction Stop }
+        catch { Die "Cannot remove $d - a file in it is in use (an Explorer window, a running setup.exe or program from dist\). Close it and run again." }
+    }
 }
 
 # ---------------------------------------------------------------- Python

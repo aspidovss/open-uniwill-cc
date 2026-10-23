@@ -261,6 +261,21 @@
         <label class="slider"><span data-i>Level</span> <input type="range" min="0" max="4" step="1" id="kb-level"><output></output></label>
       </div>
       <div id="none-ui" class="card hidden"><p data-i>No controllable keyboard backlight found.</p></div>
+      <div id="lb-ui" class="card hidden">
+        <div class="row between wrap"><div><h3 data-i>Laptop light bar</h3><p class="muted" id="lb-sub"></p></div>
+          <div class="row"><div class="seg" id="lb-zones"></div><label class="sw"><input type="checkbox" id="lb-power"><span></span></label></div></div>
+        <div class="grid g2">
+          <div>
+            <label class="slider"><span data-i>Effect</span> <select id="lb-effect"></select></label>
+            <label class="slider"><span data-i>Brightness</span> <input type="range" min="0" max="4" step="1" id="lb-light"><output></output></label>
+            <label class="slider"><span data-i>Speed</span> <input type="range" min="0" max="4" step="1" id="lb-speed"><output></output></label>
+          </div>
+          <div>
+            <div class="swatches" id="lb-swatches"></div>
+            <div class="row"><input type="color" id="lb-custom" value="#32dbbe"><span class="muted" data-i>custom colour</span></div>
+          </div>
+        </div>
+      </div>
     </section>
 
     <!-- BATTERY -->

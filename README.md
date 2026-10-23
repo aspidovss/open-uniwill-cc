@@ -25,7 +25,8 @@ hardware switches — plus Bluetooth control of the **XMG Oasis** liquid cooler 
 - **Modes** Office / Gaming / Turbo (and **Custom** with 5 named slots on platforms that have it), the Fn mode key, Fan Boost
 - **Power limits** PL1 / PL2 / PL4, TCC offset, NVIDIA cTGP and Dynamic Boost — within the limits the firmware reports
 - **Fan curves** for CPU and GPU (16 points), presets, reset to factory
-- **Keyboard lighting**: 17 hardware effects, per-key colours, gaming zones, software effects, auto-off
+- **Keyboard lighting**: 17 hardware effects, per-key colours, gaming zones, software effects, auto-off;
+  **chassis light bar** (rear / base / logo zones)
 - **Battery**: protection modes, custom charge limits, USB-C charging priority
 - **Switches**: Win-key lock, Fn lock, touchpad, USB power in sleep, power-on with AC, MUX (dGPU direct), webcam
 - **Monitoring**: temperatures, load, clocks, fans, CPU and GPU power, memory, drives, battery; one-hour history

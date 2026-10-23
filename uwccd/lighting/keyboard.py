@@ -36,6 +36,7 @@ class KeyboardManager:
         self.st = store
         self.mock = mock
         self.rgb = None
+        self.lb = None             # chassis light bar (separate ITE device)
         self.single = None
         self.kind = "none"
         self.lock = threading.RLock()
@@ -80,6 +81,21 @@ class KeyboardManager:
             if self.st.get("kb_power") is False:
                 self.single.set_power(False)
         log.info("keyboard backlight: %s", self.kind)
+        try:
+            self.lb = ite.open_lightbar(self.ec, mock=self.mock)
+        except OSError as e:
+            log.warning("light bar: %s", e)
+        if self.lb:
+            for zone, cfg in (self.st.get("lightbar") or {}).items():
+                if zone not in self.lb.zones:
+                    continue
+                try:
+                    if cfg.get("effect"):
+                        self.lb.set_zone(zone, **{k: cfg[k] for k in ("effect", "light", "speed", "colors") if k in cfg})
+                    if cfg.get("power") is False:
+                        self.lb.set_zone_power(zone, False)
+                except (ValueError, OSError) as e:
+                    log.warning("restore light bar %s: %s", zone, e)
 
     # -- API -------------------------------------------------------------------------
     def set_effect(self, **kw):
@@ -106,6 +122,21 @@ class KeyboardManager:
             self.rgb.set_brightness(int(lvl))
             self.st.set("kb_effect", self.rgb.saved)
 
+    def lightbar(self, zone, power=None, **effect):
+        if not self.lb:
+            raise ValueError("no light bar")
+        if zone not in self.lb.zones:
+            raise ValueError(f"this light bar has no '{zone}' zone ({', '.join(self.lb.zones)})")
+        effect = {k: v for k, v in effect.items() if v is not None}
+        with self.lock:
+            if effect:
+                cur = {k: v for k, v in (self.lb.saved.get(zone) or {}).items() if k != "power"}
+                cur.update(effect)
+                self.lb.set_zone(zone, **cur)
+            if power is not None:
+                self.lb.set_zone_power(zone, bool(power))
+            self.st.set("lightbar", {z: dict(v) for z, v in self.lb.saved.items()})
+
     def idle(self, idle):
         """KeyboardCloseTimer: switch the backlight off after inactivity, back on at input."""
         if not self.st.get("kb_power", True):
@@ -131,6 +162,11 @@ class KeyboardManager:
              "unsupported_effects": [i for i, (_, c) in ite.EFFECTS.items()
                                      if c == 0x22 or (c in ite.LB_ONLY_EFFECTS and not (self.rgb and self.rgb.kb_type in ite.ME_LIGHTBAR))],
              "default_colors": ite.DEFAULT_COLORS}
+        if self.lb:
+            d["lightbar"] = {"device": self.lb.info(), "effects": list(ite.LB_EFFECTS),
+                             "zones": {z: {"power": True, "effect": "static", "light": 4, "speed": 2,
+                                           "colors": [[255, 255, 255]], **(self.lb.saved.get(z) or {})}
+                                       for z in self.lb.zones}}
         if self.kind == "rgb":
             d["effect"] = self.rgb.saved
             d["device"] = self.rgb.info()

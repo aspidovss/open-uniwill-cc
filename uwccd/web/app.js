@@ -436,6 +436,7 @@ let kbSel = { effect: 4, light: 4, speed: 2, direction: 0, colors: [[255, 0, 0]]
 let userBuf = Array.from({ length: 126 }, () => [0, 0, 0]);
 function renderLight() {
   const k = S.keyboard;
+  renderLightbar();
   $("#rgb-ui").classList.toggle("hidden", k.kind !== "rgb");
   $("#single-ui").classList.toggle("hidden", k.kind !== "single");
   $("#none-ui").classList.toggle("hidden", k.kind !== "none");
@@ -471,6 +472,40 @@ function applyKb() {
   act(() => api("keyboard/effect", body));
 }
 $("#kb-power").addEventListener("change", e => act(() => api("keyboard/power", { on: e.target.checked })));
+
+// ---------------------------------------------------------------- light bar (chassis)
+const LB_EFFECT_NAME = { static: "Static colour", breathing: "Breathing", breathing_multi: "Breathing, multicolour", wave: "Wave",
+  cycle: "Colour cycle", rainbow: "Rainbow", colorbreath: "Colour breathing", colorwave: "Colour wave" };
+const LB_ZONE_NAME = { hinge: "Rear (hinge)", base: "Base", logo: "Logo" };
+let lbZone = null;
+function renderLightbar() {
+  const lb = S.keyboard && S.keyboard.lightbar;
+  $("#lb-ui").classList.toggle("hidden", !lb);
+  if (!lb) return;
+  const zones = Object.keys(lb.zones);
+  if (!zones.includes(lbZone)) lbZone = zones[0];
+  const z = lb.zones[lbZone];
+  $("#lb-sub").textContent = t("ITE controller {0}, firmware {1}", lb.device.pid, lb.device.fw);
+  const seg = $("#lb-zones"); seg.innerHTML = "";
+  if (zones.length > 1) for (const k of zones) seg.append(h("button", { class: k === lbZone ? "on" : "", onclick: () => { lbZone = k; renderLightbar(); } }, t(LB_ZONE_NAME[k] || k)));
+  $("#lb-power").checked = z.power !== false;
+  const sel = $("#lb-effect"); sel.innerHTML = "";
+  for (const e of lb.effects) { const o = h("option", { value: e }, t(LB_EFFECT_NAME[e] || e)); if (e === z.effect) o.selected = true; sel.append(o); }
+  for (const k of ["light", "speed"]) { $("#lb-" + k).value = z[k]; $("#lb-" + k).nextElementSibling.textContent = z[k]; }
+  const sw = $("#lb-swatches"); sw.innerHTML = "";
+  for (const c of S.keyboard.default_colors.concat([[255, 255, 255]])) {
+    const on = z.colors && z.colors.length === 1 && z.colors[0].join() === c.join();
+    sw.append(h("div", { class: "swatch" + (on ? " on" : ""), style: `background:rgb(${c})`, onclick: () => lbSet({ colors: [c] }) }));
+  }
+}
+function lbSet(body) { act(() => api("lightbar", { zone: lbZone, ...body })); }
+$("#lb-power").addEventListener("change", e => lbSet({ power: e.target.checked }));
+$("#lb-effect").addEventListener("change", e => lbSet({ effect: e.target.value }));
+for (const k of ["light", "speed"]) {
+  $("#lb-" + k).addEventListener("input", e => { e.target.nextElementSibling.textContent = e.target.value; });
+  $("#lb-" + k).addEventListener("change", e => lbSet({ [k]: +e.target.value }));
+}
+$("#lb-custom").addEventListener("change", e => lbSet({ colors: [hex2rgb(e.target.value)] }));
 for (const [id, key] of [["kb-light", "light"], ["kb-speed", "speed"]]) {
   $("#" + id).addEventListener("input", e => { e.target.nextElementSibling.textContent = e.target.value; });
   $("#" + id).addEventListener("change", e => { kbSel[key] = +e.target.value; applyKb(); });

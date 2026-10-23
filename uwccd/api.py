@@ -223,6 +223,9 @@ class Handler(BaseHTTPRequestHandler):
                                       speed=int(b.get("speed", 2)), direction=int(b.get("direction", 0)),
                                       colors=b.get("colors"), circular=bool(b.get("circular")), user=b.get("user"),
                                       alphabet=(str(b["alphabet"])[:40] if b.get("alphabet") else None))
+            elif path == "/api/lightbar":
+                s.keyboard.lightbar(str(b.get("zone", "hinge")), power=b.get("power"), effect=b.get("effect"),
+                                    light=b.get("light"), speed=b.get("speed"), colors=b.get("colors"))
             elif path == "/api/keyboard/power":
                 s.keyboard.set_power(bool(b["on"]))
             elif path == "/api/keyboard/level":

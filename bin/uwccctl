@@ -6,6 +6,7 @@
   uwccctl profile <N>            profile of the current mode (0..2; RamFan1p5 platforms: 0..1, custom slots 0..4)
   uwccctl boost on|off           FanBoost
   uwccctl kb off|on|effect N     keyboard backlight
+  uwccctl lb [hinge|base|logo] on|off|color RRGGBB [EFFECT]|effect static|breathing|wave|rainbow|...|light 0-4
   uwccctl lighting               keyboard / light bar devices (diagnostics)
   uwccctl history [csv|csv-excel|json] [FILE]   last hour of sensors (stdout or FILE)
   uwccctl debug on|off           verbose service log (for bug reports)
@@ -214,6 +215,23 @@ def main(a):
             call("setting", {"key": "lang", "value": a[1]})
             LANG = a[1]
         print(T("lang_set"))
+    elif cmd == "lb":
+        zones = ("hinge", "base", "logo")
+        rest = a[1:]
+        zone = rest.pop(0) if rest and rest[0] in zones else "hinge"
+        op = rest[0] if rest else "status"
+        if op in ("on", "off"):
+            call("lightbar", {"zone": zone, "power": op == "on"})
+        elif op == "color" and rest[1:]:
+            x = rest[1].lstrip("#")
+            call("lightbar", {"zone": zone, "colors": [[int(x[i:i + 2], 16) for i in (0, 2, 4)]],
+                              **({"effect": rest[2]} if rest[2:] else {})})
+        elif op == "effect" and rest[1:]:
+            call("lightbar", {"zone": zone, "effect": rest[1]})
+        elif op == "light" and rest[1:]:
+            call("lightbar", {"zone": zone, "light": int(rest[1])})
+        lb = call("state")["keyboard"].get("lightbar")
+        print(json.dumps(lb, indent=2, ensure_ascii=False) if lb else "no light bar")
     elif cmd == "lighting":
         print(json.dumps(call("lighting/devices"), indent=2, ensure_ascii=False))
     elif cmd == "history":

@@ -381,7 +381,10 @@ class ITEKeyboard:
         with self.lock:
             self.cmd08(5)
             if code == 0x01:
-                if self.fw_effects() or self.kb_type in (2, 3) or self.kb_type in ME_LIGHTBAR:
+                # GCUService draws "single colour" as a 12h picture unless the firmware is 0x12.9+/0x14/0x16/0x20;
+                # ITE firmware 0x11 (e.g. MAIBENBEN Tsunami, project 0x10) ignores that picture but runs
+                # every firmware effect, so it gets the firmware static effect too
+                if self.fw_effects() or self.ver[0] == 0x11 or self.kb_type in (2, 3) or self.kb_type in ME_LIGHTBAR:
                     self.fw_mode(code, lv, sp, dr, colors or [(255, 255, 255)], False)
                 else:
                     self.write_static(colors[0] if colors else (255, 255, 255), lv)
@@ -467,6 +470,108 @@ class MockITE(ITEKeyboard):
 
     def close(self):
         pass
+
+
+# ---------------------------------------------------------------- light bar (HIDLightbar4)
+LB_ZONES = {"hinge": (0x21, 1), "base": (0x22, 2), "logo": (0x23, 3)}   # zone -> (08h control byte, power index)
+# LM_ITE_RGB.GetDeviceSupport: 0xA2 answer -> zones present
+LB_SUPPORT = {0: ("hinge",), 1: ("hinge", "logo"), 4: ("hinge", "base", "logo"), 5: ("hinge",), 6: ("hinge", "base")}
+# effects offered for the light bar: name -> (ITE code, multicolour)
+LB_EFFECTS = {"static": (0x01, False), "breathing": (0x02, False), "breathing_multi": (0x02, True),
+              "wave": (0x03, True), "cycle": (0x04, True), "rainbow": (0x05, True), "colorbreath": (0x13, True),
+              "colorwave": (0x20, True)}
+
+
+class ITELightbar(ITEKeyboard):
+    """LM_ITE_RGB.ILM_RGBLB_Init + MyRgbKeyboard.HIDLightbar4 (_hinge / _logo / base): the RGB light strip(s)
+    of the chassis, a separate ITE device (048D:7000, usage page FF03) with up to three zones."""
+
+    def _detect(self):
+        try:
+            self.ver = self.firmware_version()
+        except OSError as e:
+            log.warning("ITE light bar firmware version: %s", e)
+        self.kb_type = 0x15
+        self.zones = ("hinge",)
+        try:
+            self.feature([0, 0xA2])
+            answer = self.get_feature()
+            self.zones = LB_SUPPORT.get(answer[2], ("hinge",))
+            self.support_code = answer[2]
+        except OSError as e:
+            log.warning("light bar zones: %s", e)
+            self.support_code = None
+        self.saved = {}
+        log.info("ITE light bar %s pid=%04x fw=%s zones=%s", self.node, self.pid,
+                 ".".join(f"{x:X}" for x in self.ver), ",".join(self.zones))
+
+    def cmd14(self, index, r, g, b, flag=0, extra=0):
+        # HID_Set_Color_14H for type 0x15: zone flag in byte 2, no colour correction
+        self.feature([0, 0x14, flag, index, r, g, b, 0, 0])
+        time.sleep(0.001)
+
+    def set_zone(self, zone, effect="static", light=4, speed=2, colors=None):
+        if zone not in LB_ZONES:
+            raise ValueError("zone: hinge | base | logo")
+        if effect not in LB_EFFECTS:
+            raise ValueError("effect: " + " | ".join(LB_EFFECTS))
+        ctrl = LB_ZONES[zone][0]
+        code, multi = LB_EFFECTS[effect]
+        lv, sp = LIGHT[max(0, min(4, int(light)))], SPEED[max(0, min(4, int(speed)))]
+        cols = [tuple(int(x) & 255 for x in c) for c in (colors or [])] or [(255, 255, 255)]
+        if multi and len(cols) < 2:
+            cols = DEFAULT_COLORS
+        with self.lock:
+            self.fw_mode(code, lv, sp, 1, cols, multi, ctrl=ctrl)
+            if ctrl == 0x22 and code == 0x01:      # Set_ITE_Effect_Type_FwMode repeats 08h for the base static colour
+                time.sleep(0.5)
+                self.cmd08(ctrl, code, sp, lv, 8 if multi else 1, 1, 0)
+        self.saved[zone] = dict(effect=effect, light=light, speed=speed, colors=[list(c) for c in cols], power=True)
+
+    def set_zone_power(self, zone, on):
+        if zone not in LB_ZONES:
+            raise ValueError("zone: hinge | base | logo")
+        st = self.saved.get(zone) or {}
+        if on:
+            self.set_zone(zone, **{k: v for k, v in st.items() if k != "power"})
+        else:
+            with self.lock:
+                self.cmd08(5)
+                self.cmd08(1, LB_ZONES[zone][1])     # ILM_RGBKB_SetPower(off, zone)
+            st["power"] = False
+            self.saved[zone] = st
+
+    def info(self):
+        return {"node": self.node, "pid": f"{self.pid:04X}", "fw": ".".join(f"{x:X}" for x in self.ver),
+                "zones": list(self.zones), "support_code": self.support_code}
+
+
+class MockLightbar(ITELightbar):
+    def __init__(self, ec):  # noqa: D401
+        self.ec, self.node, self.pid, self.usage_page = ec, "mock-lb", 0x7000, 0xFF03
+        self.lock = threading.RLock()
+        self.ver, self.kb_type, self.ap = (0x21, 0x02, 0, 0), 0x15, None
+        self.zones, self.support_code, self.saved = ("hinge", "base", "logo"), 4, {}
+        self.log = __import__("collections").deque(maxlen=200)
+
+    def feature(self, data):
+        self.log.append(("F", bytes(data).hex()))
+
+    def close(self):
+        pass
+
+
+def open_lightbar(ec, mock=False):
+    if mock:
+        return MockLightbar(ec)
+    for d in find_devices(LB_PIDS):
+        if (d["usage_page"] or 0) != 0xFF03:
+            continue
+        try:
+            return ITELightbar(ec, d)
+        except OSError as e:
+            log.warning("cannot open light bar %s: %s", d["node"], e)
+    return None
 
 
 def list_devices():
