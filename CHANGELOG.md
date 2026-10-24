@@ -2,6 +2,8 @@
 
 ## 1.5.5
 
+- *Fan settings*: the profile tabs fit in one line — the mode name once, then its slots as numbers (the full
+  name is in the tooltip, a dot marks the active table).
 - **Fan manager switch** in *Settings → Switches* (automatic by project / commercial `_CML` / RamFan 1.5 with the
   Custom mode) and `uwccctl set fan_manager auto|cml|std`; the service restarts by itself. Before, it could only be
   forced by editing `settings.json`.

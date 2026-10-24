@@ -425,8 +425,17 @@ function renderFanPage() {
   if (!curTable || !list.includes(curTable)) curTable = list.includes(S.power.current_table) ? S.power.current_table : list[0];
   $("#pl-card").classList.toggle("hidden", isStd());
   const seg = $("#table-seg"); seg.innerHTML = "";
-  for (const n of list) seg.append(h("button", { class: n === curTable ? "on" : "", onclick: () => { curTable = n; edit = null; renderFanPage(); } },
-    TABLE_LABEL[n] + (n === S.power.current_table ? " ●" : "")));
+  // one line: the mode name once, then its slots as numbers (the full name is the tooltip)
+  let group = null;
+  for (const n of list) {
+    const m = n[1], i = +n[3];
+    if (m !== group) {
+      group = m;
+      seg.append(h("span", { class: "seg-label" }, m === "4" && isStd() ? t("Custom") : t(MODE_OF_PREFIX[m] || "?")));
+    }
+    seg.append(h("button", { class: (n === curTable ? "on" : "") + (n === S.power.current_table ? " active" : ""), title: TABLE_LABEL[n],
+      onclick: () => { curTable = n; edit = null; renderFanPage(); } }, String(i)));
+  }
   $("#fan-kind-seg").classList.toggle("hidden", !S.platform.nv_gpu);
   if (!S.platform.nv_gpu) fanKind = "CPU";
   if (!edit || edit.Name !== curTable) edit = JSON.parse(JSON.stringify(S.tables[curTable] || null));

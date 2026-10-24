@@ -208,3 +208,11 @@ table.bind td,table.bind th{padding:8px;border-bottom:1px solid var(--line);text
 .rep-done p{margin:0 0 8px}@media (max-width:800px){.rep-grid{grid-template-columns:1fr}}
 a.btn{text-decoration:none;display:inline-flex;align-items:center}
 .svc-down{position:fixed;left:50%;transform:translateX(-50%);top:16px;z-index:60;max-width:min(640px,calc(100vw - 40px));background:var(--bg3);border:1px solid var(--warn);border-radius:10px;padding:10px 14px;box-shadow:0 10px 30px rgba(0,0,0,.4)}
+
+/* fan settings: profiles in one line — mode name, then slot numbers; ● marks the active table */
+.seg.grouped{flex-wrap:nowrap;align-items:center;overflow-x:auto;max-width:100%}
+.seg.grouped .seg-label{color:var(--muted);font-size:12.5px;padding:0 4px 0 10px;white-space:nowrap}
+.seg.grouped .seg-label:first-child{padding-left:6px}
+.seg.grouped .seg-label:not(:first-child){border-left:1px solid var(--line);margin-left:3px}
+.seg.grouped button{padding:6px 11px;min-width:32px;position:relative}
+.seg.grouped button.active::after{content:"";position:absolute;top:4px;right:4px;width:5px;height:5px;border-radius:50%;background:var(--acc)}
