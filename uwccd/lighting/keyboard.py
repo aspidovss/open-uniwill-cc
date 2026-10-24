@@ -65,9 +65,10 @@ class KeyboardManager:
                 log.debug("LED vendor: %s", e)
             saved = self.st.get("kb_effect")
             power = self.st.get("kb_power", True)
+            self.rgb.pictures_ok = not self.picture_modes_blocked()
             try:
                 if saved:
-                    self.rgb.set_effect(**saved)
+                    self.rgb.set_effect(**saved, force=True)
                 if not power:
                     self.rgb.set_power(False)
             except (NotImplementedError, ValueError, OSError) as e:
@@ -99,17 +100,24 @@ class KeyboardManager:
 
     # -- API -------------------------------------------------------------------------
     def picture_modes_blocked(self):
-        """User mode (per-key colours) and the gaming zones are drawn as 12h/16h pictures; ITE firmware 0x11 ignores
-        them (MAIBENBEN Tsunami), so they are hidden there unless the user turns them on (setting kb_picture_modes)."""
+        """User mode (per-key colours) and the gaming zones are drawn as 12h/16h pictures. On ITE firmware 0x11
+        (MAIBENBEN Tsunami) they looked ignored — that was the 08h reset sent before them (removed in 1.5.4), the
+        original draws single colour the same way there. They can still be hidden (setting kb_picture_modes off)."""
+        if self.rgb and self.rgb.four_zone():
+            return True                       # no per-key LEDs at all
         return bool(self.rgb and self.rgb.ver[0] == 0x11 and not self.rgb.fw_effects()
-                    and not self.st.get("kb_picture_modes", False))
+                    and self.st.get("kb_picture_modes", True) is False)
 
     def set_effect(self, **kw):
         if self.kind != "rgb":
             raise ValueError("no RGB keyboard")
-        if self.picture_modes_blocked() and kw.get("idx") in (14, 15):
+        blocked = self.picture_modes_blocked()
+        code = ite.EFFECTS.get(kw.get("idx"), (None, None))[1]
+        zone_soft = bool(self.rgb.four_zone() and code in ite.FOUR_ZONE_SOFT)     # drawn zone by zone
+        if blocked and not zone_soft and (kw.get("idx") in (14, 15) or code in ite.AP_EFFECTS):
             raise ValueError("this keyboard does not support per-key / gaming modes (see Settings to try anyway)")
         with self.lock:
+            self.rgb.pictures_ok = not blocked      # single colour falls back to the firmware static effect
             self.rgb.set_effect(**kw)
             self.st.set("kb_effect", self.rgb.saved)
             self.st.set("kb_power", True)
@@ -169,9 +177,16 @@ class KeyboardManager:
              "software_effects": [i for i, (_, c) in ite.EFFECTS.items() if c in ite.AP_EFFECTS],
              "unsupported_effects": [i for i, (_, c) in ite.EFFECTS.items()
                                      if c == 0x22 or (c in ite.LB_ONLY_EFFECTS and not (self.rgb and self.rgb.kb_type in ite.ME_LIGHTBAR))
-                                     or (i in (14, 15) and self.picture_modes_blocked())],
+                                     or ((i in (14, 15) or c in ite.AP_EFFECTS) and self.picture_modes_blocked()
+                                         and not (self.rgb and self.rgb.four_zone() and c in ite.FOUR_ZONE_SOFT))
+                                     or (self.rgb and self.rgb.four_zone()
+                                         and c not in ite.FOUR_ZONE_EFFECTS | ite.FOUR_ZONE_SOFT)],
+             "four_zone": bool(self.rgb and self.rgb.four_zone()),
+             "unchecked_effects": [i for i, (_, c) in ite.EFFECTS.items() if self.rgb and self.rgb.four_zone()
+                                   and c in ite.FOUR_ZONE_EFFECTS and c not in ite.FOUR_ZONE_CHECKED],
              "picture_modes_blocked": self.picture_modes_blocked(),
-             "picture_modes_override": bool(self.st.get("kb_picture_modes", False)),
+             "picture_modes_switch": bool(self.rgb and not self.rgb.four_zone() and self.rgb.ver[0] == 0x11
+                                          and not self.rgb.fw_effects()),
              "default_colors": ite.DEFAULT_COLORS}
         if self.lb:
             d["lightbar"] = {"device": self.lb.info(), "effects": list(ite.LB_EFFECTS),

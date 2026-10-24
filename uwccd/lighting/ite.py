@@ -56,6 +56,24 @@ ME_LIGHTBAR = {0xC, 0x13, 0x14, 0x15}
 
 ROWS, COLS = 6, 21
 
+# Reactive effects light the pressed key: the EC has to pass key presses to the ITE controller
+# (LM_ITE_RGB.Enable_EC_OnkeyPressed: EC 0x741 bit 3, for Reactive, Ripple, Aurora, Spark with direction code 1)
+REACTIVE = {0x04, 0x06, 0x0E, 0x11}
+REG_ONKEY, ONKEY_BIT = 0x741, 3
+# A repeated identical request (double click) within this time is dropped, and two effect changes are kept at
+# least MIN_GAP apart: the controller is still rolling out the previous effect across its LED zones.
+REPEAT_WINDOW, MIN_GAP = 0.6, 0.15
+# Four-zone keyboards (kb_type 2/3, RGBKB_Type.FourZone): the original window (CCU.WinUI 5.56,
+# MyKeyboardTypeInfo.InitalizeKeyboardTypeEffect) offers exactly Single, Breathing, Wave, Rainbow, Flash and Mix there,
+# and these are the ones that work on MAIBENBEN Tsunami (ITE 11.5). Rainbow is a still rainbow on ITE firmware.
+FOUR_ZONE_CHECKED = {0x01, 0x02, 0x03, 0x05, 0x12, 0x13}
+FOUR_ZONE_EFFECTS = set(FOUR_ZONE_CHECKED)
+# drawn by the service, zone by zone, with smooth transitions: Stack, Impact, Neon (frames of the original, averaged
+# per zone and blended), Colour wave and Wave (colours flowing across the zones), Flash (fading flashes)
+FOUR_ZONE_SOFT = {0x0C, 0x0D, 0x0F, 0x34}
+# columns of the 6 x 21 key grid per zone: three on the main block, the fourth on the numeric pad
+ZONE_COLS = ((0, 6), (6, 12), (12, 17), (17, 21))
+
 
 def _ioc(d, t, nr, size):
     return (d << 30) | (size << 16) | (ord(t) << 8) | nr
@@ -148,9 +166,13 @@ class APEngine(threading.Thread):
         self.colors = [apfx.RGB(*c) for c in cols[:7]]
         self.alphabet = alphabet or "HELLO"
         self._halt = threading.Event()
+        self._target = None             # four zones: the latest frame; a blender thread eases towards it
+        self._blender = None
 
     def stop(self):
         self._halt.set()
+        if self._blender and self._blender is not threading.current_thread():
+            self._blender.join(timeout=1)
 
     def stopped(self):
         return self._halt.is_set()
@@ -158,12 +180,45 @@ class APEngine(threading.Thread):
     def sleep(self, ms):
         return not self._halt.wait(max(1, ms) / 1000.0)
 
+    # four zones: the frames of the per-key effects are averaged per zone and blended over ~0.15 s, so the zones
+    # change smoothly instead of jumping from frame to frame
+    BLEND_STEP, BLEND_RATE = 0.03, 0.22
+
+    def _zones(self, cols):
+        self._target = [tuple(c) for c in cols]
+        if self._blender is None:
+            self._blender = threading.Thread(target=self._blend, daemon=True, name="ap-blend")
+            self._blender.start()
+
+    def _blend(self):
+        cur, first = None, True
+        try:
+            while not self._halt.is_set():
+                tgt = self._target
+                if tgt is not None:
+                    cur = [list(t) for t in tgt] if cur is None else \
+                        [[c + (t - c) * self.BLEND_RATE for c, t in zip(cz, tz)] for cz, tz in zip(cur, tgt)]
+                    if not self._halt.is_set():
+                        self.kb.write_zones([tuple(int(round(v)) for v in z) for z in cur], self.light, announce=first)
+                        first = False
+                self._halt.wait(self.BLEND_STEP)
+        except OSError as e:
+            log.warning("software effect stopped: %s", e)
+
     def user_mode(self, buf, first):
-        if not self.stopped():
+        if self.stopped():
+            return
+        if self.kb.four_zone():
+            self._zones(zones_of([c.t() for c in buf]))
+        else:
             self.kb.write_rows([c.t() for c in buf], self.light, 0, announce=bool(first))
 
     def static_mode(self, c, first):
-        if not self.stopped():
+        if self.stopped():
+            return
+        if self.kb.four_zone():
+            self._zones([c.t()] * 4)
+        else:
             self.kb.write_static(c.t(), self.light, 0, announce=bool(first))
 
     def run(self):
@@ -171,6 +226,77 @@ class APEngine(threading.Thread):
             apfx.run(self)
         except OSError as e:
             log.warning("software effect stopped: %s", e)
+
+
+def zones_of(frame):
+    """6 x 21 frame (row 0 = top) -> average colour of each of the four zones (black keys ignored)."""
+    out = []
+    for c0, c1 in ZONE_COLS:
+        px = [frame[r * COLS + c] for r in range(ROWS) for c in range(c0, c1)]
+        lit = [p for p in px if any(p)] or px
+        out.append(tuple(sum(p[i] for p in lit) // len(lit) for i in range(3)))
+    return out
+
+
+class ZoneWave(threading.Thread):
+    """Smooth wave for four-zone keyboards, drawn by the service: the colours flow from zone to zone.
+    colors=None: the full hue circle (Colour wave); otherwise the palette, blended (Wave)."""
+
+    def __init__(self, kb, light, speed, colors=None, reverse=False):
+        super().__init__(daemon=True, name="zone-wave")
+        self.kb, self.light = kb, light
+        self.period = (14, 10, 7, 5, 3)[max(0, min(4, speed))]      # seconds per full colour circle
+        self.colors = [tuple(c) for c in colors] if colors and len(colors) > 1 else None
+        self.reverse = reverse
+        self._halt = threading.Event()
+
+    def stop(self):
+        self._halt.set()
+
+    def colour_at(self, pos):
+        """pos 0..1 on the colour circle"""
+        if not self.colors:
+            import colorsys
+            r, g, b = colorsys.hsv_to_rgb(pos % 1.0, 1.0, 1.0)
+            return (int(r * 255), int(g * 255), int(b * 255))
+        n = len(self.colors)
+        x = (pos % 1.0) * n
+        i, f = int(x) % n, x - int(x)
+        a, b = self.colors[i], self.colors[(i + 1) % n]
+        return tuple(int(a[k] + (b[k] - a[k]) * f) for k in range(3))
+
+    def frame(self, t):
+        ph = t / self.period
+        step = -0.12 if self.reverse else 0.12
+        return [self.colour_at(ph + z * step) for z in range(4)]
+
+    def run(self):
+        t0, first = time.monotonic(), True
+        try:
+            while not self._halt.is_set():
+                self.kb.write_zones(self.frame(time.monotonic() - t0), self.light, announce=first)
+                first = False
+                self._halt.wait(0.04)
+        except OSError as e:
+            log.warning("zone effect stopped: %s", e)
+
+
+class ZoneFlash(ZoneWave):
+    """Flash for four-zone keyboards: each palette colour fades in and out in turn (the firmware Flash on FF12
+    keyboards switches hard on and off). Several colours: one after another; one colour: it keeps pulsing."""
+
+    def __init__(self, kb, light, speed, colors=None, reverse=False):
+        super().__init__(kb, light, speed, colors=colors, reverse=reverse)
+        self.name = "zone-flash"
+        self.palette = [tuple(c) for c in colors] if colors else list(DEFAULT_COLORS)
+        self.pulse = (2.0, 1.5, 1.1, 0.8, 0.55)[max(0, min(4, speed))]     # seconds per flash
+
+    def frame(self, t):
+        import math
+        n = int(t / self.pulse)
+        level = math.sin(math.pi * ((t / self.pulse) % 1.0)) ** 2           # smooth 0 -> 1 -> 0
+        c = self.palette[n % len(self.palette)]
+        return [tuple(int(v * level) for v in c)] * 4
 
 
 class ITEKeyboard:
@@ -186,6 +312,9 @@ class ITEKeyboard:
         self.kb_type = 0
         self.saved = None          # last effect (for power on)
         self.ap = None
+        self._last_apply = 0.0
+        self.pictures_ok = True    # False: the firmware ignores 12h/16h pictures (setting kb_picture_modes off)
+        self._onkey = False
         self._detect()
 
     # -- low level -------------------------------------------------------------------
@@ -237,12 +366,15 @@ class ITEKeyboard:
             log.warning("ITE firmware version: %s", e)
         up, hi = self.usage_page, self.ver[0]
         kbid = self.ec.read(0x73C)
+        # ILM_RGBKB_Init (checked in the IL): usage page FF02 -> type 4, FF12 -> four-zone keyboard (type 3 on
+        # project 0x11, otherwise 2), FF03 -> per-key keyboards by firmware version and EC 0x73C.
+        # (Up to 1.5.3 FF02 and FF12 were swapped here: MAIBENBEN Tsunami, ITE CE00 / FF12, is a four-zone keyboard.)
         t = 5
         if up == 0xFF02:
-            t = 3 if self.project == 0x11 else 2
-        elif up == 0xFF03:
             t = 4
         elif up == 0xFF12:
+            t = 3 if self.project == 0x11 else 2
+        elif up == 0xFF03:
             if hi == 0x14:
                 t = {0x39: 0xD, 0x31: 0xE, 0x79: 0xF, 0x71: 0x10}.get(kbid, 5)
             elif hi in (0x13, 0x16):
@@ -254,6 +386,9 @@ class ITEKeyboard:
         self.kb_type = t
         log.info("ITE keyboard %s pid=%04x usage=%s fw=%s type=%#x", self.node, self.pid,
                  hex(up) if up else None, ".".join(f"{x:X}" for x in self.ver), t)
+
+    def four_zone(self):
+        return self.kb_type in (2, 3)
 
     def fw_effects(self):
         hi, lo = self.ver[0], self.ver[1]
@@ -344,6 +479,17 @@ class ITEKeyboard:
             self.feature([0, 0x16, 0, row])
             self.output(pkt)
 
+    def write_zones(self, cols, light, announce=False):
+        """Four-zone keyboard: zone colours into palette slots 1..4 and the firmware static effect (colour arg 8)."""
+        with self.lock:
+            for i, (r, g, b) in enumerate(cols[:4]):
+                self.cmd14(i + 1, r, g, b)
+            if announce or getattr(self, "_zone_light", None) != light:
+                self.cmd08(2, 0x01, 0, light, 8, 0, 0)
+                self._zone_light = light
+            else:
+                self.cmd08(2, 0x01, 0, light, 8, 0, 0)
+
     # -- effects --------------------------------------------------------------------------
     def fw_mode(self, effect, light, speed, direction, colors, circular, ctrl=2):
         """Set_ITE_Effect_Type_FwMode"""
@@ -367,24 +513,46 @@ class ITEKeyboard:
             self.ap.join(timeout=2)
             self.ap = None
 
-    def set_effect(self, idx, light=4, speed=2, direction=0, colors=None, circular=False, user=None, alphabet=None):
+    def set_effect(self, idx, light=4, speed=2, direction=0, colors=None, circular=False, user=None, alphabet=None,
+                   force=False):
         """ILM_RGBKB_SetEffectALL(mode=1) + Set_Lighting_Effect"""
         if idx not in EFFECTS:
             raise ValueError("unknown effect")
         code = EFFECTS[idx][1]
         if code == 0x22 or (code in LB_ONLY_EFFECTS and self.kb_type not in ME_LIGHTBAR):
             raise NotImplementedError("software effect")
+        colors = [tuple(c) for c in (colors or [])]
+        want = dict(idx=idx, light=light, speed=speed, direction=direction,
+                    colors=colors, circular=circular, user=user, alphabet=alphabet)
+        now = time.monotonic()
+        if want == self.saved and now - self._last_apply < REPEAT_WINDOW and not force:
+            log.debug("keyboard effect repeated within %.1f s — skipped", REPEAT_WINDOW)
+            return
+        had_ap = self.ap is not None
         self.stop_ap()
         lv, sp = LIGHT[max(0, min(4, light))], SPEED[max(0, min(4, speed))]
         dr = DIRECTION.get(direction, 1)
-        colors = [tuple(c) for c in (colors or [])]
+        if self.four_zone() and code not in FOUR_ZONE_EFFECTS | FOUR_ZONE_SOFT:
+            raise ValueError("this effect is not available on a four-zone keyboard")
         with self.lock:
-            self.cmd08(5)
-            if code == 0x01:
-                # GCUService draws "single colour" as a 12h picture unless the firmware is 0x12.9+/0x14/0x16/0x20;
-                # ITE firmware 0x11 (e.g. MAIBENBEN Tsunami, project 0x10) ignores that picture but runs
-                # every firmware effect, so it gets the firmware static effect too
-                if self.fw_effects() or self.ver[0] == 0x11 or self.kb_type in (2, 3) or self.kb_type in ME_LIGHTBAR:
+            gap = MIN_GAP - (time.monotonic() - self._last_apply)
+            if had_ap:
+                gap = max(gap, 0.05)
+            if gap > 0:
+                time.sleep(gap)
+            self.cmd08(5)                      # ILM_RGBKB_SetEffectALL(mode 1): reset, then Set_Lighting_Effect
+            if self.four_zone():
+                # full stop between effects: on FF12 keyboards the firmware otherwise keeps parts of the previous
+                # effect (palette slots, zones) when one effect follows another
+                self.cmd08(1)
+                time.sleep(0.03)
+            if code == 0x01 and self.four_zone() and not circular:
+                # one colour for every zone: the colour goes to all palette slots (a single slot = zone 1 only)
+                self.fw_mode(code, lv, sp, dr, [(colors or [(255, 255, 255)])[0]] * 7, True)
+            elif code == 0x01:
+                # SetSingleEffect: firmware static effect on 0x12.9+/0x14/0x16/0x20, 4-zone and light bars,
+                # otherwise a 12h picture of one colour (Set_ITE_Effect_Type_StaticMode)
+                if self.fw_effects() or self.kb_type in (2, 3) or self.kb_type in ME_LIGHTBAR or not self.pictures_ok:
                     self.fw_mode(code, lv, sp, dr, colors or [(255, 255, 255)], False)
                 else:
                     self.write_static(colors[0] if colors else (255, 255, 255), lv)
@@ -402,6 +570,18 @@ class ITEKeyboard:
                     for i, k in enumerate((0x62, 0x76, 0x77, 0x78)):
                         buf[k] = cols[i]
                     self.write_rows(buf, lv)
+            elif code == 0x34 and self.four_zone():
+                self.ap = ZoneWave(self, lv, speed, reverse=dr == 2)
+                self.ap.start()
+            elif code == 0x03 and self.four_zone():
+                # the firmware Wave on FF12 keyboards jumps from palette colour to palette colour; blend instead
+                self.ap = ZoneWave(self, lv, speed, colors=colors if len(colors) > 1 else DEFAULT_COLORS,
+                                   reverse=dr == 2)
+                self.ap.start()
+            elif code == 0x12 and self.four_zone():
+                # Flash with fading instead of the hard on/off of the firmware
+                self.ap = ZoneFlash(self, lv, speed, colors=colors if circular or colors else None)
+                self.ap.start()
             elif code == 0x34:
                 if self.ver[0] == 0x20:
                     self.fw_mode(0x22, lv, sp, dr, colors, circular, ctrl=7)
@@ -415,8 +595,15 @@ class ITEKeyboard:
                     for i, c in enumerate(((255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 0, 255))):
                         self.cmd14(i + 1, *c)
                 self.fw_mode(code, lv, sp, dr, colors, circular)
-            self.saved = dict(idx=idx, light=light, speed=speed, direction=direction,
-                              colors=colors, circular=circular, user=user, alphabet=alphabet)
+            if code in REACTIVE and dr == 1 and not self._onkey:
+                try:
+                    self.ec.set_bit(REG_ONKEY, ONKEY_BIT, True)
+                    self._onkey = True
+                    log.info("EC passes key presses to the keyboard (0x741 bit 3) for reactive effects")
+                except Exception as e:  # noqa: BLE001
+                    log.warning("EC 0x741: %s", e)
+            self.saved = want
+            self._last_apply = time.monotonic()
 
     def set_power(self, on):
         self.stop_ap()               # outside the lock: the frame thread may be waiting for it
@@ -424,8 +611,9 @@ class ITEKeyboard:
             if not on:
                 self.cmd08(5)
                 self.cmd08(1)
+                self._onkey = False          # Disable_EC_OnkeyPressed: set again with the next reactive effect
             elif self.saved:
-                self.set_effect(**self.saved)
+                self.set_effect(**self.saved, force=True)
             else:
                 self.set_effect(4)
 
@@ -434,7 +622,7 @@ class ITEKeyboard:
         if self.saved:
             s = dict(self.saved)
             s["light"] = light
-            self.set_effect(**s)
+            self.set_effect(**s, force=True)
 
     def close(self):
         self.stop_ap()
@@ -457,6 +645,7 @@ class MockITE(ITEKeyboard):
         self.kb_type = 5
         self.saved = None
         self.ap = None
+        self._last_apply, self._onkey, self.pictures_ok = 0.0, False, True
         self.log = __import__("collections").deque(maxlen=500)
 
     def feature(self, data):

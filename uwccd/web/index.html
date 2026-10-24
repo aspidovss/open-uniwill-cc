@@ -52,10 +52,9 @@
           <h3 data-i>Fans</h3>
           <div id="fan-bars"></div>
         </div>
-        <div class="card">
-          <h3 data-i>Temperature history</h3>
-          <svg id="temp-chart" viewBox="0 0 400 140" preserveAspectRatio="none" class="chart"></svg>
-          <div class="legend"><span class="lg cpu" data-i>CPU</span><span class="lg gpu" data-i>GPU</span></div>
+        <div class="card" id="mon-lc">
+          <div class="row between"><h3 data-i>Liquid cooling</h3><button class="btn ghost" id="mon-lc-open" data-i>Open</button></div>
+          <div id="mon-lc-body"></div>
         </div>
       </div>
       <div class="card">
@@ -110,6 +109,8 @@
             <p class="muted tiny" data-i>Usually not needed. Tick them only if the developer asks.</p>
             <div id="rep-private" class="rep-list"></div></div>
         </div>
+        <label class="chk" style="margin-top:12px"><input type="checkbox" id="rep-debug"> <span data-i>Debug logging</span></label>
+        <p class="muted tiny" style="margin:4px 0 0 26px" data-i>Turn on, repeat the problem, then create the report: the log will contain every command sent to the hardware. Turn off afterwards.</p>
         <div id="rep-done" class="rep-done hidden"></div>
       </div>
     </section>

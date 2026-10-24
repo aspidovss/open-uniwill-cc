@@ -673,5 +673,63 @@ class PlatformSupportUnit(unittest.TestCase):
         self.assertEqual(self._pf(known).support, "known")
 
 
+class KeyboardTimingUnit(unittest.TestCase):
+    def _kb(self, kb_type, ver=(0x11, 5, 0, 0)):
+        from uwccd.ec import MockEC
+        from uwccd.lighting import ite
+        ec = MockEC(os.path.join(tempfile.mkdtemp(), "ec.json"))
+        k = ite.MockITE(ec)
+        k.ver, k.kb_type = ver, kb_type
+        return k, ec, ite
+
+    def test_per_key_keyboard(self):
+        k, ec, _ = self._kb(5)
+        k.set_effect(0, light=1, colors=[(0, 255, 0)])
+        self.assertEqual(k.log[0], ("F", "000805000000000000"))   # reset first, as ILM_RGBKB_SetEffectALL
+        self.assertEqual(k.log[1], ("F", "000802330008000000"))   # single colour as a 12h picture
+        n = len(k.log)
+        k.set_effect(0, light=1, colors=[(0, 255, 0)])            # double click: dropped
+        self.assertEqual(len(k.log), n)
+        k.set_effect(12, light=1, colors=[(0, 255, 0)])           # Aurora: EC passes key presses
+        self.assertTrue(ec.read(0x741) & 0x08)
+
+    def test_four_zone_keyboard(self):
+        k, ec, ite = self._kb(2)                                  # MAIBENBEN Tsunami: ITE CE00, usage page FF12
+        k.set_effect(0, light=1, colors=[(0, 255, 0)])
+        pal = [v for f, v in k.log if v.startswith("0014")]
+        self.assertEqual(len(pal), 7)                             # the colour in every palette slot ...
+        self.assertTrue(k.log[-1][1].startswith("0008020105080801"))   # ... and colour argument 8
+        with self.assertRaises(ValueError):
+            k.set_effect(14)                                      # User mode: per-key picture, not on FF12
+        with self.assertRaises(ValueError):
+            k.set_effect(12)                                      # Aurora: not offered for FourZone by the original
+        for idx in (7, 16):                                       # Neon (blended frames), Flash (fading)
+            k.log.clear()
+            k.set_effect(idx, light=1, speed=4)
+            time.sleep(0.3)
+            k.stop_ap()
+            self.assertGreater(sum(1 for f, v in k.log if v.startswith("0014")), 8, idx)
+            self.assertFalse(any(v.startswith("00080212") for f, v in k.log))   # no firmware Flash
+        k.set_effect(26, light=1, speed=2)                        # Colour wave: drawn zone by zone by the service
+        time.sleep(0.3)
+        k.stop_ap()
+        zones = [v for f, v in k.log if v.startswith("0014")][-4:]
+        self.assertEqual([v[6:8] for v in zones], ["01", "02", "03", "04"])
+        self.assertTrue(k.log[-1][1].startswith("000802010008"))   # static effect, colour argument 8
+
+
+class DetectUnit(unittest.TestCase):
+    def test_usage_page_types(self):
+        from uwccd.ec import MockEC
+        from uwccd.lighting import ite
+        ec = MockEC(os.path.join(tempfile.mkdtemp(), "ec.json"))
+        for up, project, want in ((0xFF12, 0x10, 2), (0xFF12, 0x11, 3), (0xFF02, 0x10, 4)):
+            k = ite.MockITE(ec)
+            k.usage_page, k.project = up, project
+            k.firmware_version = lambda: (0x11, 5, 0, 0)
+            k._detect()
+            self.assertEqual(k.kb_type, want, hex(up))
+
+
 if __name__ == "__main__":
     unittest.main()

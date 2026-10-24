@@ -156,7 +156,6 @@ function render() {
 }
 
 // ---------------------------------------------------------------- monitor
-const hist = { cpu: [], gpu: [] };
 function gauge(label, value, unit, max, sub, color) {
   const v = value == null ? 0 : value, frac = Math.max(0, Math.min(1, v / max));
   const R = 56, C = Math.PI * R, off = C * (1 - frac);
@@ -187,11 +186,6 @@ function onMonitor(m) {
   fb.append(bar("cpu", t("Processor fan"), m.fans.cpu_duty, m.fans.cpu_rpm));
   if (m.fans.gpu_duty != null) fb.append(bar("gpu", t("Graphics card fan"), m.fans.gpu_duty, m.fans.gpu_rpm));
   fb.append(h("p", { class: "muted tiny" }, S ? `${t("Active table:")} ${TABLE_LABEL[S.power.current_table] || "—"}${S.power.fan_boost ? " · " + t("Fan Boost") : ""}` : ""));
-  if (m !== lastMonitor) {
-    hist.cpu.push(m.cpu.temp ?? null); hist.gpu.push(m.gpu?.temp ?? null);
-    for (const k of ["cpu", "gpu"]) if (hist[k].length > 120) hist[k].shift();
-  }
-  drawHist();
   $("#st-mem").innerHTML = ""; $("#st-mem").append(h("h3", {}, t("Memory")), h("div", { class: "big" }, `${m.memory.usage}%`), h("div", { class: "sub" }, t("{0} of {1} GB", (m.memory.used_mb / 1024).toFixed(1), (m.memory.total_mb / 1024).toFixed(1))));
   $("#st-net").innerHTML = ""; $("#st-net").append(h("h3", {}, t("Network")), h("div", { class: "big" }, `↓ ${fmtRate(m.net.down_kbs)}`), h("div", { class: "sub" }, `↑ ${fmtRate(m.net.up_kbs)}`));
   const b = m.battery; $("#st-bat").innerHTML = "";
@@ -203,15 +197,38 @@ function onMonitor(m) {
 let lastMonitor = null;
 function fmtRate(k) { return k > 1024 ? `${(k / 1024).toFixed(1)} ${t("MB/s")}` : `${k} ${t("KB/s")}`; }
 function batStatus(s) { return { Charging: t("Charging"), Discharging: t("Discharging"), Full: t("Fully charged"), "Not charging": t("Not charging") }[s] || s || ""; }
-function drawHist() {
-  const svg = $("#temp-chart"), W = 400, H = 140;
-  const line = (arr, color) => {
-    const pts = arr.map((v, i) => v == null ? null : `${(i / 119) * W},${H - (v / 100) * H}`).filter(Boolean);
-    return pts.length > 1 ? `<polyline points="${pts.join(" ")}" fill="none" stroke="${color}" stroke-width="2"/>` : "";
-  };
-  let grid = ""; for (const t of [25, 50, 75]) grid += `<line x1="0" x2="${W}" y1="${H - t / 100 * H}" y2="${H - t / 100 * H}" stroke="#1f2830"/><text x="4" y="${H - t / 100 * H - 3}" fill="#55636e" font-size="9">${t}°</text>`;
-  svg.innerHTML = grid + line(hist.cpu, "var(--cpu)") + line(hist.gpu, "var(--gpu)");
+// liquid cooler summary on the Monitor page (the full controls are on the Liquid cooling page)
+function renderMonLc() {
+  const box = $("#mon-lc-body"); if (!box || !S) return;
+  const L = S.liquid || {}, c = L.config || {};
+  box.innerHTML = "";
+  if (!L.available) {
+    box.append(h("p", { class: "muted" }, t("Bluetooth support for the liquid cooler is not available on this computer.")));
+    return;
+  }
+  if (!L.connected) {
+    box.append(h("div", { class: "lc-mini-state" }, h("span", { class: "dot off" }), h("b", {}, t("Not connected"))),
+      h("p", { class: "muted tiny" }, c.address ? t("Last cooler: {0}", c.name || c.address) : t("Turn the cooler on and connect it on the Liquid cooling page.")));
+    return;
+  }
+  const mode = LC_MODES.find(x => x.id === c.mode);
+  box.append(h("div", { class: "lc-mini-state" }, h("span", { class: "dot " + (L.flow === "fault" ? "bad" : "on") }), h("b", {}, L.name || t("Liquid cooling")),
+    h("span", { class: "muted tiny" }, mode ? t(mode.name) : "")));
+  const dl = h("dl", { class: "kv" });
+  const temp = c.mode === "ec" && L.ec_target ? t("EC targets")
+    : L.temp != null ? `${L.temp_avg ?? L.temp}°C${L.tier != null && ["auto", "ec"].includes(c.mode) ? ` · ${t("tier")} ${L.tier + 1}` : ""}` : "—";
+  for (const [k, v, cls] of [[t("Pump"), L.pump != null ? (L.pump ? `${L.pump} V` : t("off")) : "—"],
+                              [t("Cooler fan"), L.fan != null ? `${L.fan}%` : "—"],
+                              [t("Coolant flow"), t(FLOW[L.flow] || L.flow || "—") + (L.guard ? " · " + t("guard 11 V") : ""), "flow-" + L.flow],
+                              [t("Temperature (tier)"), temp]])
+    dl.append(h("dt", {}, k), h("dd", { class: cls || "" }, v));
+  box.append(dl);
+  if (["auto", "ec"].includes(c.mode) && (L.pending || L.pump_idle))
+    box.append(h("p", { class: "muted tiny", style: "margin:6px 0 0" },
+      [L.pending ? t(L.pending.dir === "up" ? "Faster in {0} s if the temperature holds" : "Slower in {0} s if the temperature holds", L.pending.left) : "",
+       L.pump_idle ? t("Pump stopped: cool") : ""].filter(Boolean).join(" · ")));
 }
+$("#mon-lc-open").addEventListener("click", () => $(`#nav a[data-page="liquid"]`)?.click());
 
 // ---------------------------------------------------------------- modes
 function fanDisabledNote(el) {
@@ -548,8 +565,12 @@ function renderLight() {
   const eb = $("#effects"); eb.innerHTML = "";
   for (const [id, name] of Object.entries(k.effects)) {
     const na = (k.unsupported_effects || []).includes(+id);
-    eb.append(h("div", { class: `eff${+id === kbSel.effect ? " on" : ""}${na ? " na" : ""}`, title: na ? (+id === 13 ? t("Music mode needs audio capture — not supported") : (+id === 14 || +id === 15) ? t("Not supported by this keyboard firmware") : t("Light bar only effect")) : "",
-      onclick: () => { if (na) return toast(t("This effect is not available for this keyboard"), true); kbSel.effect = +id; applyKb(); } },
+    eb.append(h("div", { class: `eff${+id === kbSel.effect ? " on" : ""}${na ? " na" : ""}`, title: na ? (k.four_zone && !(+id === 13) ? t("Not available on this keyboard") : +id === 13 ? t("Music mode needs audio capture — not supported") : (+id === 14 || +id === 15) ? t("Not supported by this keyboard firmware") : t("Light bar only effect")) : "",
+      onclick: () => {
+        if (na) return toast(t("This effect is not available for this keyboard"), true);
+        if (+id === 2 && kbSel.effect !== 2) kbSel.circular = true;      // Wave: all palette colours by default
+        kbSel.effect = +id; applyKb();
+      } },
       h("div", { class: "sw8" }), t(EFFECT_NAME[name] || name)));
   }
   for (const [id, key] of [["kb-light", "light"], ["kb-speed", "speed"]]) { $("#" + id).value = kbSel[key]; $("#" + id).nextElementSibling.textContent = kbSel[key]; }
@@ -691,11 +712,11 @@ function renderSwitches() {
   item("Debug logging", "Write detailed messages to the service log (for bug reports).", "debug", s.debug);
   item("Record sensor history", "Charts on the Monitor page: 15 minutes every 2 s, an hour every 5 s, 24 hours as per-minute averages (kept on disk). Turn off to stop recording.", "history_record", s.history_record);
   item("Check for updates automatically", "Once a day the service asks GitHub for the latest release of open-uniwill-cc. Nothing else is sent.", "update_check", s.update_check);
-  if (S.keyboard && (S.keyboard.picture_modes_blocked || S.keyboard.picture_modes_override)) {
-    const c = h("input", { type: "checkbox" }); c.checked = !!S.keyboard.picture_modes_override;
+  if (S.keyboard && S.keyboard.picture_modes_switch) {
+    const c = h("input", { type: "checkbox" }); c.checked = !S.keyboard.picture_modes_blocked;
     c.addEventListener("change", () => act(() => api("setting", { key: "kb_picture_modes", value: c.checked })));
-    L.append(h("div", { class: "item" }, h("div", {}, h("h4", {}, t("Per-key and gaming lighting modes")),
-      h("p", {}, t("Hidden because this keyboard firmware ignores them. Turn on to try anyway."))), h("label", { class: "sw" }, c, h("span"))));
+    L.append(h("div", { class: "item" }, h("div", {}, h("h4", {}, t("Per-key keyboard pictures")),
+      h("p", {}, t("Single colour, User mode, Gaming and the software effects (Neon, Stack, Impact, Alphabet) are drawn key by key, as in the original Control Center. Turn off if the keyboard ignores them: single colour then uses the firmware effect and the others are hidden."))), h("label", { class: "sw" }, c, h("span"))));
   }
   if (S.power && S.power.limits && S.power.limits.tjmax && !S.platform.amd)
     item("Extended CPU temperature limit range", "Allow a CPU temperature limit down to 60 °C in the profiles (default: down to 85 °C).", "tcc_extended", s.tcc_extended);
@@ -727,7 +748,10 @@ $("#bind-add").addEventListener("click", () => {
 });
 
 // ---------------------------------------------------------------- info
+$("#rep-debug").addEventListener("change", e => act(() => api("setting", { key: "debug", value: e.target.checked }),
+  e.target.checked ? t("Debug logging on") : t("Debug logging off")));
 function renderInfo() {
+  if (S.settings) $("#rep-debug").checked = !!S.settings.debug;
   const i = S.info, p = S.platform;
   const dl = (el, rows) => { el.innerHTML = ""; for (const [k, v] of rows) el.append(h("dt", {}, k), h("dd", {}, v ?? "—")); };
   const lc = S.liquid || {};
@@ -768,6 +792,7 @@ function rgbHex(c) { return "#" + c.map(x => x.toString(16).padStart(2, "0")).jo
 function lcPost(op, body, ok) { return act(() => api("lc/" + op, body || {}), ok); }
 
 function renderLiquid() {
+  renderMonLc();
   const L = S.liquid; if (!L) return;
   const pill = $("#lc-pill");
   pill.classList.toggle("hidden", !L.connected);
@@ -948,6 +973,8 @@ const HIST = {
     marks: [["gpl", "GPU power limit", "#f5a524"]] },
   total: { name: "Total power", unit: "W", max: 0, lines: [["tp", "CPU + GPU", "var(--acc)"], ["bp", "From battery", "#f5a524"]],
     nodata: "no data", marks: [["adapter", "Power adapter", "#ff6b6b"]] },
+  clock: { name: "Clocks", unit: "MHz", max: 0, lines: [["cm", "CPU", "var(--cpu)"], ["gm", "GPU", "var(--gpu)"]],
+    nodata: "no data" },
   fans: { name: "Fans", unit: "rpm", max: 0, lines: [["cf", "CPU", "var(--cpu)"], ["gf", "GPU", "var(--gpu)"]] },
   cooler: { name: "Cooler", unit: "%", max: 100, lines: [["lf", "Cooler fan", "var(--acc)"], ["lpx", "Pump (V × 8)", "var(--warn)"]] },
 };
@@ -1091,9 +1118,9 @@ function renderHistDetail() {
   if (!p) { box.classList.add("hidden"); return; }
   const f = (v, u, mx) => v == null ? null : `${v} ${t(u)}` + (mx != null ? ` (${t("max")} ${mx})` : "");
   const groups = [
-    [t("CPU"), [[t("Temperature"), f(p.ct, "°C", p.ct_mx)], [t("Load"), f(p.cl, "%")], [t("Power draw"), f(p.cp, "W", p.cp_mx)],
+    [t("CPU"), [[t("Temperature"), f(p.ct, "°C", p.ct_mx)], [t("Load"), f(p.cl, "%")], [t("Clock"), f(p.cm, "MHz")], [t("Power draw"), f(p.cp, "W", p.cp_mx)],
       [t("Power limits"), [p.pl1, p.pl2, p.pl4].some(x => x != null) ? [p.pl1, p.pl2, p.pl4].map(x => x ?? "—").join(" / ") + " " + t("W") : null]]],
-    [t("GPU"), [[t("Temperature"), f(p.gt, "°C", p.gt_mx)], [t("Load"), f(p.gl, "%")], [t("Power draw"), f(p.gp, "W", p.gp_mx)], [t("GPU power limit"), f(p.gpl, "W")]]],
+    [t("GPU"), [[t("Temperature"), f(p.gt, "°C", p.gt_mx)], [t("Load"), f(p.gl, "%")], [t("Clock"), f(p.gm, "MHz")], [t("Power draw"), f(p.gp, "W", p.gp_mx)], [t("GPU power limit"), f(p.gpl, "W")]]],
     [t("Total power"), [[t("CPU + GPU"), f(p.tp, "W", p.tp_mx)], [t("From battery"), f(p.bp, "W")]]],
     [t("Fans"), [[t("CPU"), f(p.cf, "rpm")], [t("GPU"), f(p.gf, "rpm")], [t("Cooler fan"), f(p.lf, "%")], [t("Pump"), f(p.lp, "V")]]],
   ];

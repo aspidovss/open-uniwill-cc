@@ -236,7 +236,7 @@ class Service:
             self.liquid.resume()
             if self.keyboard.rgb and self.keyboard.rgb.saved and self.settings_store.get("kb_power", True):
                 try:
-                    self.keyboard.rgb.set_effect(**self.keyboard.rgb.saved)
+                    self.keyboard.rgb.set_effect(**self.keyboard.rgb.saved, force=True)
                 except Exception:  # noqa: BLE001
                     pass
             self.emit("status", {})

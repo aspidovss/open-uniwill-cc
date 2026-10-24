@@ -70,3 +70,49 @@ class EnergyMeterPower:
         while w > 1000:                     # some drivers report µW / pW: a laptop CPU package is < 1 kW
             w /= 1000.0
         return round(w, 1)
+
+
+class CpuFrequency:
+    """Current CPU clock on Windows: "Processor Frequency" (nominal MHz) × "% Processor Performance" / 100 — what Task
+    Manager shows as "Speed". psutil only reports the nominal clock there (it stays at e.g. 2300 MHz)."""
+    PATHS = (r"\Processor Information(_Total)\Processor Frequency",
+             r"\Processor Information(_Total)\% Processor Performance")
+
+    def __init__(self):
+        self.ok = False
+        try:
+            self.pdh = ctypes.WinDLL("pdh")
+            q = wintypes.HANDLE()
+            if self.pdh.PdhOpenQueryW(None, None, ctypes.byref(q)) != ERROR_SUCCESS:
+                return
+            self.counters = []
+            for p in self.PATHS:
+                c = wintypes.HANDLE()
+                if self.pdh.PdhAddEnglishCounterW(q, p, None, ctypes.byref(c)) != ERROR_SUCCESS:
+                    self.pdh.PdhCloseQuery(q)
+                    log.info("processor performance counters not available")
+                    return
+                self.counters.append(c)
+            self.query = q
+            self.pdh.PdhCollectQueryData(q)
+            self.ok = True
+        except (OSError, AttributeError) as e:
+            log.info("PDH: %s", e)
+
+    def mhz(self):
+        if not self.ok:
+            return None
+        try:
+            if self.pdh.PdhCollectQueryData(self.query) != ERROR_SUCCESS:
+                return None
+            vals = []
+            for c in self.counters:
+                v = PDH_FMT_COUNTERVALUE()
+                if self.pdh.PdhGetFormattedCounterValue(c, PDH_FMT_DOUBLE, None, ctypes.byref(v)) != ERROR_SUCCESS \
+                        or v.CStatus not in (0, 1):
+                    return None
+                vals.append(v.doubleValue)
+        except OSError:
+            return None
+        base, perf = vals
+        return round(base * perf / 100.0) if base > 0 and perf > 0 else None

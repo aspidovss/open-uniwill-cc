@@ -1,5 +1,34 @@
 # Changelog
 
+## 1.5.4
+
+- **Keyboard type detection fixed** (checked against the IL of `ILM_RGBKB_Init`): an ITE keyboard with usage page
+  `FF12` is a **four-zone** keyboard (type 2, type 3 on project 0x11) and `FF02` is type 4 — the two were swapped.
+  MAIBENBEN Tsunami (ITE CE00, firmware 11.5) is such a four-zone keyboard. Consequences:
+  - single colour goes to every zone (all palette slots, colour argument 8) — before only the first zone (the left
+    third) changed;
+  - colour correction for four-zone keyboards (`cheatRGB_4Zone`) is used;
+  - the firmware effects of the original window for this keyboard type (CCU.WinUI 5.56, `FourZone`): Single,
+    Breathing, Wave, Rainbow (a still rainbow, as on every ITE firmware), Flash, Mix — exactly the ones that work on
+    MAIBENBEN Tsunami; the others are greyed out;
+  - drawn by the service zone by zone (palette slots 1–4 + firmware static effect), with smooth transitions:
+    Neon, Stack and Impact (the frames of the original averaged per zone and blended), Colour wave, Wave and Flash
+    (fading flashes instead of the hard on/off of the firmware);
+  - Wave starts with all palette colours (*Multicolour*) by default, and on these keyboards it is drawn by the
+    service as a smooth blend of the palette colours flowing across the zones (the firmware Wave jumped between
+    colours);
+  - between two effects the backlight is switched off completely (reset + off), otherwise the firmware kept parts of
+    the previous effect.
+- Reactive, Ripple, Aurora and Spark on per-key keyboards: the EC is told to pass key presses to the keyboard
+  (`0x741` bit 3, `Enable_EC_OnkeyPressed`).
+- A repeated identical effect request within 0.6 s (double click) is dropped, and effect changes are kept 150 ms apart.
+- *Debug logging* switch on the diagnostic report card (it is also in *Settings → Switches*).
+- **Monitor:** a *Clocks* tab in the history (CPU and GPU clock, also in the CSV / JSON export and the point details);
+  the *Temperature history* card is replaced by a liquid cooler summary (state, mode, pump, fan, coolant flow,
+  temperature tier) with a button to its page.
+- Windows: the CPU clock is the current one ("Processor Frequency" × "% Processor Performance", as Task Manager shows
+  it) — it stayed at the nominal clock (e.g. 2300 MHz) before.
+
 ## 1.5.3
 
 - **Performance boost** card (*Mode selection*), independent of the mode — both switches stay on when you change

@@ -97,6 +97,9 @@ dl.kv dt{color:var(--muted)}dl.kv dd{margin:0;word-break:break-word}
 /* switches */
 .sw{position:relative;width:46px;height:26px;flex:none}
 .sw input{opacity:0;width:0;height:0}
+.lc-mini-state{display:flex;align-items:center;gap:8px;margin:4px 0 10px}.lc-mini-state .dot{width:9px;height:9px;border-radius:50%;background:var(--muted)}
+.lc-mini-state .dot.on{background:var(--acc)}.lc-mini-state .dot.bad{background:var(--bad)}
+#mon-lc .kv dd.flow-fault{color:var(--bad)}#mon-lc .kv dd.flow-ok{color:var(--acc)}
 .perf-row{gap:16px;padding:12px 0;border-top:1px solid var(--line);align-items:center}.perf-row p{margin:4px 0 0;max-width:720px}
 .sw.off{opacity:.4}.sw.off span{cursor:not-allowed}
 .sw span{position:absolute;inset:0;background:var(--bg3);border:1px solid var(--line);border-radius:99px;transition:.15s;cursor:pointer}

@@ -13,7 +13,7 @@ import psutil
 
 from ..monitor import Monitor, _num
 from . import winapi, winplat
-from .pdhpower import EnergyMeterPower
+from .pdhpower import CpuFrequency, EnergyMeterPower
 
 NVSMI = [r"C:\Windows\System32\nvidia-smi.exe", r"C:\Program Files\NVIDIA Corporation\NVSMI\nvidia-smi.exe"]
 
@@ -26,6 +26,7 @@ class WinMonitor(Monitor):
         self._bat_cache = (0.0, {})
         psutil.cpu_percent(None)
         self.rapl = EnergyMeterPower()        # CPU package power (W) for the sampler, like Rapl on Linux
+        self.cpufreq = CpuFrequency()         # current clock (psutil gives the nominal one on Windows)
 
     def cpu_temp(self):
         t, v = self._temp_cache
@@ -51,6 +52,9 @@ class WinMonitor(Monitor):
         return round(psutil.cpu_percent(None))
 
     def cpu_freq(self):
+        v = self.cpufreq.mhz()
+        if v:
+            return v
         f = psutil.cpu_freq()
         return round(f.current) if f and f.current else None
 

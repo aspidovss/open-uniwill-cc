@@ -160,6 +160,7 @@ class Sampler(threading.Thread):
                 "tp": round((cp or 0) + (gp or 0), 1) if cp is not None or gp is not None else None,
                 "bp": bat.get("power_w") if bat.get("status") == "Discharging" else None,
                 "cf": m["fans"].get("cpu_rpm"), "gf": m["fans"].get("gpu_rpm"),
+                "cm": m["cpu"].get("mhz"), "gm": g.get("core_mhz"),
                 "lf": lc.get("fan") if lc.get("connected") else None,
                 "lp": lc.get("pump") if lc.get("connected") else None}
 
@@ -213,7 +214,7 @@ def average(points):
 EXPORT_COLUMNS = [("t", "time"), ("ct", "cpu_temp_c"), ("gt", "gpu_temp_c"), ("cl", "cpu_load_pct"),
                   ("gl", "gpu_load_pct"), ("cp", "cpu_power_w"), ("gp", "gpu_power_w"), ("tp", "cpu_gpu_power_w"),
                   ("bp", "battery_discharge_w"), ("pl1", "cpu_pl1_w"), ("pl2", "cpu_pl2_w"), ("pl4", "cpu_pl4_w"),
-                  ("gpl", "gpu_power_limit_w"), ("cf", "cpu_fan_rpm"),
+                  ("gpl", "gpu_power_limit_w"), ("cm", "cpu_clock_mhz"), ("gm", "gpu_clock_mhz"), ("cf", "cpu_fan_rpm"),
                   ("gf", "gpu_fan_rpm"), ("lf", "cooler_fan_pct"), ("lp", "cooler_pump_v")]
 
 
