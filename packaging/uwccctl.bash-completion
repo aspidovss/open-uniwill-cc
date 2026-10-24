@@ -1,0 +1,137 @@
+# bash completion for uwccctl (open-uniwill-cc)        installed to /usr/share/bash-completion/completions/uwccctl
+_uwccctl() {
+    local cur prev words cword
+    if declare -F _init_completion >/dev/null; then
+        _init_completion || return
+    else
+        cur=${COMP_WORDS[COMP_CWORD]}; prev=${COMP_WORDS[COMP_CWORD-1]}; words=("${COMP_WORDS[@]}"); cword=$COMP_CWORD
+    fi
+    # drop --json so positions are counted without it
+    local w=() i
+    for ((i = 1; i < cword; i++)); do [[ ${words[i]} == --json ]] || w+=("${words[i]}"); done
+    local cmd=${w[0]} sub=${w[1]} n=${#w[@]}
+    local commands="status monitor mode profile boost super ramoc fan battery kb lb get set apps restore lc
+        history export import report lang debug version update restart resume lighting nvram ec ec-direct release help"
+    local onoff="on off"
+    local modes="office gaming turbo custom"
+    local keys="winkey_lock fn_lock usb_charger touchpad_toggle touchpad_enabled ac_recovery dgpu_direct
+        lightbar_trigger bluetooth wifi webcam kb_timeout osd lc_hwoc mem_oc super_performance history_record
+        update_check kb_picture_modes tcc_extended debug alerts overheat_boost kb_off_on_battery ppd_sync
+        cpu_alert gpu_alert mode_on_ac mode_on_battery lang fan_manager"
+    local tables="current M1T1 M1T2 M1T3 M1T4 M1T5 M2T1 M2T2 M2T3 M2T4 M2T5 M3T1 M3T2 M3T3 M3T4 M3T5 M4T1 M4T2 M4T3 M4T4 M4T5"
+    local targets="office gaming turbo custom office:0 office:1 gaming:0 gaming:1 turbo:0 turbo:1 custom:0 custom:1 custom:2 custom:3 custom:4"
+
+    if ((n == 0)); then
+        COMPREPLY=($(compgen -W "$commands --json" -- "$cur")); return
+    fi
+    case $cmd in
+        mode) ((n == 1)) && COMPREPLY=($(compgen -W "$modes" -- "$cur")) ;;
+        boost | super | ramoc | debug) ((n == 1)) && COMPREPLY=($(compgen -W "$onoff" -- "$cur")) ;;
+        lang) ((n == 1)) && COMPREPLY=($(compgen -W "en ru" -- "$cur")) ;;
+        help) ((n == 1)) && COMPREPLY=($(compgen -W "$commands" -- "$cur")) ;;
+        monitor) COMPREPLY=($(compgen -W "--watch" -- "$cur")) ;;
+        restore) COMPREPLY=($(compgen -W "--yes" -- "$cur")) ;;
+        update) ((n == 1)) && COMPREPLY=($(compgen -W "check install" -- "$cur")) ;;
+        profile)
+            if ((n == 1)); then COMPREPLY=($(compgen -W "list show set reset 0 1 2 3 4" -- "$cur"))
+            elif ((n == 2)) && [[ $sub == show || $sub == reset || $sub == set ]]; then
+                COMPREPLY=($(compgen -W "$targets" -- "$cur"))
+                [[ $sub == set ]] && COMPREPLY+=($(compgen -W "pl1= pl2= pl4= tcc= ctgp= db= gputemp= fanspeed= name=" -- "$cur"))
+                compopt -o nospace 2>/dev/null
+            elif [[ $sub == set ]]; then
+                COMPREPLY=($(compgen -W "pl1= pl2= pl4= tcc= ctgp= db= gputemp= fanspeed= name=" -- "$cur")); compopt -o nospace 2>/dev/null
+            fi ;;
+        fan)
+            if ((n == 1)); then COMPREPLY=($(compgen -W "list show set separate reset" -- "$cur"))
+            elif ((n == 2)) && [[ $sub != list ]]; then COMPREPLY=($(compgen -W "$tables" -- "$cur"))
+            elif ((n == 3)) && [[ $sub == set ]]; then COMPREPLY=($(compgen -W "cpu gpu --file" -- "$cur"))
+            elif ((n == 3)) && [[ $sub == separate ]]; then COMPREPLY=($(compgen -W "$onoff" -- "$cur"))
+            elif [[ $prev == --file ]]; then COMPREPLY=($(compgen -f -- "$cur"))
+            fi ;;
+        battery)
+            if ((n == 1)); then COMPREPLY=($(compgen -W "mode limit typec" -- "$cur"))
+            elif ((n == 2)) && [[ $sub == mode ]]; then COMPREPLY=($(compgen -W "full balanced stationary" -- "$cur"))
+            elif ((n == 2)) && [[ $sub == typec ]]; then COMPREPLY=($(compgen -W "$onoff" -- "$cur"))
+            fi ;;
+        kb)
+            if ((n == 1)); then COMPREPLY=($(compgen -W "on off effects effect level" -- "$cur"))
+            elif ((n == 2)) && [[ $sub == effect ]]; then
+                COMPREPLY=($(compgen -W "single breathing wave reactive rainbow ripple raindrop neon marquee stack impact
+                    spark aurora usermode gaming flash mix rippleo alphabet thinking colorfulwave" -- "${cur,,}"))
+            elif [[ $sub == effect ]]; then
+                case $prev in
+                    --dir) COMPREPLY=($(compgen -W "right left up down" -- "$cur")) ;;
+                    --light | --speed) COMPREPLY=($(compgen -W "0 1 2 3 4" -- "$cur")) ;;
+                    --color | --text) ;;
+                    *) COMPREPLY=($(compgen -W "--light --speed --dir --color --multi --no-multi --text" -- "$cur")) ;;
+                esac
+            fi ;;
+        lb)
+            local z=1; [[ $sub == hinge || $sub == base || $sub == logo ]] && z=2
+            local op=${w[z]}
+            if ((n == 1)); then COMPREPLY=($(compgen -W "hinge base logo on off color effect light" -- "$cur"))
+            elif ((n == z)); then COMPREPLY=($(compgen -W "on off color effect light" -- "$cur"))
+            elif ((n == z + 1)) && [[ $op == effect ]]; then
+                COMPREPLY=($(compgen -W "static breathing breathing_multi wave cycle rainbow colorbreath colorwave" -- "$cur"))
+            elif ((n == z + 1)) && [[ $op == light ]]; then COMPREPLY=($(compgen -W "0 1 2 3 4" -- "$cur"))
+            fi ;;
+        get) ((n == 1)) && COMPREPLY=($(compgen -W "$keys" -- "$cur")) ;;
+        set)
+            if ((n == 1)); then COMPREPLY=($(compgen -W "$keys" -- "$cur"))
+            elif ((n == 2)); then
+                case $sub in
+                    mode_on_ac) COMPREPLY=($(compgen -W "keep previous $modes" -- "$cur")) ;;
+                    mode_on_battery) COMPREPLY=($(compgen -W "keep $modes" -- "$cur")) ;;
+                    lang) COMPREPLY=($(compgen -W "en ru" -- "$cur")) ;;
+                    fan_manager) COMPREPLY=($(compgen -W "auto cml std" -- "$cur")) ;;
+                    kb_timeout | cpu_alert | gpu_alert) ;;
+                    *) COMPREPLY=($(compgen -W "$onoff" -- "$cur")) ;;
+                esac
+            fi ;;
+        apps)
+            if ((n == 1)); then COMPREPLY=($(compgen -W "add remove enable disable" -- "$cur"))
+            elif ((n == 3)) && [[ $sub == add ]]; then COMPREPLY=($(compgen -W "$modes" -- "$cur"))
+            fi ;;
+        lc)
+            if ((n == 1)); then
+                COMPREPLY=($(compgen -W "status scan connect disconnect mode manual tiers set idle rgb prime suspend" -- "$cur"))
+            elif ((n == 2)); then
+                case $sub in
+                    mode) COMPREPLY=($(compgen -W "auto laptop ec low medium high off" -- "$cur")) ;;
+                    set) COMPREPLY=($(compgen -W "temp_source delay_up delay_down smooth notify_flow flow_guard boost_fan boost_pump" -- "$cur")) ;;
+                    idle) COMPREPLY=($(compgen -W "$onoff" -- "$cur")) ;;
+                    rgb) COMPREPLY=($(compgen -W "off" -- "$cur")) ;;
+                    prime) COMPREPLY=($(compgen -W "stop" -- "$cur")) ;;
+                    disconnect) COMPREPLY=($(compgen -W "--forget" -- "$cur")) ;;
+                esac
+            elif ((n == 3)); then
+                case $sub in
+                    set) case ${w[2]} in
+                            temp_source) COMPREPLY=($(compgen -W "max cpu gpu" -- "$cur")) ;;
+                            delay_up | delay_down) ;;
+                            *) COMPREPLY=($(compgen -W "$onoff" -- "$cur")) ;;
+                         esac ;;
+                    rgb) COMPREPLY=($(compgen -W "static breathe rainbow breathe_rainbow spiral rotating_rainbow color_wave" -- "$cur")) ;;
+                    idle) COMPREPLY=($(compgen -W "off_below= off_after= on_above= on_after= min_run=" -- "$cur")); compopt -o nospace 2>/dev/null ;;
+                esac
+            elif [[ $sub == idle ]]; then
+                COMPREPLY=($(compgen -W "off_below= off_after= on_above= on_after= min_run=" -- "$cur")); compopt -o nospace 2>/dev/null
+            fi ;;
+        history)
+            COMPREPLY=($(compgen -W "csv csv-excel json 1m 5m 15m 1h 24h" -- "$cur") $(compgen -f -- "$cur")) ;;
+        export)
+            if ((n == 1)); then COMPREPLY=($(compgen -W "fans all" -- "$cur")); else COMPREPLY=($(compgen -f -- "$cur")); fi ;;
+        import)
+            if ((n == 1)); then COMPREPLY=($(compgen -f -- "$cur"))
+            else COMPREPLY=($(compgen -W "fans,profiles fans,profiles,settings settings --force" -- "$cur")); fi ;;
+        report)
+            case $prev in
+                --private) COMPREPLY=($(compgen -W "serial,uuid,mac,names,apps" -- "$cur")) ;;
+                --sections) ;;
+                *) COMPREPLY=($(compgen -W "--private --sections --full" -- "$cur") $(compgen -f -- "$cur")) ;;
+            esac ;;
+        ec) ((n == 1)) && COMPREPLY=($(compgen -W "read" -- "$cur")) ;;
+        ec-direct) ((n == 1)) && COMPREPLY=($(compgen -W "read dump" -- "$cur")) ;;
+    esac
+}
+complete -F _uwccctl uwccctl

@@ -1,39 +1,36 @@
 #!/usr/bin/env python3
-"""Command line control for the Control Center service.
+"""uwccctl — command line control for the open-uniwill-cc service.
 
-  uwccctl status                 current mode, fans, settings, liquid cooler
-  uwccctl mode office|gaming|turbo|custom
-  uwccctl profile <N>            profile of the current mode (0..2; RamFan1p5 platforms: 0..1, custom slots 0..4)
-  uwccctl boost on|off           FanBoost
-  uwccctl kb off|on|effect N     keyboard backlight
-  uwccctl lb [hinge|base|logo] on|off|color RRGGBB [EFFECT]|effect static|breathing|wave|rainbow|...|light 0-4
-  uwccctl lighting               keyboard / light bar devices (diagnostics)
-  uwccctl history [csv|csv-excel|json] [1m|5m|15m|1h|24h] [FILE]   sensor history (default 1h; stdout or FILE)
-  uwccctl debug on|off           verbose service log (for bug reports)
-  uwccctl version                version of the service and the latest release
-  uwccctl restart                restart the service (Linux: systemctl, group uwcc; Windows: administrator console)
-  uwccctl update [check|install] check GitHub for a new release (install: Windows only)
-  uwccctl report [FILE] [--private serial,uuid,mac,names,apps] [--sections system,ec,...] [--full]
-                                 diagnostic report (zip) for adding support / bug reports;
-                                 --full adds the original Control Center folders complete (large)
-  uwccctl export fans|all FILE   fan tables / full backup (profiles, settings, liquid cooler) to FILE
-  uwccctl import FILE [fans,profiles,settings] [--force]   default: fans,profiles; --force ignores another project
-  uwccctl lang en|ru             interface language (UI, notifications, this tool)
-  uwccctl lc status              liquid cooler (Bluetooth)
-  uwccctl lc scan                find coolers nearby
-  uwccctl lc connect ADDR        connect and remember (reconnects automatically)
-  uwccctl lc disconnect [--forget]
-  uwccctl lc mode auto|ec|low|medium|high|off
-  uwccctl lc manual FAN% PUMP_V  e.g. uwccctl lc manual 60 8   (pump 7/8/11/12 V, 0 = off)
-  uwccctl lc rgb RRGGBB [static|breathe|rainbow|breathe_rainbow|spiral|rotating_rainbow|color_wave]
-  uwccctl lc rgb off
-  uwccctl lc prime [stop]        coolant filling cycle (~68 s)
-  uwccctl lc suspend             put the cooler to sleep (used by the system-sleep hook)
-  uwccctl ec read ADDR           read an EC register through the service (hex address)
-  uwccctl nvram                  dump UniWillVariable fields
-  uwccctl resume                 re-apply settings (used by the system-sleep hook)
-  uwccctl ec-direct read ADDR    read EC without the service (root, for debugging)
-  uwccctl release                give fan control back to the EC, clear AP flags (root, used by uninstall)
+Usage: uwccctl [--json] COMMAND [ARGS]       uwccctl help [COMMAND]       Linux: man uwccctl
+
+Overview
+  status                         mode, fans, temperatures, battery, liquid cooler, settings
+  monitor [--watch [SEC]]        sensors once, or every SEC seconds (default 2) until Ctrl+C
+  mode [office|gaming|turbo|custom]
+  profile [N]                    show / select the profile slot of the current mode (from 0)
+  profile show|set|reset [TARGET] ...   PL1/PL2/PL4, TCC, cTGP, Dynamic Boost, GPU limit, name
+  boost [on|off]                 FanBoost (fans at maximum)
+  super [on|off]                 super performance (overclocking fan table and GPU limits)
+  ramoc [on|off]                 RAM overclocking (BIOS, applies after a reboot)
+  fan list|show|set|separate|reset ...   fan tables
+  battery [mode|limit|typec] ... battery protection mode, charge limits, Type-C priority
+  kb [on|off|effects|effect|level] ...   keyboard backlight
+  lb [hinge|base|logo] on|off|color|effect|light ...   light bar
+  get [KEY]  /  set KEY VALUE    switches and automation (see: uwccctl help set)
+  apps [add|remove|enable|disable] ...   switch the mode when a program runs
+  restore --yes                  factory profiles and fan tables
+  lc ...                         liquid cooler (Bluetooth): status, scan, connect, mode, manual, tiers, ...
+  history [csv|csv-excel|json] [1m|5m|15m|1h|24h] [FILE]
+  export fans|all FILE  /  import FILE [fans,profiles,settings] [--force]
+  report [FILE] [--private serial,uuid,mac,names,apps] [--sections ...] [--full]
+  lang en|ru  /  debug on|off  /  version  /  update [check|install]  /  restart
+  lighting  /  nvram  /  ec read ADDR  /  resume
+  ec-direct read ADDR [N] | dump BASE    (root, without the service)
+  release                        give fan control back to the EC (root, used by uninstall)
+
+--json prints machine-readable output (one JSON document; monitor --watch prints one per line).
+Exit codes: 0 success, 1 the service rejected the request, 2 wrong usage, 3 the service is
+unavailable or access is denied.
 """
 import json
 import locale
@@ -45,9 +42,29 @@ import urllib.request
 
 PORT = int(os.environ.get("UWCC_PORT", "47321"))
 IS_WIN = sys.platform == "win32"
-TOKEN_FILE = (os.path.join(os.environ.get("ProgramData", r"C:\ProgramData"), "UWCC", "run", "token") if IS_WIN
-              else "/run/uwcc/token")
+TOKEN_FILE = os.environ.get("UWCC_TOKEN_FILE") or (
+    os.path.join(os.environ.get("ProgramData", r"C:\ProgramData"), "UWCC", "run", "token") if IS_WIN
+    else "/run/uwcc/token")
 MODES = {"office": 0, "gaming": 1, "turbo": 2, "custom": 3}
+MODE_BY_ID = {v: k for k, v in MODES.items()}
+MODE_PREFIX = {"gaming": 1, "office": 2, "turbo": 3, "custom": 4}       # Mode<N>_Profile<k>
+BAT_MODES = {"full": 0, "balanced": 1, "stationary": 2}
+DIRECTIONS = {"right": 0, "left": 1, "up": 2, "down": 3}
+ON = ("on", "1", "true", "yes", "enable", "enabled")
+OFF = ("off", "0", "false", "no", "disable", "disabled")
+JSON = False
+
+# Keys of `uwccctl set` and their value types (bool | int | str | mode)
+SETTINGS = {
+    "winkey_lock": "bool", "fn_lock": "bool", "usb_charger": "bool", "touchpad_toggle": "bool",
+    "touchpad_enabled": "bool", "ac_recovery": "bool", "dgpu_direct": "bool", "lightbar_trigger": "bool",
+    "bluetooth": "bool", "wifi": "bool", "webcam": "bool", "kb_timeout": "int", "osd": "bool",
+    "lc_hwoc": "bool", "mem_oc": "bool", "super_performance": "bool", "history_record": "bool",
+    "update_check": "bool", "kb_picture_modes": "bool", "tcc_extended": "bool", "debug": "bool",
+    "alerts": "bool", "overheat_boost": "bool", "kb_off_on_battery": "bool", "ppd_sync": "bool",
+    "cpu_alert": "int", "gpu_alert": "int", "mode_on_ac": "mode", "mode_on_battery": "mode", "lang": "str",
+    "fan_manager": "str",
+}
 
 TEXT = {
     "en": {
@@ -85,6 +102,92 @@ TEXT = {
 }
 LANG = "en"
 
+# `uwccctl help COMMAND` — the same text as the man page, for Windows where there is no man
+HELP = {
+    "status": "uwccctl status [--json]\n  Mode, profile, fans, temperatures, battery, liquid cooler and switches.\n"
+              "  --json prints {\"state\": ..., \"monitor\": ...} exactly as the service reports them.",
+    "monitor": "uwccctl monitor [--watch [SEC]] [--json]\n  CPU/GPU temperature, load, clock, power, fans, memory, battery.\n"
+               "  --watch repeats every SEC seconds (default 2, minimum 0.5) until Ctrl+C;\n"
+               "  with --json every sample is one line of JSON (NDJSON).",
+    "mode": "uwccctl mode [office|gaming|turbo|custom]\n  Without an argument prints the current mode.",
+    "profile": (
+        "uwccctl profile [N]                      show / select slot N (from 0) of the current mode\n"
+        "uwccctl profile show [TARGET]            values of a profile\n"
+        "uwccctl profile list                     all profiles\n"
+        "uwccctl profile set [TARGET] KEY=VALUE ...\n"
+        "uwccctl profile reset [TARGET]           factory values and fan curve of the slot\n"
+        "  TARGET: MODE or MODE:N (office, gaming:1, custom:4) or a raw name (Mode4_Profile5);\n"
+        "          default — the active profile.\n"
+        "  KEY:  pl1, pl2, pl4 (W)  tcc (°C below Tjmax | off)  ctgp (W | off)  db (Dynamic Boost W | off)\n"
+        "        gputemp (°C | off)  fanspeed (fan switch speed rpm | off)  name (custom slot name)\n"
+        "  Example: uwccctl profile set custom:0 pl1=65 pl2=90 tcc=10 ctgp=off name=Quiet"),
+    "boost": "uwccctl boost [on|off]\n  FanBoost: both fans at maximum speed.",
+    "super": "uwccctl super [on|off]\n  Super performance: Turbo fan table, maximum cTGP and Dynamic Boost, independent of the mode.",
+    "ramoc": "uwccctl ramoc [on|off]\n  RAM overclocking (UniWillVariable MemoryOverClockSwitch); takes effect after a reboot.",
+    "fan": (
+        "uwccctl fan list                         tables and which one is active\n"
+        "uwccctl fan show [TABLE]                 levels of a table (default: the active one)\n"
+        "uwccctl fan set TABLE cpu|gpu POINT ...  POINT = UP/DOWN:DUTY, up to 16 levels;\n"
+        "                                         level 0 starts at 0 °C, e.g. 0/45:0 55/50:30 70/65:60 85/80:100\n"
+        "uwccctl fan set TABLE --file FILE        JSON in the format of `fan show --json`\n"
+        "uwccctl fan separate TABLE on|off        separate CPU and GPU curves (FanControlRespective)\n"
+        "uwccctl fan reset TABLE                  factory curve\n"
+        "  TABLE: a name from `fan list` (M1T1 ... M4T5) or `current`."),
+    "battery": (
+        "uwccctl battery                          status\n"
+        "uwccctl battery mode full|balanced|stationary\n"
+        "uwccctl battery limit UP [DOWN]          stop charging at UP %, resume below DOWN %\n"
+        "uwccctl battery typec on|off             charge from Type-C first"),
+    "kb": (
+        "uwccctl kb                               status\n"
+        "uwccctl kb on|off\n"
+        "uwccctl kb effects                       effects of this keyboard (number, name, support)\n"
+        "uwccctl kb effect NAME|N [--light 0-4] [--speed 0-4] [--dir right|left|up|down]\n"
+        "                  [--color RRGGBB[,RRGGBB...]] [--multi|--no-multi] [--text TEXT]\n"
+        "                                         options not given keep their current values\n"
+        "uwccctl kb level N                       brightness (RGB 0-4; single-colour keyboards 0-4)\n"
+        "  Example: uwccctl kb effect wave --speed 3 --multi"),
+    "lb": (
+        "uwccctl lb [hinge|base|logo] on|off\n"
+        "uwccctl lb [ZONE] color RRGGBB [EFFECT]\n"
+        "uwccctl lb [ZONE] effect static|breathing|breathing_multi|wave|cycle|rainbow|colorbreath|colorwave\n"
+        "uwccctl lb [ZONE] light 0-4"),
+    "get": "uwccctl get [KEY]\n  All switches and automation settings, or one of them.",
+    "set": ("uwccctl set KEY VALUE\n  bool: on|off   int: number   mode: keep|previous|office|gaming|turbo|custom\n"
+            "  " + "\n  ".join(f"{k:18} {v}" for k, v in SETTINGS.items()) +
+            "\n  kb_timeout: seconds 0..3600 (0 = never); cpu_alert/gpu_alert: 60..105 °C;\n"
+            "  mode_on_battery does not accept `previous`; lang: en|ru;\n"
+            "  fan_manager: auto|cml|std (restarts the service; auto = chosen by the project)."),
+    "apps": (
+        "uwccctl apps                             rules\n"
+        "uwccctl apps add PROCESS MODE            e.g. uwccctl apps add steam gaming\n"
+        "uwccctl apps remove PROCESS\n"
+        "uwccctl apps enable|disable PROCESS"),
+    "restore": "uwccctl restore --yes\n  Factory profiles and fan tables of every mode.",
+    "lc": (
+        "uwccctl lc [status]                      state of the liquid cooler\n"
+        "uwccctl lc scan                          find coolers nearby\n"
+        "uwccctl lc connect ADDR                  connect and remember\n"
+        "uwccctl lc disconnect [--forget]\n"
+        "uwccctl lc mode auto|laptop|ec|low|medium|high|off\n"
+        "uwccctl lc manual FAN% PUMP_V            pump 7/8/11/12 V, 0 = off\n"
+        "uwccctl lc tiers BELOW:FAN:PUMP ...      auto mode, e.g. 55:25:8 70:50:8 85:75:11 999:90:11\n"
+        "uwccctl lc set KEY VALUE                 temp_source max|cpu|gpu, delay_up/delay_down 0..300 s,\n"
+        "                                         smooth, notify_flow, flow_guard, boost_fan, boost_pump on|off\n"
+        "uwccctl lc idle on|off [off_below=50 off_after=60 on_above=55 on_after=10 min_run=120]\n"
+        "uwccctl lc rgb RRGGBB [static|breathe|rainbow|breathe_rainbow|spiral|rotating_rainbow|color_wave]\n"
+        "uwccctl lc rgb off\n"
+        "uwccctl lc prime [stop]                  coolant filling cycle (~68 s)\n"
+        "uwccctl lc suspend                       put the cooler to sleep (system-sleep hook)"),
+    "history": "uwccctl history [csv|csv-excel|json] [1m|5m|15m|1h|24h] [FILE]\n  Sensor history (default csv, 1h) to stdout or FILE.",
+    "export": "uwccctl export fans|all [FILE]\n  Fan tables or a full backup (profiles, settings, liquid cooler).",
+    "import": "uwccctl import FILE [fans,profiles,settings] [--force]\n  Default sections: fans,profiles; --force accepts a backup of another project.",
+    "report": ("uwccctl report [FILE] [--private serial,uuid,mac,names,apps] [--sections LIST] [--full]\n"
+               "  Diagnostic zip for bug reports; --full adds the original Control Center folders."),
+    "update": "uwccctl update [check|install]\n  Check GitHub for a new release (install: Windows only).",
+    "restart": "uwccctl restart\n  Restart the service (Linux: systemctl, group uwcc via polkit; Windows: administrator console).",
+}
+
 
 def T(k):
     return TEXT[LANG].get(k, TEXT["en"].get(k, k))
@@ -95,39 +198,72 @@ def guess_lang():
     return "ru" if loc.lower().startswith("ru") else "en"
 
 
+def fail(msg, code=1):
+    """Error: text on stderr, or {"error": ...} on stdout with --json."""
+    if JSON:
+        msg = str(msg)
+        for pre in (TEXT["en"]["error"] + ": ", TEXT["ru"]["error"] + ": "):
+            msg = msg[len(pre):] if msg.startswith(pre) else msg
+        print(json.dumps({"error": msg}, ensure_ascii=False))
+    else:
+        print(msg, file=sys.stderr)
+    sys.exit(code)
+
+
+def usage(topic):
+    fail(HELP.get(topic, __doc__), 2)
+
+
+def out(data, text=None):
+    """Result: JSON with --json, otherwise `text` (str, list of lines or a callable)."""
+    if JSON:
+        print(json.dumps(data, ensure_ascii=False, indent=1))
+        return
+    if callable(text):
+        text = text(data)
+    if text is None:
+        text = json.dumps(data, ensure_ascii=False, indent=2)
+    print("\n".join(text) if isinstance(text, list) else text)
+
+
 def tok():
     global LANG
+    if os.environ.get("UWCC_TOKEN"):
+        return os.environ["UWCC_TOKEN"]
     try:
         with open(TOKEN_FILE) as f:
             return f.read().strip()
     except PermissionError:
         LANG = guess_lang()
-        sys.exit(T("no_access_win" if IS_WIN else "no_access"))
+        fail(T("no_access_win" if IS_WIN else "no_access"), 3)
     except FileNotFoundError:
         LANG = guess_lang()
-        sys.exit(T("not_running_win" if IS_WIN else "not_running"))
+        fail(T("not_running_win" if IS_WIN else "not_running"), 3)
+
+
+def _open(req, timeout):
+    try:
+        return urllib.request.urlopen(req, timeout=timeout)
+    except urllib.error.HTTPError as e:
+        try:
+            msg = json.load(e).get("error", e)
+        except ValueError:
+            msg = e
+        fail(f"{T('error')}: {msg}", 3 if e.code in (401, 403) else 1)
+    except (urllib.error.URLError, ConnectionError, TimeoutError):
+        fail(T("not_running_win" if IS_WIN else "not_running"), 3)
 
 
 def call_raw(path, timeout=30):
     req = urllib.request.Request(f"http://127.0.0.1:{PORT}/api/{path}", headers={"X-UWCC-Token": tok()})
-    try:
-        return urllib.request.urlopen(req, timeout=timeout).read()
-    except urllib.error.HTTPError as e:
-        sys.exit(f"{T('error')}: {json.load(e).get('error', e)}")
-    except urllib.error.URLError:
-        sys.exit(T("not_running_win" if IS_WIN else "not_running"))
+    return _open(req, timeout).read()
 
 
 def call(path, body=None, method=None, timeout=30):
     req = urllib.request.Request(f"http://127.0.0.1:{PORT}/api/{path}", method=method or ("POST" if body is not None else "GET"),
                                  data=json.dumps(body).encode() if body is not None else None,
                                  headers={"X-UWCC-Token": tok(), "Content-Type": "application/json"})
-    try:
-        return json.load(urllib.request.urlopen(req, timeout=timeout))
-    except urllib.error.HTTPError as e:
-        sys.exit(f"{T('error')}: {json.load(e).get('error', e)}")
-    except urllib.error.URLError:
-        sys.exit(T("not_running_win" if IS_WIN else "not_running"))
+    return json.load(_open(req, timeout))
 
 
 def _pkg():
@@ -143,6 +279,79 @@ def direct_ec():
     return open_ec()
 
 
+# -- value parsing ------------------------------------------------------------------------------
+def onoff(v, topic):
+    v = str(v).lower()
+    if v in ON:
+        return True
+    if v in OFF:
+        return False
+    usage(topic)
+
+
+def num(v, topic, kind=int):
+    try:
+        return kind(v)
+    except (TypeError, ValueError):
+        usage(topic)
+
+
+def rgb(x, topic):
+    x = x.lstrip("#")
+    if len(x) != 6:
+        usage(topic)
+    try:
+        return [int(x[i:i + 2], 16) for i in (0, 2, 4)]
+    except ValueError:
+        usage(topic)
+
+
+def hexrgb(c):
+    return "%02X%02X%02X" % tuple(c) if c else "—"
+
+
+def mode_value(v):
+    v = str(v).lower()
+    if v in ("keep", "previous"):
+        return v
+    if v in MODES:
+        return MODES[v]
+    if v.isdigit():
+        return int(v)
+    usage("set")
+
+
+def setting_value(key, v):
+    kind = SETTINGS.get(key)
+    if kind == "bool":
+        return onoff(v, "set")
+    if kind == "int":
+        return num(v, "set")
+    if kind == "mode":
+        return mode_value(v)
+    return v
+
+
+def opts(args, flags):
+    """--key value / --flag options -> (dict, positional)."""
+    o, pos, i = {}, [], 0
+    while i < len(args):
+        x = args[i]
+        if x.startswith("--") and x[2:] in flags:
+            if flags[x[2:]]:
+                if i + 1 >= len(args):
+                    return None, None
+                o[x[2:]] = args[i + 1]
+                i += 1
+            else:
+                o[x[2:]] = True
+        else:
+            pos.append(x)
+        i += 1
+    return o, pos
+
+
+# -- status ---------------------------------------------------------------------------------------
 def lc_line(lc):
     if not lc["available"]:
         return T("lc_na")
@@ -155,216 +364,755 @@ def lc_line(lc):
             f"{T('lc_fan')} {lc['fan']}% · {pump} · {T('lc_flow')}: {T('flow').get(lc['flow'], lc['flow'])}")
 
 
+def cmd_status():
+    s = call("state")
+    m = call("monitor")
+    if JSON:
+        return out({"state": s, "monitor": m})
+    p = s["power"]
+    print(f"{T('project'):15} {s['platform'].get('display_name') or s['platform']['project_name']}  "
+          f"({s['platform']['project_name']}, EC: {s['platform']['ec_backend']})")
+    prof = s["profiles"].get(p.get("current_profile") or "", {})
+    slot = f" «{prof.get('CustomizeName')}»" if p["mode"] == 3 else ""
+    print(f"{T('mode'):15} {T('modes').get(p['mode'])}{slot}  {T('table')} {p['current_table']}  "
+          f"FanBoost={'on' if p['fan_boost'] else 'off'}" +
+          ("  super=on" if p.get("super_performance") else "") + f"  [{p.get('manager', 'cml')}]")
+    if p.get("manager") == "std" and prof:
+        c = prof["CPU"]
+        print(f"{'':15} PL1/PL2/PL4 {c['PL1']}/{c['PL2']}/{c['PL4']} W" +
+              (f", TCC −{c['TccOffset']} °C" if c.get("TccOffsetSwitch") else ""))
+    print(f"{T('fans'):15} {T('cpu')} {m['fans']['cpu_duty']}% {m['fans']['cpu_rpm']} {T('rpm')}" +
+          (f", {T('gpu')} {m['fans']['gpu_duty']}% {m['fans']['gpu_rpm']} {T('rpm')}" if 'gpu_duty' in m['fans'] else ""))
+    print(f"{T('temp'):15} {T('cpu')} {m['cpu']['temp'] if m['cpu']['temp'] is not None else '—'}°C" +
+          (f", {T('gpu')} {m['gpu']['temp']}°C" if m.get('gpu') else ""))
+    b = s["battery"]
+    print(f"{T('battery'):15} " + T("bat_line").format(b['health_mode'], b['limit_down'], b['limit_up'], b['cycle_count']))
+    print(f"{T('lc'):15} {lc_line(s['liquid'])}")
+    print(f"{T('settings'):15} " + ", ".join(f"{k}={v}" for k, v in s["settings"].items()))
+
+
+def monitor_line(m):
+    def v(x, unit=""):
+        return "—" if x is None else f"{x}{unit}"
+    c, g, f = m.get("cpu") or {}, m.get("gpu") or {}, m.get("fans") or {}
+    s = (time.strftime("%H:%M:%S", time.localtime(m.get("t", time.time()))) +
+         f"  CPU {v(c.get('temp'), '°C')} {v(c.get('usage'), '%')} {v(c.get('mhz'), ' MHz')} {v(c.get('power_w'), ' W')}")
+    if g:
+        s += f"  GPU {v(g.get('temp'), '°C')} {v(g.get('usage'), '%')} {v(g.get('core_mhz') or g.get('mhz'), ' MHz')} {v(g.get('power_w'), ' W')}"
+    s += f"  fan CPU {v(f.get('cpu_duty'), '%')} {v(f.get('cpu_rpm'), ' rpm')}"
+    if "gpu_duty" in f:
+        s += f" GPU {v(f.get('gpu_duty'), '%')} {v(f.get('gpu_rpm'), ' rpm')}"
+    mem = m.get("memory") or {}
+    s += f"  RAM {v(mem.get('usage'), '%')}"
+    bat = m.get("battery") or {}
+    if bat.get("present"):
+        s += f"  bat {v(bat.get('percent'), '%')}"
+    return s + ("  AC" if m.get("ac") else "")
+
+
+def cmd_monitor(a):
+    o, pos = opts(a, {"watch": False})
+    if o is None or pos[1:]:
+        usage("monitor")
+    if not o.get("watch"):
+        m = call("monitor")
+        return out(m, monitor_line)
+    period = max(0.5, num(pos[0], "monitor", float)) if pos else 2.0
+    try:
+        while True:
+            m = call("monitor")
+            print(json.dumps(m, ensure_ascii=False) if JSON else monitor_line(m), flush=True)
+            time.sleep(period)
+    except KeyboardInterrupt:
+        pass
+
+
+# -- modes and profiles ---------------------------------------------------------------------------
+def cmd_mode(a):
+    if a:
+        if a[0] not in MODES:
+            usage("mode")
+        call("mode", {"mode": MODES[a[0]]})
+    p = call("state")["power"]
+    out({"mode": MODE_BY_ID.get(p["mode"]), "id": p["mode"], "profile": p.get("current_profile"),
+         "table": p.get("current_table")}, lambda d: f"{d['mode']}  ({d['profile']}, {d['table']})")
+
+
+def profile_target(s, t):
+    """MODE | MODE:N | Mode4_Profile5 | None (active) -> profile name."""
+    profs, p = s["profiles"], s["power"]
+    if not t:
+        name = p.get("current_profile")
+    elif t in profs:
+        name = t
+    else:
+        mode, _, idx = t.partition(":")
+        if mode not in MODE_PREFIX:
+            fail(f"{T('error')}: unknown profile {t}", 2)
+        if idx:
+            i = num(idx, "profile")
+        else:
+            i = int((p.get("profile_index") or {}).get(mode, 0))
+        name = f"Mode{MODE_PREFIX[mode]}_Profile{i + 1}"
+    if name not in profs:
+        fail(f"{T('error')}: no profile {name} on this laptop", 1)
+    return name
+
+
+def profile_text(name, pr, active):
+    c, g, f = pr.get("CPU", {}), pr.get("GPU", {}), pr.get("FAN", {})
+
+    def sw(on, val, unit):
+        return f"{val} {unit}" if on else "off"
+    return [f"{name}{' (active)' if active else ''}  «{pr.get('CustomizeName', '')}»  table {f.get('TableName')}",
+            f"  PL1/PL2/PL4  {c.get('PL1')}/{c.get('PL2')}/{c.get('PL4')} W",
+            f"  TCC offset   {sw(c.get('TccOffsetSwitch'), c.get('TccOffset'), '°C')}",
+            f"  cTGP         {sw(g.get('ConfigurableTGPSwitch'), g.get('ConfigurableTGPTarget'), 'W')}",
+            f"  Dyn. Boost   {sw(g.get('DynamicBoostSwitch'), g.get('DynamicBoost'), 'W')}",
+            f"  GPU limit    {sw(g.get('TargetTemperatureSwitch'), g.get('TargetTemperature'), '°C')}",
+            f"  fan switch   {sw(f.get('FanSwitchSpeedEnabled'), f.get('FanSwitchSpeed'), 'rpm')}"]
+
+
+PROFILE_KEYS = {   # key -> (section, value key, switch key)
+    "pl1": ("CPU", "PL1", None), "pl2": ("CPU", "PL2", None), "pl4": ("CPU", "PL4", None),
+    "tcc": ("CPU", "TccOffset", "TccOffsetSwitch"),
+    "ctgp": ("GPU", "ConfigurableTGPTarget", "ConfigurableTGPSwitch"),
+    "db": ("GPU", "DynamicBoost", "DynamicBoostSwitch"),
+    "gputemp": ("GPU", "TargetTemperature", "TargetTemperatureSwitch"),
+    "fanspeed": ("FAN", "FanSwitchSpeed", "FanSwitchSpeedEnabled"),
+}
+
+
+def cmd_profile(a):
+    s = call("state")
+    p = s["power"]
+    op = a[0] if a else "show"
+    if op.isdigit():
+        mode = p["mode"]
+        call("profile", {"mode": mode, "index": int(op)})
+        s = call("state")
+        op, a = "show", ["show"]
+    if op == "list":
+        cur = s["power"].get("current_profile")
+        rows = {n: {"name": pr.get("CustomizeName"), "table": pr.get("FAN", {}).get("TableName"),
+                    "PL1": pr["CPU"].get("PL1"), "PL2": pr["CPU"].get("PL2"), "PL4": pr["CPU"].get("PL4"),
+                    "active": n == cur} for n, pr in sorted(s["profiles"].items())}
+        return out(rows, lambda d: [f"{'*' if r['active'] else ' '} {n:16} «{r['name']}»  {r['table']}  "
+                                    f"PL {r['PL1']}/{r['PL2']}/{r['PL4']} W" for n, r in d.items()])
+    if op == "show":
+        name = profile_target(s, a[1] if a[1:] else None)
+        pr = s["profiles"][name]
+        return out(pr, lambda d: profile_text(name, d, name == s["power"].get("current_profile")))
+    if op == "reset":
+        name = profile_target(s, a[1] if a[1:] else None)
+        pr = call(f"profile-reset/{name}", {})
+        return out(pr, lambda d: profile_text(name, d, name == s["power"].get("current_profile")))
+    if op == "set":
+        rest = a[1:]
+        target = rest.pop(0) if rest and "=" not in rest[0] else None
+        if not rest:
+            usage("profile")
+        name = profile_target(s, target)
+        body = {}
+        for kv in rest:
+            k, eq, v = kv.partition("=")
+            k = k.lower()
+            if not eq:
+                usage("profile")
+            if k == "name":
+                body["CustomizeName"] = v
+                continue
+            if k not in PROFILE_KEYS:
+                fail(f"{T('error')}: unknown key {k} (pl1 pl2 pl4 tcc ctgp db gputemp fanspeed name)", 2)
+            sect, key, switch = PROFILE_KEYS[k]
+            d = body.setdefault(sect, {})
+            if v.lower() in OFF and switch:
+                d[switch] = 0
+            elif v.lower() in ("on",) and switch:
+                d[switch] = 1
+            else:
+                d[key] = num(v, "profile")
+                if switch:
+                    d[switch] = 1
+        pr = call(f"profiles/{name}", body, method="PUT")
+        return out(pr, lambda d: profile_text(name, d, name == s["power"].get("current_profile")))
+    usage("profile")
+
+
+def cmd_switch(a, key, state_get, topic):
+    if a:
+        call("setting", {"key": key, "value": onoff(a[0], topic)})
+    v = bool(state_get(call("state")))
+    out({key: v}, f"{key}: {'on' if v else 'off'}")
+
+
+# -- fan tables -----------------------------------------------------------------------------------
+def table_name(s, t):
+    p = s["power"]
+    if t in (None, "current"):
+        return p.get("current_table")
+    if t not in p.get("table_names", []):
+        fail(f"{T('error')}: unknown table {t} ({', '.join(p.get('table_names', []))})", 2)
+    return t
+
+
+def active_points(pts):
+    res = []
+    for i, x in enumerate(pts):
+        if x["Duty"] > 100 or (i > 0 and x["UpT"] in (0, 255)):
+            break
+        res.append(x)
+    return res
+
+
+def table_text(name, t):
+    lines = [f"{name}  separate CPU/GPU: {'on' if t.get('FanControlRespective') else 'off'}"]
+    for kind in ("CPU", "GPU"):
+        pts = active_points(t.get(kind) or [])
+        if pts:
+            lines.append(f"  {kind}: " + " ".join(f"{x['UpT']}/{x['DownT']}:{x['Duty']}" for x in pts))
+        else:
+            lines.append(f"  {kind}: —")
+    return lines
+
+
+def parse_points(args):
+    pts = []
+    for x in args:
+        try:
+            temps, duty = x.split(":")
+            up, down = temps.split("/")
+            pts.append({"UpT": int(up), "DownT": int(down), "Duty": int(duty)})
+        except ValueError:
+            usage("fan")
+    if not 1 <= len(pts) <= 16:
+        fail(f"{T('error')}: 1..16 levels", 2)
+    for i in range(len(pts), 16):
+        pts.append({"UpT": 255, "DownT": 255, "Duty": 255})
+    for i, x in enumerate(pts):
+        x["ID"] = i
+    return pts
+
+
+def cmd_fan(a):
+    op = a[0] if a else "show"
+    s = call("state")
+    p = s["power"]
+    if op == "list":
+        used = {}
+        for n, pr in s["profiles"].items():
+            used.setdefault((pr.get("FAN") or {}).get("TableName"), []).append(n)
+        rows = [{"table": t, "active": t == p.get("current_table"), "profiles": sorted(used.get(t, []))}
+                for t in p.get("table_names", [])]
+        return out(rows, lambda d: [f"{'*' if r['active'] else ' '} {r['table']:6} {', '.join(r['profiles'])}" for r in d])
+    if op == "show":
+        name = table_name(s, a[1] if a[1:] else None)
+        t = call(f"table/{name}")
+        return out(t, lambda d: table_text(name, d))
+    if op == "reset" and a[1:]:
+        name = table_name(s, a[1])
+        t = call(f"table/{name}/restore", {})
+        return out(t, lambda d: table_text(name, d))
+    if op == "separate" and a[2:]:
+        name = table_name(s, a[1])
+        t = call(f"table/{name}", {"FanControlRespective": onoff(a[2], "fan")})
+        return out(t, lambda d: table_text(name, d))
+    if op == "set" and a[2:]:
+        name = table_name(s, a[1])
+        if a[2] == "--file":
+            if not a[3:]:
+                usage("fan")
+            with open(a[3], encoding="utf-8-sig") as f:
+                data = json.load(f)
+            body = {k: data[k] for k in ("CPU", "GPU", "FanControlRespective") if k in data}
+        elif a[2].lower() in ("cpu", "gpu"):
+            body = {a[2].upper(): parse_points(a[3:])}
+        else:
+            usage("fan")
+        t = call(f"table/{name}", body)
+        return out(t, lambda d: table_text(name, d))
+    usage("fan")
+
+
+# -- battery --------------------------------------------------------------------------------------
+def battery_text(b):
+    mode = {v: k for k, v in BAT_MODES.items()}.get(b.get("health_mode"), b.get("health_mode"))
+    lines = [f"mode {mode}, charge limit {b.get('limit_down')}–{b.get('limit_up')} %, {b.get('cycle_count')} cycles"]
+    if b.get("typec_priority_support"):
+        lines.append(f"Type-C priority: {'on' if b.get('typec_priority') else 'off'}")
+    return lines
+
+
+def cmd_battery(a):
+    op = a[0] if a else "status"
+    if op == "mode" and a[1:]:
+        m = BAT_MODES.get(a[1], a[1])
+        call("battery", {"health_mode": num(m, "battery")})
+    elif op == "limit" and a[1:]:
+        body = {"limit_up": num(a[1], "battery")}
+        if a[2:]:
+            body["limit_down"] = num(a[2], "battery")
+        call("battery", body)
+    elif op == "typec" and a[1:]:
+        call("battery", {"typec_priority": onoff(a[1], "battery")})
+    elif op != "status":
+        usage("battery")
+    out(call("state")["battery"], battery_text)
+
+
+# -- keyboard -------------------------------------------------------------------------------------
+def kb_text(k):
+    lines = [f"kind {k.get('kind')}, power {'on' if k.get('power') else 'off'}"]
+    e = k.get("effect")
+    if e:
+        name = (k.get("effects") or {}).get(str(e.get("idx")), e.get("idx"))
+        lines.append(f"effect {name} ({e.get('idx')}), light {e.get('light')}, speed {e.get('speed')}, "
+                     f"direction {e.get('direction')}, multicolour {'on' if e.get('circular') else 'off'}, "
+                     f"colours {' '.join(hexrgb(c) for c in e.get('colors') or [])}")
+    if "level" in k:
+        lines.append(f"level {k['level']}")
+    if k.get("device"):
+        d = k["device"]
+        lines.append(f"device {d.get('pid')} fw {d.get('fw')} type {d.get('type')}" +
+                     (" (four-zone)" if k.get("four_zone") else ""))
+    return lines
+
+
+def effect_index(k, x):
+    effects = k.get("effects") or {}
+    if str(x).isdigit():
+        if str(x) not in effects:
+            fail(f"{T('error')}: no effect {x} (uwccctl kb effects)", 2)
+        return int(x)
+    key = str(x).lower().replace("-", "").replace("_", "").replace(" ", "")
+    for i, n in effects.items():
+        if n.lower().replace(" ", "") == key:
+            return int(i)
+    fail(f"{T('error')}: no effect {x} (uwccctl kb effects)", 2)
+
+
+def cmd_kb(a):
+    op = a[0] if a else "status"
+    if op in ("on", "off"):
+        call("keyboard/power", {"on": op == "on"})
+    elif op == "level" and a[1:]:
+        call("keyboard/level", {"level": num(a[1], "kb")})
+    elif op == "effects":
+        k = call("state")["keyboard"]
+        bad = set(k.get("unsupported_effects") or [])
+        soft = set(k.get("software_effects") or [])
+        rows = [{"id": int(i), "name": n, "supported": int(i) not in bad, "software": int(i) in soft}
+                for i, n in (k.get("effects") or {}).items()]
+        return out(rows, lambda d: [f"{r['id']:3} {r['name']:14}" + ("" if r["supported"] else " (not on this keyboard)") +
+                                    (" (drawn by the service)" if r["software"] and r["supported"] else "") for r in d])
+    elif op == "effect" and a[1:]:
+        o, pos = opts(a[1:], {"light": True, "speed": True, "dir": True, "color": True, "multi": False,
+                              "no-multi": False, "text": True})
+        if o is None or len(pos) != 1:
+            usage("kb")
+        k = call("state")["keyboard"]
+        cur = k.get("effect") or {}
+        body = {"effect": effect_index(k, pos[0]), "light": cur.get("light", 4), "speed": cur.get("speed", 2),
+                "direction": cur.get("direction", 0), "circular": bool(cur.get("circular"))}
+        if cur.get("colors"):
+            body["colors"] = cur["colors"]
+        if "light" in o:
+            body["light"] = num(o["light"], "kb")
+        if "speed" in o:
+            body["speed"] = num(o["speed"], "kb")
+        if "dir" in o:
+            body["direction"] = DIRECTIONS.get(o["dir"], None)
+            if body["direction"] is None:
+                body["direction"] = num(o["dir"], "kb")
+        if "color" in o:
+            body["colors"] = [rgb(c, "kb") for c in o["color"].split(",")]
+        if o.get("multi"):
+            body["circular"] = True
+        if o.get("no-multi"):
+            body["circular"] = False
+        if "text" in o:
+            body["alphabet"] = o["text"]
+        call("keyboard/effect", body)
+    elif op != "status":
+        usage("kb")
+    out(call("state")["keyboard"], kb_text)
+
+
+def cmd_lb(a):
+    zones = ("hinge", "base", "logo")
+    rest = list(a)
+    zone = rest.pop(0) if rest and rest[0] in zones else "hinge"
+    op = rest[0] if rest else "status"
+    if op in ("on", "off"):
+        call("lightbar", {"zone": zone, "power": op == "on"})
+    elif op == "color" and rest[1:]:
+        call("lightbar", {"zone": zone, "colors": [rgb(rest[1], "lb")], **({"effect": rest[2]} if rest[2:] else {})})
+    elif op == "effect" and rest[1:]:
+        call("lightbar", {"zone": zone, "effect": rest[1]})
+    elif op == "light" and rest[1:]:
+        call("lightbar", {"zone": zone, "light": num(rest[1], "lb")})
+    elif op != "status":
+        usage("lb")
+    lb = call("state")["keyboard"].get("lightbar")
+    if not lb:
+        fail("no light bar", 1)
+    out(lb, lambda d: [f"{z:6} {'on ' if v.get('power') else 'off'} {v.get('effect'):16} light {v.get('light')} "
+                       f"speed {v.get('speed')} {' '.join(hexrgb(c) for c in v.get('colors') or [])}"
+                       for z, v in d["zones"].items()])
+
+
+# -- settings, automation, app binding ------------------------------------------------------------
+def all_settings(s):
+    d = dict(s["settings"])
+    d.update(s.get("automation") or {})
+    d["super_performance"] = bool(s["power"].get("super_performance"))
+    return d
+
+
+def cmd_get(a):
+    d = all_settings(call("state"))
+    if a:
+        if a[0] not in d:
+            fail(f"{T('error')}: unknown key {a[0]}", 2)
+        return out({a[0]: d[a[0]]}, f"{d[a[0]]}")
+    out(d, lambda x: [f"{k:18} {v}" for k, v in x.items()])
+
+
+def cmd_set(a):
+    if len(a) != 2:
+        usage("set")
+    key, v = a
+    if key not in SETTINGS:
+        fail(f"{T('error')}: unknown key {key} (uwccctl help set)", 2)
+    call("setting", {"key": key, "value": setting_value(key, v)})
+    if key == "fan_manager":
+        return out({key: v, "restarting": True}, f"{key}: {v} (the service restarts if it changed)")
+    if key == "lightbar_trigger":
+        return out({"ok": True}, "ok")
+    d = all_settings(call("state"))
+    v = d.get(key)
+    out({key: v}, f"{key}: {MODE_BY_ID.get(v, v) if SETTINGS[key] == 'mode' and not isinstance(v, bool) else v}")
+
+
+def cmd_apps(a):
+    rules = call("state").get("app_binding") or []
+    op = a[0] if a else "list"
+    if op == "add" and len(a) == 3:
+        m = MODES.get(a[2], None)
+        m = num(a[2], "apps") if m is None else m
+        rules = [r for r in rules if r["process"].lower() != a[1].lower()] + [{"process": a[1], "mode": m, "enabled": True}]
+    elif op == "remove" and len(a) == 2:
+        if not any(r["process"].lower() == a[1].lower() for r in rules):
+            fail(f"{T('error')}: no rule for {a[1]}", 1)
+        rules = [r for r in rules if r["process"].lower() != a[1].lower()]
+    elif op in ("enable", "disable") and len(a) == 2:
+        if not any(r["process"].lower() == a[1].lower() for r in rules):
+            fail(f"{T('error')}: no rule for {a[1]}", 1)
+        for r in rules:
+            if r["process"].lower() == a[1].lower():
+                r["enabled"] = op == "enable"
+    elif op != "list":
+        usage("apps")
+    if op != "list":
+        call("appbinding", {"rules": rules})
+        rules = call("state").get("app_binding") or []
+    out(rules, lambda d: [f"{'on ' if r['enabled'] else 'off'} {r['process']:24} {MODE_BY_ID.get(r['mode'], r['mode'])}"
+                          for r in d] or ["no rules"])
+
+
+# -- liquid cooler --------------------------------------------------------------------------------
+LC_BOOL = ("smooth", "notify_flow", "flow_guard", "boost_fan", "boost_pump")
+LC_IDLE = ("off_below", "off_after", "on_above", "on_after", "min_run")
+
+
 def cmd_lc(a):
     op = a[0] if a else "status"
     if op == "status":
-        print(T("lc"), lc_line(call("state")["liquid"]))
-    elif op == "scan":
+        lc = call("state")["liquid"]
+        return out(lc, lambda d: T("lc") + " " + lc_line(d))
+    if op == "scan":
         devs = call("lc/scan", {}, timeout=40)["devices"]
-        if not devs:
-            print(T("lc_nothing"))
-        for d in devs:
-            print(f"  {d['address']}  {d['name']}  RSSI {d['rssi']}")
-    elif op == "connect":
+        return out(devs, lambda d: [f"  {x['address']}  {x['name']}  RSSI {x['rssi']}" for x in d] or T("lc_nothing"))
+    if op == "connect" and a[1:]:
         call("lc/connect", {"address": a[1]}, timeout=70)
-        print(T("lc"), lc_line(call("state")["liquid"]))
     elif op == "disconnect":
         call("lc/disconnect", {"forget": "--forget" in a})
-    elif op == "mode":
+    elif op == "mode" and a[1:]:
         call("lc/config", {"mode": a[1]})
-    elif op == "manual":
-        call("lc/config", {"mode": "manual", "fan": int(a[1]), "pump": int(a[2])})
-    elif op == "rgb":
+    elif op == "manual" and a[2:]:
+        call("lc/config", {"mode": "manual", "fan": num(a[1], "lc"), "pump": num(a[2], "lc")})
+    elif op == "tiers" and a[1:]:
+        tiers = []
+        for x in a[1:]:
+            try:
+                below, fan, pump = (int(v) for v in x.split(":"))
+            except ValueError:
+                usage("lc")
+            tiers.append({"below": below, "fan": fan, "pump": pump})
+        call("lc/config", {"tiers": tiers})
+    elif op == "set" and len(a) == 3:
+        k, v = a[1], a[2]
+        if k in LC_BOOL:
+            val = onoff(v, "lc")
+        elif k in ("delay_up", "delay_down"):
+            val = num(v, "lc")
+        elif k == "temp_source":
+            val = v
+        else:
+            usage("lc")
+        call("lc/config", {k: val})
+    elif op == "idle" and a[1:]:
+        pi = {"enabled": onoff(a[1], "lc")}
+        for kv in a[2:]:
+            k, eq, v = kv.partition("=")
+            if not eq or k not in LC_IDLE:
+                usage("lc")
+            pi[k] = num(v, "lc")
+        call("lc/config", {"pump_idle": pi})
+    elif op == "rgb" and a[1:]:
         if a[1] == "off":
             call("lc/config", {"rgb": {"on": False}})
         else:
-            h = a[1].lstrip("#")
-            rgb = {"on": True, "color": [int(h[i:i + 2], 16) for i in (0, 2, 4)]}
-            if len(a) > 2:
-                rgb["mode"] = a[2].replace("-", "_")
-            call("lc/config", {"rgb": rgb})
+            body = {"on": True, "color": rgb(a[1], "lc")}
+            if a[2:]:
+                body["mode"] = a[2].replace("-", "_")
+            call("lc/config", {"rgb": body})
     elif op == "prime":
-        call("lc/prime", {"stop": len(a) > 1 and a[1] == "stop"})
+        call("lc/prime", {"stop": a[1:2] == ["stop"]})
     elif op == "suspend":
         call("lc/suspend", {})
     else:
-        sys.exit(__doc__)
+        usage("lc")
+    lc = call("state")["liquid"]
+    out(lc, lambda d: T("lc") + " " + lc_line(d))
+
+
+# -- the rest -------------------------------------------------------------------------------------
+def cmd_history(a):
+    ranges = ("1m", "5m", "15m", "1h", "24h")
+    fmts = ("csv", "csv-excel", "json")
+    fmt = next((x for x in a if x in fmts), "json" if JSON else "csv")
+    rng = next((x for x in a if x in ranges), "1h")
+    dest = next((x for x in a if x not in fmts + ranges), None)
+    data = call_raw(f"history/export?format={fmt}&range={rng}")
+    if dest:
+        with open(dest, "wb") as f:
+            f.write(data)
+        out({"file": os.path.abspath(dest)}, dest)
+    else:
+        sys.stdout.write(data.decode("utf-8-sig"))
+
+
+def cmd_version(cmd, a):
+    st = call("update/check", {}, timeout=40) if cmd == "update" or a[:1] == ["check"] else call("update")
+    if cmd == "update" and a[:1] == ["install"]:
+        if not st.get("can_install"):
+            fail("Linux: download the release archive and run: sudo bash install.sh", 1)
+        call("update/download", {})
+        return out({"downloading": True}, "downloading; the Control Center tray app starts the installer when it is verified")
+    if JSON:
+        return out(st)
+    print("open-uniwill-cc", st.get("version_full") or st.get("current"))
+    if st.get("error"):
+        print("update check:", st["error"])
+    elif st.get("latest"):
+        print("latest release:", st["latest"], "— newer, see " + str(st.get("url")) if st.get("newer") else "(up to date)")
+    if st.get("newer") and not IS_WIN:
+        print("install: download " + str(st.get("linux") or st.get("url")) + ", unpack it and run: sudo bash install.sh")
+
+
+def cmd_report(a):
+    def opt(k):
+        return next((a[i + 1] for i, x in enumerate(a) if x == k and i + 1 < len(a)), "")
+    flags = {"--private", "--sections"}
+    dest = next((x for i, x in enumerate(a) if not x.startswith("--") and (i == 0 or a[i - 1] not in flags)), None)
+    q = f"report?private={opt('--private')}" + (f"&sections={opt('--sections')}" if opt("--sections") else "") \
+        + ("&full=1" if "--full" in a else "")
+    req = urllib.request.Request(f"http://127.0.0.1:{PORT}/api/{q}", headers={"X-UWCC-Token": tok()})
+    r = _open(req, 180)
+    name = dest or r.headers.get("X-UWCC-Filename") or "uwcc-report.zip"
+    with open(name, "wb") as f:
+        f.write(r.read())
+    out({"file": os.path.abspath(name)},
+        [os.path.abspath(name), "Attach it to a GitHub issue (https://github.com/aspidovss/open-uniwill-cc/issues) "
+                                "or send it to OUCC@aspidov.ru"])
+
+
+def cmd_export(a):
+    if not a or a[0] not in ("fans", "all"):
+        usage("export")
+    data = call_raw(f"export?what={a[0]}")
+    if a[1:]:
+        with open(a[1], "wb") as f:
+            f.write(data)
+        out({"file": os.path.abspath(a[1])}, a[1])
+    else:
+        sys.stdout.write(data.decode())
+
+
+def cmd_import(a):
+    if not a:
+        usage("import")
+    with open(a[0], encoding="utf-8-sig") as f:
+        data = json.load(f)
+    rest = [x for x in a[1:] if x != "--force"]
+    sections = rest[0].split(",") if rest else ["fans", "profiles"]
+    out(call("import", {"data": data, "sections": sections, "force": "--force" in a}))
+
+
+def cmd_restart():
+    import subprocess
+    if IS_WIN:
+        subprocess.run(["sc.exe", "stop", "uwccd"], check=False)
+        time.sleep(3)
+        sys.exit(subprocess.run(["sc.exe", "start", "uwccd"], check=False).returncode)
+    sys.exit(subprocess.run(["systemctl", "restart", "uwccd.service"], check=False).returncode)
+
+
+def cmd_ec_direct(a):
+    ec = direct_ec()
+    if a[:1] == ["read"] and a[1:]:
+        addr = int(a[1], 16)
+        n = int(a[2]) if a[2:] else 1
+        vals = {f"0x{addr + i:04X}": ec.read(addr + i) for i in range(n)}
+        out(vals, [f"{k} = 0x{v:02X}" for k, v in vals.items()])
+    elif a[:1] == ["dump"] and a[1:]:
+        base = int(a[1], 16)
+        for row in range(0, 256, 16):
+            print(f"{base + row:04X}: " + " ".join(f"{ec.read(base + row + i):02X}" for i in range(16)))
+    else:
+        usage("ec-direct")
+
+
+def cmd_release():
+    _pkg()
+    from uwccd.nvram import Nvram
+    ec = direct_ec()
+    ec.set_bit(0x7C6, 2, False)   # RAM fan table off
+    ec.set_bit(0x741, 0, False)   # AP not present
+    nv = Nvram()
+    nv.verify(ec.read(0x740))
+    nv.set("ApExistFlag", 0)
+    if nv.get("MemoryOverClockSupport") == 1 and nv.get("MemoryOverClockSwitch"):
+        nv.set("MemoryOverClockSwitch", 0)     # SetFwVarsForUninstall: no RAM overclocking without the program
+        print("RAM overclocking switched off (BIOS, next start)")
+    print("fan control returned to the EC")
+
+
+def cmd_help(a):
+    topic = a[0] if a else None
+    if topic in HELP:
+        print(HELP[topic])
+    else:
+        print(__doc__)
+        if not IS_WIN:
+            print("Details: man uwccctl   (Russian: man -L ru uwccctl)")
+        else:
+            print("Details: uwccctl help COMMAND")
 
 
 def main(a):
-    global LANG
-    if not a or a[0] in ("-h", "--help", "help"):
-        print(__doc__)
-        return
-    cmd = a[0]
-    if cmd == "restart":
-        import subprocess
-        if IS_WIN:
-            subprocess.run(["sc.exe", "stop", "uwccd"], check=False)
-            time.sleep(3)
-            sys.exit(subprocess.run(["sc.exe", "start", "uwccd"], check=False).returncode)
-        sys.exit(subprocess.run(["systemctl", "restart", "uwccd.service"], check=False).returncode)
-    if cmd not in ("ec-direct", "release"):
-        LANG = call("state")["settings"].get("lang", "en") if cmd in ("status", "lc", "lang") else LANG
-    if cmd == "status":
-        s = call("state")
-        m = call("monitor")
-        p = s["power"]
-        print(f"{T('project'):15} {s['platform']['project_name']}  (EC: {s['platform']['ec_backend']})")
-        prof = s["profiles"].get(p.get("current_profile") or "", {})
-        slot = f" «{prof.get('CustomizeName')}»" if p["mode"] == 3 else ""
-        print(f"{T('mode'):15} {T('modes').get(p['mode'])}{slot}  {T('table')} {p['current_table']}  "
-              f"FanBoost={'on' if p['fan_boost'] else 'off'}  [{p.get('manager', 'cml')}]")
-        if p.get("manager") == "std" and prof:
-            c = prof["CPU"]
-            print(f"{'':15} PL1/PL2/PL4 {c['PL1']}/{c['PL2']}/{c['PL4']} W" +
-                  (f", TCC −{c['TccOffset']} °C" if c.get("TccOffsetSwitch") else ""))
-        print(f"{T('fans'):15} {T('cpu')} {m['fans']['cpu_duty']}% {m['fans']['cpu_rpm']} {T('rpm')}" +
-              (f", {T('gpu')} {m['fans']['gpu_duty']}% {m['fans']['gpu_rpm']} {T('rpm')}" if 'gpu_duty' in m['fans'] else ""))
-        print(f"{T('temp'):15} {T('cpu')} {m['cpu']['temp'] if m['cpu']['temp'] is not None else '—'}°C" + (f", {T('gpu')} {m['gpu']['temp']}°C" if m.get('gpu') else ""))
-        b = s["battery"]
-        print(f"{T('battery'):15} " + T("bat_line").format(b['health_mode'], b['limit_down'], b['limit_up'], b['cycle_count']))
-        print(f"{T('lc'):15} {lc_line(s['liquid'])}")
-        print(f"{T('settings'):15} " + ", ".join(f"{k}={v}" for k, v in s["settings"].items()))
-    elif cmd == "lang":
-        if a[1:] and a[1] in ("en", "ru"):
-            call("setting", {"key": "lang", "value": a[1]})
-            LANG = a[1]
-        print(T("lang_set"))
-    elif cmd == "lb":
-        zones = ("hinge", "base", "logo")
-        rest = a[1:]
-        zone = rest.pop(0) if rest and rest[0] in zones else "hinge"
-        op = rest[0] if rest else "status"
-        if op in ("on", "off"):
-            call("lightbar", {"zone": zone, "power": op == "on"})
-        elif op == "color" and rest[1:]:
-            x = rest[1].lstrip("#")
-            call("lightbar", {"zone": zone, "colors": [[int(x[i:i + 2], 16) for i in (0, 2, 4)]],
-                              **({"effect": rest[2]} if rest[2:] else {})})
-        elif op == "effect" and rest[1:]:
-            call("lightbar", {"zone": zone, "effect": rest[1]})
-        elif op == "light" and rest[1:]:
-            call("lightbar", {"zone": zone, "light": int(rest[1])})
-        lb = call("state")["keyboard"].get("lightbar")
-        print(json.dumps(lb, indent=2, ensure_ascii=False) if lb else "no light bar")
-    elif cmd == "lighting":
-        print(json.dumps(call("lighting/devices"), indent=2, ensure_ascii=False))
-    elif cmd == "history":
-        ranges = ("1m", "5m", "15m", "1h", "24h")
-        fmt = next((x for x in a[1:] if x in ("csv", "csv-excel", "json")), "csv")
-        rng = next((x for x in a[1:] if x in ranges), "1h")
-        out = next((x for x in a[1:] if x not in ("csv", "csv-excel", "json") + ranges), None)
-        data = call_raw(f"history/export?format={fmt}&range={rng}")
-        if out:
-            with open(out, "wb") as f:
-                f.write(data)
-            print(out)
-        else:
-            sys.stdout.write(data.decode("utf-8-sig"))
-    elif cmd in ("version", "update"):
-        st = call("update/check", {}, timeout=40) if cmd == "update" or a[1:2] == ["check"] else call("update")
-        print("open-uniwill-cc", st.get("version_full") or st.get("current"))
-        if st.get("error"):
-            print("update check:", st["error"])
-        elif st.get("latest"):
-            print("latest release:", st["latest"], "— newer, see " + str(st.get("url")) if st.get("newer") else "(up to date)")
-        if cmd == "update" and a[1:2] == ["install"]:
-            if not st.get("can_install"):
-                sys.exit("Linux: download the release archive and run: sudo bash install.sh")
-            call("update/download", {})
-            print("downloading; the Control Center tray app starts the installer when it is verified")
-        elif st.get("newer") and not IS_WIN:
-            print("install: download " + str(st.get("linux") or st.get("url")) + ", unpack it and run: sudo bash install.sh")
-    elif cmd == "report":
-        opt = lambda k: next((a[i + 1] for i, x in enumerate(a) if x == k and i + 1 < len(a)), "")   # noqa: E731
-        flags = {"--private", "--sections"}
-        out = next((x for i, x in enumerate(a[1:], 1) if not x.startswith("--") and a[i - 1] not in flags), None)
-        q = f"report?private={opt('--private')}" + (f"&sections={opt('--sections')}" if opt("--sections") else "") \
-            + ("&full=1" if "--full" in a else "")
-        req = urllib.request.Request(f"http://127.0.0.1:{PORT}/api/{q}", headers={"X-UWCC-Token": tok()})
+    global LANG, JSON
+    for stream in (sys.stdout, sys.stderr):        # a console code page without "°" or "—" must not crash the tool
         try:
-            r = urllib.request.urlopen(req, timeout=180)
-        except urllib.error.HTTPError as e:
-            sys.exit(f"{T('error')}: {json.load(e).get('error', e)}")
-        except urllib.error.URLError:
-            sys.exit(T("not_running_win" if IS_WIN else "not_running"))
-        name = out or r.headers.get("X-UWCC-Filename") or "uwcc-report.zip"
-        with open(name, "wb") as f:
-            f.write(r.read())
-        print(os.path.abspath(name))
-        print("Attach it to a GitHub issue (https://github.com/aspidovss/open-uniwill-cc/issues) "
-              "or send it to OUCC@aspidov.ru")
-    elif cmd == "export":
-        what = a[1] if a[1:] and a[1] in ("fans", "all") else sys.exit("uwccctl export fans|all FILE")
-        data = call_raw(f"export?what={what}")
-        if a[2:]:
-            with open(a[2], "wb") as f:
-                f.write(data)
-            print(a[2])
-        else:
-            sys.stdout.write(data.decode())
-    elif cmd == "import":
-        if not a[1:]:
-            sys.exit("uwccctl import FILE [fans,profiles,settings] [--force]")
-        with open(a[1], encoding="utf-8-sig") as f:
-            data = json.load(f)
-        rest = [x for x in a[2:] if x != "--force"]
-        sections = rest[0].split(",") if rest else ["fans", "profiles"]
-        r = call("import", {"data": data, "sections": sections, "force": "--force" in a})
-        print(json.dumps(r, indent=2, ensure_ascii=False))
-    elif cmd == "debug":
-        if a[1:] and a[1] in ("on", "off"):
-            call("setting", {"key": "debug", "value": a[1] == "on"})
-        print("debug logging:", "on" if call("state")["settings"].get("debug") else "off")
-    elif cmd == "lc":
-        cmd_lc(a[1:])
-    elif cmd == "mode":
-        call("mode", {"mode": MODES[a[1]]})
-    elif cmd == "profile":
-        mode = call("state")["power"]["mode"]
-        call("profile", {"mode": mode, "index": int(a[1])})
-    elif cmd == "boost":
-        call("fanboost", {"on": a[1] == "on"})
-    elif cmd == "kb":
-        if a[1] in ("on", "off"):
-            call("keyboard/power", {"on": a[1] == "on"})
-        elif a[1] == "effect":
-            call("keyboard/effect", {"effect": int(a[2])})
-    elif cmd == "ec" and a[1] == "read":
-        r = call(f"ec/{int(a[2], 16):x}")
-        print(f"0x{r['addr']:04X} = 0x{r['value']:02X} ({r['value']})")
-    elif cmd == "nvram":
-        print(json.dumps(call("nvram"), indent=1))
-    elif cmd == "resume":
-        call("resume", {})
-    elif cmd == "ec-direct":
-        ec = direct_ec()
-        if a[1] == "read":
-            addr = int(a[2], 16)
-            n = int(a[3]) if len(a) > 3 else 1
-            for i in range(n):
-                print(f"0x{addr + i:04X} = 0x{ec.read(addr + i):02X}")
-        elif a[1] == "dump":
-            base = int(a[2], 16)
-            for row in range(0, 256, 16):
-                print(f"{base + row:04X}: " + " ".join(f"{ec.read(base + row + i):02X}" for i in range(16)))
-    elif cmd == "release":
-        _pkg()
-        from uwccd.nvram import Nvram
-        ec = direct_ec()
-        ec.set_bit(0x7C6, 2, False)   # RAM fan table off
-        ec.set_bit(0x741, 0, False)   # AP not present
-        nv = Nvram()
-        nv.verify(ec.read(0x740))
-        nv.set("ApExistFlag", 0)
-        if nv.get("MemoryOverClockSupport") == 1 and nv.get("MemoryOverClockSwitch"):
-            nv.set("MemoryOverClockSwitch", 0)     # SetFwVarsForUninstall: no RAM overclocking without the program
-            print("RAM overclocking switched off (BIOS, next start)")
-        print("fan control returned to the EC")
-    else:
-        sys.exit(__doc__)
+            stream.reconfigure(errors="replace")
+        except (AttributeError, ValueError):
+            pass
+    if "--json" in a:
+        JSON = True
+        a = [x for x in a if x != "--json"]
+    if not a or a[0] in ("-h", "--help", "help"):
+        return cmd_help(a[1:])
+    cmd, rest = a[0], a[1:]
+    if rest[:1] in (["-h"], ["--help"]):
+        return cmd_help([cmd])
+    if cmd == "restart":
+        return cmd_restart()
+    if cmd == "ec-direct":
+        return cmd_ec_direct(rest)
+    if cmd == "release":
+        return cmd_release()
+    if cmd in ("status", "lc", "lang"):
+        LANG = call("state")["settings"].get("lang", "en")
+    simple = {
+        "status": lambda: cmd_status(),
+        "monitor": lambda: cmd_monitor(rest),
+        "mode": lambda: cmd_mode(rest),
+        "profile": lambda: cmd_profile(rest),
+        "boost": lambda: (call("fanboost", {"on": onoff(rest[0], "boost")}) if rest else None,
+                          out({"fan_boost": call("state")["power"]["fan_boost"]},
+                              lambda d: f"FanBoost: {'on' if d['fan_boost'] else 'off'}")),
+        "super": lambda: cmd_switch(rest, "super_performance", lambda s: s["power"].get("super_performance"), "super"),
+        "ramoc": lambda: cmd_ramoc(rest),
+        "fan": lambda: cmd_fan(rest),
+        "battery": lambda: cmd_battery(rest),
+        "kb": lambda: cmd_kb(rest),
+        "lb": lambda: cmd_lb(rest),
+        "get": lambda: cmd_get(rest),
+        "set": lambda: cmd_set(rest),
+        "apps": lambda: cmd_apps(rest),
+        "restore": lambda: cmd_restore(rest),
+        "lc": lambda: cmd_lc(rest),
+        "history": lambda: cmd_history(rest),
+        "version": lambda: cmd_version(cmd, rest),
+        "update": lambda: cmd_version(cmd, rest),
+        "report": lambda: cmd_report(rest),
+        "export": lambda: cmd_export(rest),
+        "import": lambda: cmd_import(rest),
+        "lang": lambda: cmd_lang(rest),
+        "debug": lambda: cmd_switch(rest, "debug", lambda s: s["settings"].get("debug"), "debug"),
+        "lighting": lambda: out(call("lighting/devices")),
+        "nvram": lambda: out(call("nvram")),
+        "resume": lambda: (call("resume", {}), out({"ok": True}, "ok")),
+        "ec": lambda: cmd_ec(rest),
+    }
+    if cmd not in simple:
+        usage(None)
+    simple[cmd]()
+
+
+def cmd_ramoc(a):
+    if a:
+        call("setting", {"key": "mem_oc", "value": onoff(a[0], "ramoc")})
+    st = call("state")["settings"]
+    d = {"supported": bool(st.get("mem_oc_support")), "mem_oc": bool(st.get("mem_oc")),
+         "pending_reboot": bool(st.get("mem_oc_pending"))}
+    out(d, lambda x: "RAM overclocking: not supported on this laptop" if not x["supported"] else
+        f"RAM overclocking: {'on' if x['mem_oc'] else 'off'}" + (" (applies after a reboot)" if x["pending_reboot"] else ""))
+
+
+def cmd_restore(a):
+    if "--yes" not in a:
+        fail("This resets every profile and fan table to factory values. Run: uwccctl restore --yes", 2)
+    call("restore", {})
+    out({"ok": True}, "factory profiles and fan tables restored")
+
+
+def cmd_lang(a):
+    global LANG
+    if a:
+        if a[0] not in ("en", "ru"):
+            usage("lang")
+        call("setting", {"key": "lang", "value": a[0]})
+        LANG = a[0]
+    out({"lang": LANG}, T("lang_set"))
+
+
+def cmd_ec(a):
+    if a[:1] != ["read"] or not a[1:]:
+        usage("ec")
+    r = call(f"ec/{int(a[1], 16):x}")
+    out(r, f"0x{r['addr']:04X} = 0x{r['value']:02X} ({r['value']})")
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    try:
+        main(sys.argv[1:])
+    except BrokenPipeError:                      # uwccctl ... | head
+        try:
+            sys.stdout = open(os.devnull, "w")
+        except OSError:
+            pass
+        sys.exit(0)
+    except KeyboardInterrupt:
+        sys.exit(130)

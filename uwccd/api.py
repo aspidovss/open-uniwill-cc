@@ -468,6 +468,15 @@ class Handler(BaseHTTPRequestHandler):
             if isinstance(value, int) and value not in s.power.MODES:
                 raise ValueError("mode not available")
             s.settings_store.set(key, value)
+        elif key == "fan_manager":
+            if value not in ("auto", "cml", "std"):
+                raise ValueError("fan_manager: auto | cml | std")
+            if value == s.settings_store.get("fan_manager", "auto"):
+                return
+            s.settings_store.set("fan_manager", value)
+            log.info("fan manager set to %s — restarting the service", value)
+            if not s.mock:
+                threading.Timer(1.0, lambda: os._exit(3)).start()   # the manager is chosen at start-up
         elif key == "lang":
             if value not in ("en", "ru"):
                 raise ValueError("lang: en | ru")

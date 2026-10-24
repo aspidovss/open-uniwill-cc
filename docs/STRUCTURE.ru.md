@@ -44,6 +44,8 @@
 | `uwccd/lighting/` | подсветка клавиатуры; `oem/` — код на основе программы производителя (проприетарный) |
 | `uwccd/web/` | интерфейс: `index.html`, `app.js`, `app.css`, `i18n.js` (русские строки), значки |
 | `bin/` | `uwcc` (окно), `uwcc-agent` (агент сеанса Linux), `uwccctl` (командная строка) |
+| `docs/CLI.ru.md` | справочник командной строки (`docs/CLI.md` — английский) |
+| `man/` | справочная страница `uwccctl.1` (английская; `man/ru/` — русская), ставится `install.sh` |
 | `kernel/` | модуль ядра Linux `uwcc` — доступ к EC и горячие клавиши (GPL-2.0, DKMS) |
 | `packaging/` | Linux: юнит systemd, хук сна, ярлыки, правило polkit |
 | `windows/` | спецификация PyInstaller и точки входа, скрипт Inno Setup, `install.ps1` / `uninstall.ps1` |
@@ -123,6 +125,7 @@
 | `packaging/system-sleep-uwcc` | усыпляет СЖО перед сном, после сна заново применяет настройки |
 | `packaging/50-uwcc.rules` | polkit: группе `uwcc` можно перезапускать службу |
 | `packaging/*.desktop` | ярлык окна в меню и автозапуск агента |
+| `packaging/uwccctl.bash-completion` | автодополнение команд `uwccctl` в bash |
 
 ## С чего начать
 

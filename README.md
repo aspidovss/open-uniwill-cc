@@ -6,7 +6,7 @@
 
 <p align="center"><b>Open Control Center for Uniwill-based laptops — modes, fans, power, lighting, liquid cooling. No tracking.</b></p>
 
-<p align="center"><b>English</b> · <a href="README.ru.md">Русский</a> · <a href="docs/STRUCTURE.md">Project structure</a></p>
+<p align="center"><b>English</b> · <a href="README.ru.md">Русский</a> · <a href="docs/STRUCTURE.md">Project structure</a> · <a href="docs/CLI.md">Command line</a></p>
 
 <p align="center">
   <a href="https://github.com/aspidovss/open-uniwill-cc/releases/latest"><img src="https://img.shields.io/badge/Download-latest%20release-e8613c?logo=github&logoColor=white" alt="Download"></a>
@@ -153,21 +153,23 @@ The installer builds the `uwcc` kernel module with DKMS (falls back to `acpi_cal
 
 ```text
 uwccctl status                   mode, fans, temperatures, battery, cooler
+uwccctl monitor --watch 2        sensors every 2 s
 uwccctl mode office|gaming|turbo|custom
-uwccctl profile 1                profile of the current mode
-uwccctl boost on|off             Fan Boost
-uwccctl kb off|on|effect N       keyboard backlight
-uwccctl lc scan / connect ADDR   liquid cooler: find / connect
-uwccctl lc mode auto|ec|low|medium|high|off
-uwccctl lang en|ru
-uwccctl history csv out.csv      last hour of sensors to a file
-uwccctl debug on|off             verbose service log
+uwccctl profile set custom:0 pl1=65 pl2=90 tcc=10 name=Quiet
+uwccctl fan set current cpu 0/45:0 55/50:30 70/65:60 85/80:100
+uwccctl boost on|off  /  super on|off  /  ramoc on|off
+uwccctl battery limit 80 60      charge limits
+uwccctl kb effect wave --speed 3 --multi
+uwccctl set fn_lock on           any switch or automation setting (uwccctl get lists them)
+uwccctl apps add steam gaming    mode while a program runs
+uwccctl lc tiers 55:25:8 70:50:8 999:90:11   liquid cooler steps
 uwccctl export all backup.json   fan curves, profiles and settings to a file
-uwccctl import backup.json       fan curves and profiles back (add fans,profiles,settings to choose)
-uwccctl update                   check for a new release
 uwccctl report                   diagnostic report (zip) for bug reports and new laptops
-uwccctl restart                  restart the service (administrator / root)
+uwccctl --json status            any command as JSON, for scripts
 ```
+
+Everything the window changes is available from the console. Full reference: [docs/CLI.md](docs/CLI.md), `man uwccctl` on Linux
+(`man -L ru uwccctl` in Russian; bash completion is installed too), `uwccctl help COMMAND` on both systems.
 
 ## Uninstall / back to the original
 

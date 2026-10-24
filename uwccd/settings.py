@@ -246,6 +246,7 @@ class SettingsManager:
             "eula_accepted": int(self.st.get("eula_accepted", 0) or 0), "eula_version": EULA_VERSION,
             "mem_oc_support": self.mem_oc_support, "mem_oc": self.mem_oc(), "mem_oc_pending": self.mem_oc_pending(),
             "lang": self.st.get("lang", "en"),
+            "fan_manager": self.st.get("fan_manager", "auto"),
             "webcam": self.webcam(),
         }
 

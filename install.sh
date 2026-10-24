@@ -106,6 +106,11 @@ fi
 ln -sf "$PREFIX/bin/uwcc" /usr/local/bin/uwcc
 ln -sf "$PREFIX/bin/uwccctl" /usr/local/bin/uwccctl
 ln -sf "$PREFIX/bin/uwcc-agent" /usr/local/bin/uwcc-agent
+# man uwccctl (English) and man -L ru uwccctl (Russian); bash completion
+install -Dm644 "$HERE/man/uwccctl.1" /usr/local/share/man/man1/uwccctl.1
+install -Dm644 "$HERE/man/ru/uwccctl.1" /usr/local/share/man/ru/man1/uwccctl.1
+mandb -q 2>/dev/null || true
+install -Dm644 "$HERE/packaging/uwccctl.bash-completion" /usr/share/bash-completion/completions/uwccctl
 install -Dm644 "$HERE/packaging/uwcc.desktop" /usr/share/applications/uwcc.desktop
 install -Dm644 "$HERE/packaging/uwcc-agent.desktop" /etc/xdg/autostart/uwcc-agent.desktop
 # group uwcc may restart the service without a password (the agent's "Restart the service" button)
@@ -160,7 +165,7 @@ cat <<EOF
 
 Done. Control Center is installed.
   • Open "Control Center" from the application menu (or run: uwcc)
-  • Console:  uwccctl status      Liquid cooler:  uwccctl lc scan
+  • Console:  uwccctl status      Liquid cooler:  uwccctl lc scan      Manual: man uwccctl
   • Log:      journalctl -u uwccd -f
   • Language: English by default; switch with EN/RU in the window or: uwccctl lang ru
 User ${TARGET_USER:-<yours>} was added to the uwcc group — log out and back in.

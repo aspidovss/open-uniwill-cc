@@ -1,0 +1,423 @@
+.TH UWCCCTL 1 "Октябрь 2026" "open-uniwill-cc 1.5.5" "Команды пользователя"
+.SH ИМЯ
+uwccctl \- управление open-uniwill-cc из командной строки (ноутбуки Uniwill)
+.SH СИНТАКСИС
+.B uwccctl
+.RB [ \-\-json ]
+.I команда
+.RI [ аргументы ]
+.br
+.B uwccctl help
+.RI [ команда ]
+.SH ОПИСАНИЕ
+.B uwccctl
+управляет службой
+.BR uwccd :
+режимы производительности и профили, таблицы вентиляторов, защита батареи, подсветка
+клавиатуры и световой полосы, переключатели, автоматизация, водяное охлаждение
+(Bluetooth), история, резервные копии и отчёты для диагностики.
+Всё, что меняется в окне, доступно и здесь, поэтому ноутбуком можно управлять из скриптов,
+горячих клавиш, по SSH или в системе без рабочего стола.
+.PP
+Программа обращается к службе на 127.0.0.1 с ключом из
+.IR /run/uwcc/token .
+Его могут читать группа
+.B uwcc
+(установщик добавляет в неё пользователя; после установки один раз войдите в сеанс заново) и root.
+Команда без аргументов показывает текущее состояние; с аргументами \(em меняет его
+и показывает новое.
+.SH ПАРАМЕТРЫ
+.TP
+.B \-\-json
+Вывод в JSON (один документ;
+.B monitor \-\-watch
+выводит по одному объекту JSON на строку).
+Ошибки выводятся как
+.B {"error": "..."}
+в стандартный вывод.
+Параметр можно указать в любом месте командной строки.
+.TP
+.BR \-h ", " \-\-help
+Обзор; после команды \(em справка по ней.
+.SH КОМАНДЫ
+.SS Обзор
+.TP
+.B status
+Модель ноутбука, режим и профиль, пределы PL, вентиляторы, температуры, батарея,
+водяное охлаждение и переключатели.
+С
+.B \-\-json
+выводит
+.B {"state": ..., "monitor": ...}
+в том виде, в каком их отдаёт служба.
+.TP
+.BR "monitor " [ \-\-watch " [" \fIСЕК\fR ]]
+Температура, загрузка, частота и мощность ЦП и ГП, вентиляторы, память, батарея.
+.B \-\-watch
+повторяет каждые
+.I СЕК
+секунд (по умолчанию 2, не меньше 0,5) до Ctrl+C.
+.TP
+.BR "history " [ csv | csv\-excel | json "] [" 1m | 5m | 15m | 1h | 24h "] [" \fIФАЙЛ\fR ]
+Записанная история датчиков (по умолчанию csv за 1h; с
+.B \-\-json
+\(em json) в стандартный вывод или в
+.IR ФАЙЛ .
+.SS Производительность
+.TP
+.BR "mode " [ office | gaming | turbo | custom ]
+Показать или сменить режим: офисный, игровой, турбо, пользовательский.
+.B custom
+есть на платформах с RamFan 1.5 и пятью пользовательскими ячейками.
+.TP
+.BR "profile " [\fIN\fR]
+Показать активный профиль или выбрать ячейку
+.I N
+(счёт с 0) текущего режима.
+.TP
+.B profile list
+Все профили; активный отмечен *.
+.TP
+.BR "profile show " [\fIЦЕЛЬ\fR]
+Значения профиля.
+.TP
+.BR "profile set " [\fIЦЕЛЬ\fR] " \fIКЛЮЧ\fR=\fIЗНАЧЕНИЕ\fR ..."
+Изменить профиль. Ключи:
+.RS
+.TP 10
+.BR pl1 ", " pl2 ", " pl4
+пределы мощности ЦП, Вт (PL2 поднимается до PL1; PL4 не может быть меньше PL2).
+.TP
+.B tcc
+смещение TCC, \(deC ниже Tjmax, или
+.BR off .
+.TP
+.B ctgp
+настраиваемый TGP видеокарты NVIDIA, Вт, или
+.BR off .
+.TP
+.B db
+Dynamic Boost, Вт, или
+.BR off .
+.TP
+.B gputemp
+предел температуры ГП, \(deC, или
+.BR off .
+.TP
+.B fanspeed
+скорость переключения вентилятора, об/мин (100..12700), или
+.BR off .
+.TP
+.B name
+имя пользовательской ячейки (до 24 символов).
+.RE
+.IP
+Служба проверяет диапазоны этого ноутбука и сообщает о нарушенном как об ошибке.
+.TP
+.BR "profile reset " [\fIЦЕЛЬ\fR]
+Заводские значения и заводская кривая вентиляторов ячейки.
+.PP
+.I ЦЕЛЬ
+\(em режим
+.RB ( office ),
+режим и ячейка со счётом с 0
+.RB ( custom:2 )
+или имя профиля
+.RB ( Mode4_Profile3 ).
+Без неё используется активный профиль.
+.TP
+.BR "boost " [ on | off ]
+FanBoost: оба вентилятора на максимуме.
+.TP
+.BR "super " [ on | off ]
+Суперпроизводительность: таблица вентиляторов Turbo, максимальные cTGP и Dynamic Boost
+независимо от режима.
+.TP
+.BR "ramoc " [ on | off ]
+Разгон оперативной памяти (переменная BIOS MemoryOverClockSwitch).
+Действует после перезагрузки; до неё отображается как ожидающий.
+.TP
+.B restore \-\-yes
+Заводские профили и таблицы вентиляторов всех режимов.
+.SS Таблицы вентиляторов
+.TP
+.B fan list
+Таблицы и профили, которые их используют; активная отмечена *.
+.TP
+.BR "fan show " [\fIТАБЛИЦА\fR]
+Уровни таблицы в виде
+.IR ВВЕРХ / ВНИЗ : СКОРОСТЬ .
+.TP
+.BI "fan set " "ТАБЛИЦА " cpu | gpu " ТОЧКА ..."
+Заменить кривую. Точка \(em
+.IR ВВЕРХ / ВНИЗ : СКОРОСТЬ :
+температура включения уровня, температура возврата на предыдущий уровень и скорость
+вентилятора в процентах.
+До 16 уровней; уровень 0 начинается с 0 \(deC, температуры не убывают, на последнем
+уровне вентилятор работает не меньше чем на 40 %.
+.TP
+.BI "fan set " "ТАБЛИЦА " "\-\-file " ФАЙЛ
+Загрузить таблицу, сохранённую командой
+.BR "fan show \-\-json" .
+.TP
+.BI "fan separate " "ТАБЛИЦА " on | off
+Раздельные кривые ЦП и ГП (FanControlRespective).
+.TP
+.BI "fan reset " ТАБЛИЦА
+Заводская кривая.
+.PP
+.I ТАБЛИЦА
+\(em имя из
+.B fan list
+(M1T1 .. M4T5) или
+.BR current .
+.SS Батарея
+.TP
+.B battery
+Режим защиты, пределы заряда, циклы, приоритет Type\-C.
+.TP
+.BR "battery mode " full | balanced | stationary
+Режим защиты: полная ёмкость, сбалансированный, стационарный.
+.TP
+.BI "battery limit " ВЕРХ " \fR[\fIНИЗ\fR]"
+Прекращать заряд на
+.I ВЕРХ
+% (1..100) и возобновлять ниже
+.I НИЗ
+% (1..95).
+.TP
+.BR "battery typec " on | off
+Заряжать в первую очередь от адаптера Type\-C.
+.SS Клавиатура и световая полоса
+.TP
+.B kb
+Состояние подсветки, текущий эффект и контроллер клавиатуры.
+.TP
+.BR "kb " on | off
+.TP
+.B kb effects
+Эффекты с номерами; отмечены неподдерживаемые и те, что рисует служба
+(им нужна работающая служба).
+.TP
+.BI "kb effect " ИМЯ | N " \fR[\fIпараметры\fR]"
+Включить эффект. Неуказанные параметры сохраняют текущие значения:
+.RS
+.TP 22
+.BI \-\-light " 0..4"
+яркость
+.TP
+.BI \-\-speed " 0..4"
+скорость
+.TP
+.BR \-\-dir " right|left|up|down"
+направление
+.TP
+.BI \-\-color " RRGGBB\fR[,\fIRRGGBB\fR...]"
+цвет или палитра
+.TP
+.BR \-\-multi ", " \-\-no\-multi
+многоцветный режим (круговая палитра)
+.TP
+.BI \-\-text " ТЕКСТ"
+текст эффекта Alphabet
+.RE
+.TP
+.BI "kb level " N
+Яркость 0..4.
+.TP
+.BR "lb " [ hinge | base | logo "] " on | off
+.TP
+.BI "lb \fR[\fIЗОНА\fR] color " RRGGBB " \fR[\fIЭФФЕКТ\fR]"
+.TP
+.BR "lb " [\fIЗОНА\fR] " effect " static | breathing | breathing_multi | wave | cycle | rainbow | colorbreath | colorwave
+.TP
+.BI "lb \fR[\fIЗОНА\fR] light " 0..4
+Зоны световой полосы; по умолчанию
+.BR hinge .
+.TP
+.B lighting
+Устройства клавиатуры и световой полосы (диагностика).
+.SS Переключатели и автоматизация
+.TP
+.BR "get " [\fIКЛЮЧ\fR]
+Все переключатели и настройки автоматизации или один из них.
+.TP
+.BI "set " "КЛЮЧ ЗНАЧЕНИЕ"
+Изменить. Логические значения:
+.BR on / off .
+.RS
+.TP 20
+.B Переключатели
+winkey_lock, fn_lock, usb_charger, touchpad_toggle, touchpad_enabled, ac_recovery,
+dgpu_direct, bluetooth, wifi, webcam, osd, lc_hwoc, kb_picture_modes, tcc_extended,
+history_record, update_check, debug, mem_oc, super_performance
+.TP
+.B kb_timeout
+время до отключения подсветки клавиатуры, с (0..3600, 0 = никогда)
+.TP
+.B Автоматизация
+alerts, overheat_boost, kb_off_on_battery, ppd_sync (on/off);
+cpu_alert, gpu_alert (60..105 \(deC);
+mode_on_ac
+.RB ( keep | previous |\fIрежим\fR),
+mode_on_battery
+.RB ( keep |\fIрежим\fR)
+.TP
+.B lightbar_trigger
+переключить световую полосу, как горячая клавиша
+.TP
+.B lang
+.BR en | ru
+.TP
+.B fan_manager
+.BR auto " (по проекту), " cml ", " std ;
+служба перезапускается
+.RE
+.TP
+.B apps
+Правила смены режима, пока запущена программа.
+.TP
+.BI "apps add " "ПРОЦЕСС РЕЖИМ"
+Например
+.BR "apps add steam gaming" .
+.TP
+.BI "apps remove " ПРОЦЕСС
+.TP
+.BR "apps enable" | disable " \fIПРОЦЕСС\fR"
+.SS Водяное охлаждение
+.TP
+.BR "lc " [ status ]
+.TP
+.B lc scan
+Найти системы охлаждения поблизости.
+.TP
+.BI "lc connect " АДРЕС
+Подключить и запомнить; служба переподключается сама.
+.TP
+.BR "lc disconnect " [ \-\-forget ]
+.TP
+.BR "lc mode " auto | laptop | ec | low | medium | high | off
+.TP
+.BI "lc manual " "ВЕНТ ПОМПА"
+Вентилятор 0..100 %, помпа 7, 8, 11 или 12 В (0 = выкл).
+.TP
+.BI "lc tiers " НИЖЕ : ВЕНТ : ПОМПА " ..."
+Ступени автоматического режима, 1..8; последняя действует при любой большей температуре.
+.TP
+.BI "lc set " "КЛЮЧ ЗНАЧЕНИЕ"
+.B temp_source
+.RB ( max | cpu | gpu ),
+.BR delay_up ", " delay_down
+(0..300 с),
+.BR smooth ", " notify_flow ", " flow_guard ", " boost_fan ", " boost_pump
+.RB ( on / off ).
+.TP
+.BR "lc idle " on | off " [\fIКЛЮЧ\fR=\fIЗНАЧЕНИЕ\fR ...]"
+Останавливать помпу при низкой температуре: off_below, off_after, on_above, on_after, min_run.
+.TP
+\fBlc rgb\fR \fIRRGGBB\fR [\fIРЕЖИМ\fR] | \fBlc rgb off\fR
+Режимы: static, breathe, rainbow, breathe_rainbow, spiral, rotating_rainbow, color_wave.
+.TP
+.BR "lc prime " [ stop ]
+Цикл заполнения жидкостью (около 68 с).
+.TP
+.B lc suspend
+Перевести систему охлаждения в сон (используется при засыпании системы).
+.SS Служба
+.TP
+.BR "export fans" | all " [\fIФАЙЛ\fR]"
+Таблицы вентиляторов или полная копия с профилями, настройками и водяным охлаждением.
+.TP
+.BI "import " ФАЙЛ " \fR[fans,profiles,settings] [\-\-force]"
+Разделы по умолчанию: fans,profiles.
+.B \-\-force
+принимает копию с другой модели ноутбука.
+.TP
+.BI "report \fR[\fIФАЙЛ\fR] [\-\-private " СПИСОК "\fR] [\-\-sections " СПИСОК "\fR] [\-\-full]"
+Архив для диагностики и сообщений об ошибках.
+.B \-\-private
+скрывает serial, uuid, mac, names, apps.
+.TP
+.BR "lang " en | ru
+Язык окна, уведомлений и этой программы.
+.TP
+.BR "debug " [ on | off ]
+Подробный журнал службы.
+.TP
+.B version
+.TP
+.BR "update " [ check | install ]
+Проверить новый выпуск на GitHub; установка работает только в Windows.
+.TP
+.B restart
+Перезапустить службу (участники группы uwcc могут сделать это через polkit).
+.TP
+.B resume
+Применить настройки заново (используется после сна).
+.TP
+.BI "ec read " АДРЕС
+Прочитать регистр EC (шестнадцатеричный адрес) через службу.
+.TP
+.B nvram
+Поля UniWillVariable.
+.TP
+\fBec\-direct read\fR \fIАДРЕС\fR [\fIN\fR] | \fBec\-direct dump\fR \fIБАЗА\fR
+Прочитать EC без службы (root).
+.TP
+.B release
+Вернуть управление вентиляторами EC и снять флаги программы в BIOS (root; используется при удалении).
+.SH КОД ВОЗВРАТА
+.TP
+.B 0
+Успех.
+.TP
+.B 1
+Служба отклонила запрос (значение вне диапазона, функции нет на этом ноутбуке).
+.TP
+.B 2
+Неверное использование.
+.TP
+.B 3
+Служба не запущена или нет доступа.
+.SH ОКРУЖЕНИЕ
+.TP
+.B UWCC_PORT
+Порт службы (по умолчанию 47321).
+.TP
+.B UWCC_TOKEN
+Использовать этот ключ вместо файла.
+.TP
+.B UWCC_TOKEN_FILE
+Путь к файлу ключа (по умолчанию
+.IR /run/uwcc/token ).
+.SH ФАЙЛЫ
+.TP
+.I /run/uwcc/token
+Ключ доступа к работающей службе.
+.TP
+.I /var/lib/uwcc
+Настройки, профили, таблицы вентиляторов и история.
+.SH ПРИМЕРЫ
+.nf
+uwccctl mode turbo
+uwccctl profile set custom:0 pl1=65 pl2=90 tcc=10 ctgp=off name=Тихий
+uwccctl fan set current cpu 0/45:0 55/50:30 70/65:60 85/80:100
+uwccctl battery limit 80 60
+uwccctl kb effect wave \-\-speed 3 \-\-multi
+uwccctl kb effect single \-\-color 00A0FF \-\-light 2
+uwccctl set mode_on_battery office
+uwccctl apps add steam gaming
+uwccctl \-\-json monitor | jq .cpu.temp
+uwccctl \-\-json monitor \-\-watch 5 >> sensors.ndjson
+.fi
+.SH СМОТРИТЕ ТАКЖЕ
+.BR systemctl (1),
+.BR journalctl (1)
+.PP
+https://github.com/aspidovss/open-uniwill-cc
+.SH ПРИМЕЧАНИЯ
+В Windows те же команды есть в
+.BR uwccctl.exe ;
+вместо этой страницы используйте
+.B uwccctl help
+.IR команда .

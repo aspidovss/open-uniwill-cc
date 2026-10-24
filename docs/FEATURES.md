@@ -21,10 +21,10 @@ In Custom mode the Fn mode key steps through the five slots. Each slot can be re
 Dynamic Boost with Dynamic Boost off; the PL limits of the current mode stay. **RAM overclocking** (also its own
 switch) when `UniWillVariable.MemoryOverClockSupport = 1`: written to `UniWillVariable.MemoryOverClockSwitch`, which the
 BIOS applies at the next boot; set to 0 by `uwccctl release` on uninstall.
-`uwccctl status` shows which manager runs (`[cml]` / `[std]`). If the choice is wrong for your laptop it can be forced with
-`"fan_manager": "cml"` or `"std"` in `settings.json` (Linux `/var/lib/uwcc`, Windows `%ProgramData%\UWCC\data`), then restart the service.
-Not ported from the RamFan1p5 manager (Windows APIs): GPU core/memory clock offsets and target temperature (NVAPI),
-CPU voltage offset (Intel OC SDK), WhisperMode, memory overclocking.
+`uwccctl status` shows which manager runs (`[cml]` / `[std]`). If the choice is wrong for your laptop, pick the other one in
+*Settings → Switches → Fan manager* (or `uwccctl set fan_manager cml|std|auto`); the service restarts by itself.
+Not ported from the RamFan1p5 manager: GPU core/memory clock offsets (NVAPI), CPU voltage offset (Intel OC SDK),
+WhisperMode.
 
 ## Automation (Settings → Automation)
 
@@ -35,7 +35,8 @@ CPU voltage offset (Intel OC SDK), WhisperMode, memory overclocking.
 
 ## Monitoring extras
 
-* **Last hour** chart on the Monitor page: temperatures, load, CPU package power (RAPL) and GPU power, fan speed, cooler.
+* **History** on the Monitor page (1 min … 24 h, a point can be pinned for details, CSV / JSON export): temperatures,
+  load, clocks, CPU package power and power limits, GPU power, CPU + GPU and battery power, fans, cooler.
 * **Discrete GPU** card on the Information page: whether the NVIDIA GPU sleeps and which programs keep it awake.
   The monitor no longer calls `nvidia-smi` while the GPU is in runtime suspend (that used to wake it every 2 s and drain the battery).
 * **Fan curve presets** (Factory / Quiet = factory × 0.8, the OEM rule for its quiet table / Maximum) — loaded into the editor, saved with *Save*.
@@ -75,38 +76,69 @@ leave the cooler unusable. Use the vendor tool or nRF Connect with the right pac
 
 ## What was ported
 
-| Control Center feature | Status | Implementation |
-|---|---|---|
-| Office / Gaming / Turbo mode, Fn mode key, OSD | ✅ | EC `0x751`, NVRAM `PowerMode`, WMI event `0xB0` |
-| Profiles 1–3 for Gaming and Office | ✅ | `Mode1/2_Profile*.json`, tables `M1T1…M2T3` |
-| Fan Boost | ✅ | bit 6 of `0x751`, event `0xA7` |
-| CPU/GPU fan curves (16 levels), factory reset | ✅ | EC `0xF00–0xF5F`, factory tables from the EC (handshake `0xF5D/F5E/F5F`) |
-| PL1/PL2 on AC and battery, factory PL from the EC | ✅ | EC `0x783/0x784`, `0x730–0x737`, `0x7A7–0x7AA` |
-| NVIDIA cTGP and Dynamic Boost | ✅ | EC `0x743–0x746` |
-| Balanced protection PH6PG0x/3x/7x (thermal profile S2) | ✅ | EC `0x726`, event `0xCB` |
-| Monitor: temperatures, load, clocks, fans (%, rpm), memory, network, drives, battery | ✅ | fans — EC `0x75B/0x75C`, `0x464/0x46B`; rest — hwmon, `/proc`, `nvidia-smi` |
-| ITE lighting: 17 hardware effects, brightness, speed, direction, colours, multicolour | ✅ | HID feature reports 08h/09h/12h/14h/16h via hidraw |
-| User mode (per-key colour) and gaming mode (WASD/arrows) | ✅ | picture 12h / rows 16h |
-| Software effects Neon, Stack, Impact, Alphabet | ✅ | frames from `AP_Effect_Task` (`uwccd/lighting/oem`, proprietary) |
-| LED colour correction per LED vendor | ✅ | `WKDColor.cheatRGB_*` (`uwccd/lighting/oem`, proprietary) |
-| Single-colour backlight (on/off, level) | ✅ | EC `0x78C` |
-| Backlight auto-off on inactivity | ✅ | timer on `/dev/input` events |
-| Windows key lock, Fn Lock | ✅ | EC `0x767/0x768`, `0x74E`, NVRAM `FnKeyStatus` |
-| USB charging in sleep, touchpad toggle, touchpad LED | ✅ | EC `0x767` bit 4, `0x7A6` |
-| Power on with AC | ✅ | NVRAM `ACRecoveryStatus` or EC `0x726` bit 3 |
-| NVIDIA Optimus / MUX (discrete GPU direct) | ✅ | NVRAM `OemDisplayMode`, after a restart |
-| Battery protection modes (full / balanced / stationary) | ✅ | EC `0x7A6` bits 4–5 |
-| Custom charge limits | ✅ | EC `0x7B9`, `0x7D0`, NVRAM `Charge*Limit` |
-| Type-C charging priority | ✅ | EC `0x7CC` bit 7 |
-| Wi-Fi / Bluetooth | ✅ | rfkill |
-| App binding | ✅ | process watch |
-| Liquid cooling over Bluetooth (BT Cooling) | ✅ | see above; DFU firmware update ❌ |
-| Custom mode with 5 slots, PL4, TCC offset, Smart APC limits (RamFan1p5 platforms) | ✅ | EC `0x785/0x786/0x787`, `0x726` bit 7, ACPI `SMRW` |
-| Keyboard power-on (welcome) effect | ❌ | stored in a UEFI variable whose layout is not verified yet |
-| Music lighting effect | ❌ | needs audio capture (Windows WASAPI in the original) |
-| StarHitting / StarSpark | ➖ | light bar only in the original |
-| Display colour calibration, display modes (Windows ICC/gamma) | ❌ | use GNOME: Settings → Color |
-| Overclocking (Intel OC SDK, NVIDIA offsets), WhisperMode 2.0 | ❌ | no Linux API (for NVIDIA use `nvidia-settings`) |
-| Game monitor (FPS overlay), Dynamic Desk, key remapping | ❌ | Windows-specific; MangoHud is an overlay alternative |
-| OTA, MQTT | ❌ | not needed on Linux |
+✅ works · ❌ not available · ➖ not needed / not applicable. Linux and Windows run the same service code; only the access
+to the hardware differs (see the last section).
 
+| Control Center feature | Linux | Windows | Implementation |
+|---|:-:|:-:|---|
+| Office / Gaming / Turbo mode, Fn mode key, OSD | ✅ | ✅ | EC `0x751`, NVRAM `PowerMode`, event `0xB0` |
+| Profiles 1–3 for Gaming and Office | ✅ | ✅ | `Mode1/2_Profile*.json`, tables `M1T1…M2T3` |
+| Custom mode with 5 slots, PL4, TCC offset, Smart APC limits (RamFan1p5 platforms) | ✅ | ✅ | EC `0x785/0x786/0x787`, `0x726` bit 7, ACPI `SMRW` |
+| Fan Boost | ✅ | ✅ | bit 6 of `0x751`, event `0xA7` |
+| CPU/GPU fan curves (16 levels), presets, factory reset | ✅ | ✅ | EC `0xF00–0xF5F`, factory tables from the EC (handshake `0xF5D/F5E/F5F`) |
+| PL1/PL2 on AC and battery, factory PL from the EC | ✅ | ✅ | EC `0x783/0x784`, `0x730–0x737`, `0x7A7–0x7AA` |
+| CPU temperature limit (TCC offset) | ✅ | ✅ | EC `0x786` |
+| NVIDIA cTGP and Dynamic Boost | ✅ | ✅ | EC `0x743–0x746`; Dynamic Boost needs `nvidia-powerd` (Linux) / the NVIDIA service (Windows) |
+| NVIDIA GPU temperature limit | ✅ | ✅ | `nvidia-smi -gtt` (Linux), NVAPI client thermal policies (Windows) |
+| Balanced protection PH6PG0x/3x/7x (thermal profile S2) | ✅ | ✅ | EC `0x726`, event `0xCB` |
+| Super performance (any mode) | ✅ | ✅ | `0x751 = 0x10`, factory Turbo table, cTGP maximum + Dynamic Boost |
+| RAM overclocking | ✅ | ✅ | NVRAM `MemoryOverClockSwitch` (applied by the BIOS at the next start) |
+| Power boost with the liquid cooler (CoolingOC / LiquidHWOC) | ✅ | ✅ | EC LC fan table `0xF5F`, firmware `INOU.PWUP` (kernel module ioctl / `UWACPIDriver`) |
+| Monitor: temperatures, load, clocks, fans (%, rpm), power, memory, network, drives, battery | ✅ | ✅ | fans — EC `0x75B/0x75C`, `0x464/0x46B`; Linux: hwmon, RAPL, `/proc`, `nvidia-smi`; Windows: ACPI thermal zone, Energy Meter / processor counters, `nvidia-smi` |
+| History 1 min … 24 h, export CSV / JSON | ✅ | ✅ | service-side recording, 24 h kept on disk |
+| "Who keeps the discrete GPU awake" | ✅ | ❌ | runtime PM + process scan |
+| ITE keyboard lighting: hardware effects, brightness, speed, direction, colours, multicolour | ✅ | ✅ | HID feature reports 08h/09h/14h (hidraw / hid.dll) |
+| Four-zone ITE keyboards (usage page FF12, e.g. MAIBENBEN Tsunami) | ✅ | ✅ | Single, Breathing, Wave, Rainbow, Flash, Mix; smooth Wave, Colour wave, Flash, Neon, Stack, Impact drawn zone by zone |
+| User mode (per-key colour) and gaming mode (WASD/arrows) — per-key keyboards | ✅ | ✅ | picture 12h / rows 16h |
+| Software effects Neon, Stack, Impact, Alphabet | ✅ | ✅ | frames from `AP_Effect_Task` (`uwccd/lighting/oem`, proprietary) |
+| Reactive effects (Reactive, Ripple, Aurora, Spark) light pressed keys | ✅ | ✅ | EC `0x741` bit 3 |
+| LED colour correction per keyboard type / LED vendor | ✅ | ✅ | `WKDColor.cheatRGB_*` (`uwccd/lighting/oem`, proprietary) |
+| Chassis light bar (hinge / base / logo) | ✅ | ✅ | HIDLightbar4, HID 0x7000 |
+| Single-colour backlight (on/off, level) | ✅ | ✅ | EC `0x78C` |
+| Backlight auto-off on inactivity | ✅ | ✅ | Linux: `/dev/input` events; Windows: idle time of the tray app |
+| Windows key lock, Fn Lock | ✅ | ✅ | EC `0x767/0x768`, `0x74E`, NVRAM `FnKeyStatus` |
+| USB charging in sleep, touchpad toggle, touchpad LED | ✅ | ✅ | EC `0x767` bit 4, `0x7A6`; touchpad on Windows: Win+Ctrl+F24 |
+| Power on with AC | ✅ | ✅ | NVRAM `ACRecoveryStatus` or EC `0x726` bit 3 |
+| NVIDIA Optimus / MUX (discrete GPU direct) | ✅ | ✅ | NVRAM `OemDisplayMode`, after a restart |
+| Webcam switch | ✅ | ✅ | Linux: USB de-authorisation; Windows: `Disable-PnpDevice` |
+| Wi-Fi / Bluetooth switches | ✅ | ❌ | rfkill |
+| Battery protection modes (full / balanced / stationary) | ✅ | ✅ | EC `0x7A6` bits 4–5 |
+| Custom charge limits | ✅ | ✅ | EC `0x7B9`, `0x7D0`, NVRAM `Charge*Limit` |
+| Type-C charging priority | ✅ | ✅ | EC `0x7CC` bit 7 |
+| Automation: mode per power source, overheating alerts, follow the power profile | ✅ | ✅ | power-profiles-daemon (Linux) / Windows power mode |
+| App binding | ✅ | ✅ | process watch |
+| Liquid cooling over Bluetooth (BT Cooling) | ✅ | ✅ | `bleak` (BlueZ / WinRT); see above |
+| Liquid cooler firmware update (DFU) | ❌ | ❌ | not done on purpose: a failed update can leave the cooler unusable |
+| Updates of this program | ✅ check | ✅ download + install | GitHub releases, checked against `SHA256SUMS.txt` |
+| Diagnostic report for new laptops / bug reports | ✅ | ✅ | `uwccctl report`, *Information → Diagnostic report* |
+| Full control from the command line (`uwccctl`, JSON output) | ✅ `man uwccctl`, bash completion | ✅ `uwccctl help` | everything the window changes; see [CLI.md](CLI.md) |
+| Restart of a hung service | ✅ | ✅ | Linux: agent notice + polkit; Windows: tray with UAC |
+| Keyboard power-on (welcome) effect | ❌ | ❌ | stored in a UEFI variable whose layout is not verified yet |
+| Music lighting effect | ❌ | ❌ | needs audio capture (WASAPI in the original) |
+| StarHitting / StarSpark | ➖ | ➖ | light bar only in the original |
+| Display colour calibration, display modes (ICC / gamma) | ❌ | ❌ | Linux: GNOME Settings → Color; Windows: the system colour settings |
+| Overclocking (Intel OC SDK, NVIDIA clock offsets), WhisperMode 2.0 | ❌ | ❌ | not ported (for NVIDIA on Linux: `nvidia-settings`) |
+| Game monitor (FPS overlay), Dynamic Desk, key remapping | ❌ | ❌ | Windows-specific in the original; MangoHud is an overlay alternative on Linux |
+| OTA — BIOS / EC / Control Center updates from the vendor server | ❌ | ❌ | firmware is not flashed by this program: use the vendor tools |
+| MQTT — internal message bus between the original service, window and tray | ➖ | ➖ | replaced by the local HTTP API + server-sent events with a token |
+
+### Hardware access: Linux and Windows
+
+| | Linux | Windows |
+|---|---|---|
+| EC | kernel module `uwcc` (`/dev/uwcc`, DKMS), fallback `acpi_call` | OEM driver `UWACPIDriver.sys` (`\\.\ACPIDriver`) |
+| Hot keys | WMI events through the module, fallback EC polling | WMI `AcpiTest_EventULong` |
+| UEFI variable `UniWillVariable` | `/sys/firmware/efi/efivars` | `GetFirmwareEnvironmentVariable` |
+| Keyboard / light bar | hidraw | SetupAPI + hid.dll |
+| Desktop part | session agent `uwcc-agent` (notifications, OSD) | tray app `ControlCenter.exe` |
+| Service | systemd `uwccd.service` | Windows service `uwccd` |

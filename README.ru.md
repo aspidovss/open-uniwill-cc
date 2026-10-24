@@ -6,7 +6,7 @@
 
 <p align="center"><b>Открытый Control Center для ноутбуков на Uniwill — режимы, вентиляторы, мощность, подсветка, СЖО. Без слежки.</b></p>
 
-<p align="center"><a href="README.md">English</a> · <b>Русский</b> · <a href="docs/STRUCTURE.ru.md">Структура проекта</a></p>
+<p align="center"><a href="README.md">English</a> · <b>Русский</b> · <a href="docs/STRUCTURE.ru.md">Структура проекта</a> · <a href="docs/CLI.ru.md">Командная строка</a></p>
 
 <p align="center">
   <a href="https://github.com/aspidovss/open-uniwill-cc/releases/latest"><img src="https://img.shields.io/badge/%D0%A1%D0%BA%D0%B0%D1%87%D0%B0%D1%82%D1%8C-%D0%BF%D0%BE%D1%81%D0%BB%D0%B5%D0%B4%D0%BD%D0%B8%D0%B9%20%D1%80%D0%B5%D0%BB%D0%B8%D0%B7-e8613c?logo=github&logoColor=white" alt="Скачать"></a>
@@ -155,21 +155,23 @@ sudo bash install.sh
 
 ```text
 uwccctl status                   режим, вентиляторы, температуры, батарея, СЖО
+uwccctl monitor --watch 2        датчики каждые 2 с
 uwccctl mode office|gaming|turbo|custom
-uwccctl profile 1                профиль текущего режима
-uwccctl boost on|off             Fan Boost
-uwccctl kb off|on|effect N       подсветка клавиатуры
-uwccctl lc scan / connect ADDR   СЖО: поиск / подключение
-uwccctl lc mode auto|ec|low|medium|high|off
-uwccctl lang en|ru
-uwccctl history csv out.csv      последний час датчиков в файл
-uwccctl debug on|off             подробный журнал службы
+uwccctl profile set custom:0 pl1=65 pl2=90 tcc=10 name=Тихий
+uwccctl fan set current cpu 0/45:0 55/50:30 70/65:60 85/80:100
+uwccctl boost on|off  /  super on|off  /  ramoc on|off
+uwccctl battery limit 80 60      пределы заряда
+uwccctl kb effect wave --speed 3 --multi
+uwccctl set fn_lock on           любой переключатель или настройка автоматизации (список: uwccctl get)
+uwccctl apps add steam gaming    режим, пока запущена программа
+uwccctl lc tiers 55:25:8 70:50:8 999:90:11   ступени СЖО
 uwccctl export all backup.json   кривые, профили и настройки в файл
-uwccctl import backup.json       вернуть кривые и профили (fans,profiles,settings — выбор разделов)
-uwccctl update                   проверить новый релиз
 uwccctl report                   диагностический отчёт (zip) для сообщений об ошибках и новых ноутбуков
-uwccctl restart                  перезапустить службу (администратор / root)
+uwccctl --json status            любая команда в JSON, для скриптов
 ```
+
+Из консоли доступно всё, что меняется в окне. Полный справочник: [docs/CLI.ru.md](docs/CLI.ru.md), `man -L ru uwccctl` в Linux (`man uwccctl` —
+на английском; ставится и автодополнение для bash), `uwccctl help КОМАНДА` в обеих системах.
 
 ## Удаление / возврат к оригиналу
 

@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.5.5
+
+- **Fan manager switch** in *Settings → Switches* (automatic by project / commercial `_CML` / RamFan 1.5 with the
+  Custom mode) and `uwccctl set fan_manager auto|cml|std`; the service restarts by itself. Before, it could only be
+  forced by editing `settings.json`.
+- **Full control from the command line.** `uwccctl` now changes everything the window does:
+  - `profile list|show|set|reset` — PL1/PL2/PL4, TCC offset, cTGP, Dynamic Boost, GPU temperature limit, fan switch
+    speed and the name of any profile (`custom:2`, `office`, `Mode4_Profile3`);
+  - `fan list|show|set|separate|reset` — fan curves as `UP/DOWN:DUTY` points or from a JSON file;
+  - `battery mode|limit|typec`; `super`, `ramoc`; `restore --yes`;
+  - `kb effects` and `kb effect NAME [--light --speed --dir --color --multi --text]`, `kb level`;
+  - `get` / `set KEY VALUE` for every switch and automation setting; `apps add|remove|enable|disable`;
+  - `lc tiers`, `lc set` (temperature source, delays, smoothing, flow guard, boosts), `lc idle`;
+  - `monitor [--watch SEC]`;
+  - `--json` for every command (errors as `{"error": ...}`), exit codes 0 / 1 rejected / 2 usage / 3 no service;
+  - `UWCC_TOKEN`, `UWCC_TOKEN_FILE` and `UWCC_PORT` environment variables.
+- **Man page** `uwccctl(1)` in English and Russian (`man uwccctl`, `man -L ru uwccctl`) and **bash completion**,
+  installed by `install.sh`; `uwccctl help COMMAND` on both systems; reference in `docs/CLI.md` / `docs/CLI.ru.md`.
+
 ## 1.5.4
 
 - **Keyboard type detection fixed** (checked against the IL of `ILM_RGBKB_Init`): an ITE keyboard with usage page

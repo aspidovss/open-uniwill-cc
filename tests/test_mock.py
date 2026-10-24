@@ -176,6 +176,139 @@ class MockService(unittest.TestCase):
         self.assertIsNone(lc["config"]["address"])
 
 
+class CliService(MockService):
+    """bin/uwccctl against the simulated service (MAIBENBEN Tsunami, project 0x10)."""
+
+    @classmethod
+    def setUpClass(cls):
+        os.environ["UWCC_MOCK_PROJECT"] = "0x10"
+        try:
+            super().setUpClass()
+        finally:
+            del os.environ["UWCC_MOCK_PROJECT"]
+
+    def cli(self, *args, code=0):
+        env = dict(os.environ, UWCC_PORT=str(self.port), UWCC_TOKEN=TOKEN, PYTHONPATH=ROOT)
+        r = subprocess.run([sys.executable, os.path.join(ROOT, "bin", "uwccctl"), *args], env=env,
+                           capture_output=True, text=True, timeout=30)
+        self.assertEqual(r.returncode, code, f"uwccctl {' '.join(args)}: {r.stdout}{r.stderr}")
+        return r.stdout
+
+    def j(self, *args, code=0):
+        return json.loads(self.cli("--json", *args, code=code))
+
+    def test_cli_status_monitor_help(self):
+        self.assertIn("MAIBENBEN Tsunami", self.cli("status"))
+        d = self.j("status")
+        self.assertIn("state", d)
+        self.assertIn("fans", d["monitor"])
+        self.assertIn("cpu", self.j("monitor"))
+        self.assertIn("kb effect", self.cli("help", "kb"))
+        self.assertIn("COMMAND", self.cli("help"))
+        self.assertIn("error", self.j("nosuchcommand", code=2))
+
+    def test_cli_modes_profiles(self):
+        self.assertEqual(self.j("mode", "turbo")["mode"], "turbo")
+        self.assertEqual(self.get("state")["power"]["mode"], 2)
+        self.cli("mode", "custom")
+        self.assertEqual(self.j("profile", "2")["Name"], "Mode4_Profile3")
+        p = self.j("profile", "set", "custom:2", "pl1=60", "pl2=90", "tcc=10", "ctgp=off", "name=Quiet")
+        self.assertEqual((p["CPU"]["PL1"], p["CPU"]["PL2"], p["CPU"]["TccOffsetSwitch"], p["CPU"]["TccOffset"]),
+                         (60, 90, 1, 10))
+        self.assertEqual((p["GPU"]["ConfigurableTGPSwitch"], p["CustomizeName"]), (0, "Quiet"))
+        self.assertEqual(self.j("profile", "show")["CustomizeName"], "Quiet")
+        self.assertEqual(self.j("profile", "set", "pl1=999", code=1)["error"][:10], "ValueError")
+        self.assertEqual(self.j("profile", "reset", "custom:2")["CustomizeName"], "3")
+        self.assertEqual(len(self.j("profile", "list")), 11)
+        self.cli("profile", "show", "nosuch", code=2)
+        self.assertTrue(self.j("boost", "on")["fan_boost"])
+        self.assertFalse(self.j("boost", "off")["fan_boost"])
+        self.assertTrue(self.j("super", "on")["super_performance"])
+        self.assertTrue(self.get("state")["power"]["super_performance"])
+        self.cli("super", "off")
+        self.assertTrue(self.j("ramoc", "on")["pending_reboot"])
+        self.cli("ramoc", "off")
+        self.cli("restore", code=2)
+        self.cli("restore", "--yes")
+        self.cli("mode", "office")
+
+    def test_cli_fan_tables(self):
+        names = [r["table"] for r in self.j("fan", "list")]
+        self.assertEqual(len(names), 20)
+        t = self.j("fan", "set", "M3T2", "cpu", "0/45:0", "55/50:30", "70/65:60", "85/80:100")
+        self.assertEqual([(x["UpT"], x["Duty"]) for x in t["CPU"][:5]], [(0, 0), (55, 30), (70, 60), (85, 100), (255, 255)])
+        self.assertEqual(self.get("table/M3T2")["CPU"][2]["DownT"], 65)
+        self.cli("fan", "set", "M3T2", "cpu", "0/45:0", "55/50:20", code=1)        # last level below 40 %
+        self.assertTrue(self.j("fan", "separate", "M3T2", "on")["FanControlRespective"])
+        path = os.path.join(self.tmp, "t.json")
+        with open(path, "w") as f:
+            f.write(self.cli("--json", "fan", "show", "M3T2"))
+        self.j("fan", "reset", "M3T2")
+        self.assertNotEqual(self.get("table/M3T2")["CPU"][1]["UpT"], 55)
+        self.assertEqual(self.j("fan", "set", "M3T2", "--file", path)["CPU"][1]["UpT"], 55)
+        self.assertIn("CPU:", self.cli("fan", "show"))
+        self.cli("fan", "show", "X9", code=2)
+
+    def test_cli_battery_keyboard(self):
+        self.assertEqual(self.j("battery", "mode", "stationary")["health_mode"], 2)
+        b = self.j("battery", "limit", "80", "60")
+        self.assertEqual((b["limit_up"], b["limit_down"]), (80, 60))
+        self.assertTrue(self.j("battery", "typec", "on")["typec_priority"])
+        self.cli("battery", "mode", "full")
+        names = {e["name"].lower() for e in self.j("kb", "effects")}
+        self.assertIn("wave", names)
+        k = self.j("kb", "effect", "wave", "--speed", "3", "--multi", "--dir", "left")
+        self.assertEqual((k["effect"]["idx"], k["effect"]["speed"], k["effect"]["circular"], k["effect"]["direction"]),
+                         (2, 3, True, 1))
+        k = self.j("kb", "effect", "single", "--color", "00ff80", "--light", "2", "--no-multi")
+        self.assertEqual((k["effect"]["colors"], k["effect"]["light"], k["effect"]["circular"]), ([[0, 255, 128]], 2, False))
+        self.assertEqual(self.j("kb", "effect", "breathing")["effect"]["colors"], [[0, 255, 128]])   # options kept
+        self.cli("kb", "effect", "nosuch", code=2)
+        self.cli("kb", "effect", "single", "--color", "zz", code=2)
+        self.assertFalse(self.j("kb", "off")["power"])
+        self.assertTrue(self.j("kb", "on")["power"])
+        lb = self.j("lb", "logo", "color", "ff0000", "breathing")
+        self.assertEqual((lb["zones"]["logo"]["effect"], lb["zones"]["logo"]["colors"]), ("breathing", [[255, 0, 0]]))
+
+    def test_cli_settings_apps_lc(self):
+        self.assertEqual(self.j("set", "fn_lock", "on"), {"fn_lock": True})
+        self.assertEqual(self.j("get", "fn_lock"), {"fn_lock": True})
+        self.cli("set", "fn_lock", "off")
+        self.assertEqual(self.j("set", "cpu_alert", "90"), {"cpu_alert": 90})
+        self.assertEqual(self.j("set", "mode_on_battery", "office"), {"mode_on_battery": 0})
+        self.cli("set", "mode_on_battery", "previous", code=1)
+        self.cli("set", "kb_timeout", "abc", code=2)
+        self.cli("set", "nosuch", "1", code=2)
+        self.assertEqual(self.j("set", "kb_timeout", "30"), {"kb_timeout": 30})
+        self.assertIn("ppd_sync", self.j("get"))
+        self.assertEqual(self.j("apps", "add", "steam", "gaming"), [{"process": "steam", "mode": 1, "enabled": True}])
+        self.assertFalse(self.j("apps", "disable", "steam")[0]["enabled"])
+        self.assertEqual(self.j("apps", "remove", "steam"), [])
+        self.cli("apps", "remove", "steam", code=1)
+        c = self.j("lc", "tiers", "50:20:7", "65:40:8", "999:80:12")["config"]
+        self.assertEqual([t["below"] for t in c["tiers"]], [50, 65, 999])
+        self.assertEqual(self.j("lc", "set", "temp_source", "gpu")["config"]["temp_source"], "gpu")
+        self.assertEqual(self.j("lc", "set", "delay_up", "20")["config"]["delay_up"], 20)
+        self.assertFalse(self.j("lc", "set", "smooth", "off")["config"]["smooth"])
+        pi = self.j("lc", "idle", "on", "off_below=45")["config"]["pump_idle"]
+        self.assertEqual((pi["enabled"], pi["off_below"]), (True, 45))
+        self.cli("lc", "set", "temp_source", "disk", code=1)
+        self.assertEqual(self.j("debug", "on"), {"debug": True})
+        self.cli("debug", "off")
+
+    def test_fan_manager_setting(self):
+        self.assertEqual(self.get("state")["settings"]["fan_manager"], "auto")
+        self.assertEqual(self.post("setting", {"key": "fan_manager", "value": "xyz"})[0], 400)
+        self.assertTrue(self.j("set", "fan_manager", "cml")["restarting"])
+        self.assertEqual(self.get("state")["settings"]["fan_manager"], "cml")
+        self.assertEqual(self.post("setting", {"key": "fan_manager", "value": "auto"})[0], 200)
+        self.assertEqual(self.get("state")["settings"]["fan_manager"], "auto")
+
+
+for _n in [n for n in dir(MockService) if n.startswith("test_")]:
+    setattr(CliService, _n, None)
+
+
 class LiquidCoolerUnit(unittest.TestCase):
     """Protocol frames and policy of uwccd.watercooler against the simulated cooler."""
 

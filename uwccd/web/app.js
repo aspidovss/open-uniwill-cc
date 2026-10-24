@@ -720,6 +720,18 @@ function renderSwitches() {
   }
   if (S.power && S.power.limits && S.power.limits.tjmax && !S.platform.amd)
     item("Extended CPU temperature limit range", "Allow a CPU temperature limit down to 60 °C in the profiles (default: down to 85 °C).", "tcc_extended", s.tcc_extended);
+  if (S.power && S.power.manager) {
+    const auto = S.platform.commercial ? "cml" : "std";
+    const names = { cml: t("Commercial (_CML): Office / Gaming / Turbo"), std: t("RamFan 1.5: Office / Gaming / Turbo / Custom") };
+    const fm = h("select", {}, ...[["auto", t("Automatic by project — {0}", names[auto])], ["cml", names.cml], ["std", names.std]]
+      .map(([v, txt]) => { const o = h("option", { value: v }, txt); if ((s.fan_manager || "auto") === v) o.selected = true; return o; }));
+    fm.addEventListener("change", () => {
+      if (!confirm(t("Change the fan manager? The service restarts; fan control is handed to the laptop for a few seconds."))) { fm.value = s.fan_manager || "auto"; return; }
+      act(() => api("setting", { key: "fan_manager", value: fm.value }), t("The service is restarting…"));
+    });
+    L.append(h("div", { class: "item" }, h("div", {}, h("h4", {}, t("Fan manager")),
+      h("p", {}, t("How modes, profiles and fan tables are driven. The original Control Center picks it by the project; change it only if modes or fan curves do not work on your laptop. Now running: {0}.", names[S.power.manager] || S.power.manager))), fm));
+  }
   const sel = h("select", {}, ...[[0, t("Never")], [10, t("{0} seconds", 10)], [30, t("{0} seconds", 30)], [60, t("1 minute")], [300, t("{0} minutes", 5)], [600, t("{0} minutes", 10)]].map(([v, txt]) => { const o = h("option", { value: v }, txt); if (+s.kb_timeout === v) o.selected = true; return o; }));
   sel.addEventListener("change", () => act(() => api("setting", { key: "kb_timeout", value: +sel.value })));
   L.append(h("div", { class: "item" }, h("div", {}, h("h4", {}, t("Keyboard backlight auto-off")), h("p", {}, t("Turn the backlight off after inactivity and back on when a key is pressed."))), sel));

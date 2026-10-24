@@ -44,6 +44,8 @@ EC protocol: [PROTOCOL.md](PROTOCOL.md).
 | `uwccd/lighting/` | keyboard lighting; `oem/` — code derived from the OEM program (proprietary) |
 | `uwccd/web/` | the interface: `index.html`, `app.js`, `app.css`, `i18n.js` (Russian strings), icons |
 | `bin/` | `uwcc` (window), `uwcc-agent` (Linux session agent), `uwccctl` (command line) |
+| `docs/CLI.md` | command line reference (`docs/CLI.ru.md` in Russian) |
+| `man/` | `uwccctl.1` man page (English; `man/ru/` Russian), installed by `install.sh` |
 | `kernel/` | Linux kernel module `uwcc` — EC access and hot keys (GPL-2.0, DKMS) |
 | `packaging/` | Linux: systemd unit, sleep hook, desktop files, polkit rule |
 | `windows/` | PyInstaller spec and entry points, Inno Setup script, `install.ps1` / `uninstall.ps1` |
@@ -123,6 +125,7 @@ EC protocol: [PROTOCOL.md](PROTOCOL.md).
 | `packaging/system-sleep-uwcc` | puts the liquid cooler to sleep before suspend, re-applies the settings after |
 | `packaging/50-uwcc.rules` | polkit: group `uwcc` may restart the service |
 | `packaging/*.desktop` | menu entry of the window and autostart of the agent |
+| `packaging/uwccctl.bash-completion` | bash completion of `uwccctl` commands |
 
 ## Where to start
 
