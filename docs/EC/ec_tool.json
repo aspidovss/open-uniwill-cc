@@ -1,0 +1,14 @@
+{
+  "backend": "auto",
+  "compare_with": "driver",
+  "wmi_instance": "1_1",
+  "service_port": 47321,
+  "interval": 2.0,
+  "count": 0,
+  "watch": ["0x464", "0x465", "0x46B", "0x46C", "0x75B", "0x75C", "0x751", "0x7C7"],
+  "writable_extra": [],
+  "writable_deny": ["0x7C7", "0xF5D", "0xF5E", "0xF5F"],
+  "names": {
+    "0x7DB": "unknown 0x7DB (example label)"
+  }
+}
