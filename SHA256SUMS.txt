@@ -1,2 +1,2 @@
-054c0b985ab5e0077c6aa0698ce47b752bdf23dead0bdff25b62eb037dd79777  open-uniwill-cc-windows-1.5.5-setup.exe
-4aba8d100c228efdccce4f78ccc8e31c9df052277ac09da9c936ef655218b055  open-uniwill-cc-linux-1.5.5.tar.gz
+7d9008dbd760f3a6b22f65e2de8d4a4dd3099d40ea71a72ef59c1f7320f5a035  open-uniwill-cc-windows-1.5.5-setup.exe
+dd13188f5207cca057e26ce7597dd195746e5d9d8569b126dfc61ed8b0ba5886  open-uniwill-cc-linux-1.5.5.tar.gz
