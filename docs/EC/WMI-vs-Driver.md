@@ -1,78 +1,80 @@
-# Доступ к EC: OEM-драйвер или WMI — MAIBENBEN Tsunami X629
+# EC access: OEM driver vs WMI — MAIBENBEN Tsunami X629
 
-Сравнение по результатам тестов на реальном ноутбуке 26.10.2026 (BIOS N.1.23A14).
+**English** · [Русский](WMI-vs-Driver.ru.md)
 
-- **OEM-драйвер** — `UWACPIDriver.sys` (устройство `\\.\ACPIDriver`), подписанный драйвер производителя; вызывает методы
-  прошивки `ECRR`, `ECRW`, `SMRW`, `PWUP` напрямую.
-- **WMI** — стандартный драйвер Windows `wmiacpi.sys` (`ACPI\PNP0C14`), класс `root\WMI\AcpiTest_MULong`, метод
-  `GetSetULong`. Прошивка выполняет его через `WMBC → OEMG → RKBC/WKBC` — старый протокол «клавиатурного контроллера»
-  с паузами `Sleep(50)` / `Sleep(10)`.
+Based on tests on a real laptop on 2026-10-26 (BIOS N.1.23A14).
 
-## Возможности
+- **OEM driver** — `UWACPIDriver.sys` (device `\\.\ACPIDriver`), the manufacturer's signed driver; calls the firmware
+  methods `ECRR`, `ECRW`, `SMRW`, `PWUP` directly.
+- **WMI** — the Windows built-in driver `wmiacpi.sys` (`ACPI\PNP0C14`), class `root\WMI\AcpiTest_MULong`, method
+  `GetSetULong`. The firmware runs it through `WMBC → OEMG → RKBC/WKBC`, the old "keyboard controller" protocol with
+  `Sleep(50)` / `Sleep(10)` waits.
 
-| Что | OEM-драйвер | WMI | Проверено |
+## Features
+
+| What | OEM driver | WMI | Verified |
 |---|---|---|---|
-| Чтение любого регистра EC | ✅ | ✅ | 78 регистров + 96 байт таблицы — все совпали |
-| Запись в EC | ✅ | ✅ | Fn Lock, USB во сне, LED тачпада, пределы заряда, PL1, TCC, Fan Boost — 8/8 |
-| Режимы Office / Gaming / Turbo / Custom, Fan Boost | ✅ | ✅ | `0x751`, `0x726` |
-| PL1 / PL2 / PL4, TCC | ✅ | ✅ | совпадают с профилем, запись работает |
-| cTGP, Dynamic Boost (регистры EC) | ✅ | ✅ | `0x743–0x746` |
-| Заводские PL режимов | ✅ | ✅ | `0x730–0x737`, `0x7A7–0x7AA` |
-| Таблица вентиляторов | ✅ ~1 с | ✅ но ~14 с на 96 байт | запись тех же значений, таблица не изменилась |
-| Пределы и режим защиты батареи | ✅ | ✅ | `0x7B9`, `0x7D0`, `0x7A6` |
-| Fn Lock, Win-lock, USB во сне, тачпад | ✅ | ✅ | |
-| Обороты, скважность, датчики EC | ✅ | ✅ (медленно) | |
-| Цели EC для СЖО, таблица EC для СЖО | ✅ | ✅ | рукопожатие `0xF5D–0xF5F` — обычная запись в EC |
-| События горячих клавиш (`AcpiTest_EventULong`) | ✅ | ✅ | событие WMI, драйвер не нужен |
-| **Таблица Smart APC (`SMRW`)**: пределы PL/TCC/TGP/DB для ползунков | ✅ | ❌ | метод не вызывается из `OEMG` |
-| **Уровень мощности СЖО (`PWUP`)** | ✅ | ❌ | запись в `0x7C7` EC сразу откатывает; лимит и частота не меняются |
-| Подсветка клавиатуры и полосы (HID) | — | — | не через EC, драйвер не нужен |
-| Переменные UEFI (Fn Lock в BIOS, MUX, разгон ОЗУ) | — | — | не через EC, драйвер не нужен |
+| Read any EC register | ✅ | ✅ | 78 registers + 96 fan-table bytes — all equal |
+| Write to the EC | ✅ | ✅ | Fn Lock, USB in sleep, touchpad LED, charge limits, PL1, TCC, Fan Boost — 8/8 |
+| Office / Gaming / Turbo / Custom modes, Fan Boost | ✅ | ✅ | `0x751`, `0x726` |
+| PL1 / PL2 / PL4, TCC | ✅ | ✅ | match the profile, writes work |
+| cTGP, Dynamic Boost (EC registers) | ✅ | ✅ | `0x743–0x746` |
+| Factory PL of the modes | ✅ | ✅ | `0x730–0x737`, `0x7A7–0x7AA` |
+| Fan table | ✅ ~1 s | ✅ but ~14 s for 96 bytes | rewritten with the same values, table unchanged |
+| Battery limits and protection mode | ✅ | ✅ | `0x7B9`, `0x7D0`, `0x7A6` |
+| Fn Lock, Win lock, USB in sleep, touchpad | ✅ | ✅ | |
+| Fan speed, duty, EC sensors | ✅ | ✅ (slow) | |
+| EC targets for the cooler, EC liquid fan table | ✅ | ✅ | handshake `0xF5D–0xF5F` is an ordinary EC write |
+| Hotkey events (`AcpiTest_EventULong`) | ✅ | ✅ | WMI event, no driver needed |
+| **Smart APC table (`SMRW`)**: PL/TCC/TGP/DB limits for the sliders | ✅ | ❌ | `OEMG` does not call it |
+| **Liquid-cooling power level (`PWUP`)** | ✅ | ❌ | the EC restores `0x7C7` at once; limit and clock unchanged |
+| Keyboard and light bar lighting (HID) | — | — | not through the EC, no driver needed |
+| UEFI variables (BIOS Fn Lock, MUX, RAM overclocking) | — | — | not through the EC, no driver needed |
 
-## Скорость
+## Speed
 
-| | OEM-драйвер | WMI |
+| | OEM driver | WMI |
 |---|---|---|
-| Одно чтение | ~10 мс (пауза 10 мс, как в оригинале) | **~124 мс** |
-| Одна запись | ~10 мс | **~147 мс** |
-| Опрос 14 регистров (служба, раз в 2 с) | ~0,15 с | ~1,7 с |
-| Запись таблицы вентиляторов (96 байт) | ~1 с | ~14 с |
+| One read | ~10 ms (10 ms delay, as in the original) | **~124 ms** |
+| One write | ~10 ms | **~147 ms** |
+| Poll of 14 registers (the service, every 2 s) | ~0.15 s | ~1.7 s |
+| Fan table write (96 bytes) | ~1 s | ~14 s |
 
-Задержка WMI заложена в прошивке (циклы ожидания со `Sleep(50)` внутри `RKBC/WKBC`), ускорить её нельзя.
+The WMI delay is built into the firmware (wait loops with `Sleep(50)` inside `RKBC/WKBC`) and cannot be reduced.
 
-## Чего стоит отказ от OEM-драйвера
+## What you lose without the OEM driver
 
-| Ситуация | Потеря без драйвера |
+| Situation | Loss without the driver |
 |---|---|
-| Без СЖО | по замерам — ничего существенного; медленнее опрос и запись таблиц |
-| СЖО подключена | нет `PWUP`: лимит видеокарты 160 Вт вместо 175 Вт, частота ~1860 вместо ~2120 МГц (**−13…15 %**) в Turbo + Super performance |
-| Ползунки PL / TCC / DB | без `SMRW` пределы берутся из заводских PL в EC (`pl1_max` = Turbo PL1) и значений по умолчанию (TCC, DB 25 Вт) |
+| No liquid cooler | nothing significant in the measurements; slower polling and table writes |
+| Liquid cooler connected | no `PWUP`: GPU limit 160 W instead of 175 W, clock ~1860 instead of ~2120 MHz (**−13…15 %**) in Turbo + Super performance |
+| PL / TCC / DB sliders | without `SMRW` the limits come from the factory PL in the EC (`pl1_max` = Turbo PL1) and defaults (TCC, DB 25 W) |
 
-Замер `PWUP` (Turbo + Super performance + FanBoost + Dynamic Boost, полная нагрузка на видеокарту):
+`PWUP` measurement (Turbo + Super performance + FanBoost + Dynamic Boost, full GPU load):
 
-| Фаза | Лимит | Частота |
+| Phase | Limit | Clock |
 |---|---|---|
-| Office, уровень EC 4 | 150 Вт | 2002 МГц |
-| `PWUP(0)` драйвером | 160 Вт | 1859 МГц |
-| «уровень 5» через WMI после `PWUP(0)` | 160 Вт | 1868 МГц — не сработало |
-| `PWUP(0)` драйвером повторно | 160 Вт | 1855 МГц |
-| `PWUP(4)` драйвером | 175 Вт | 2114–2144 МГц |
-| `PWUP(5)` драйвером | 175 Вт | 2101–2193 МГц |
+| Office, EC level 4 | 150 W | 2002 MHz |
+| `PWUP(0)` via the driver | 160 W | 1859 MHz |
+| "level 5" via WMI after `PWUP(0)` | 160 W | 1868 MHz — no effect |
+| `PWUP(0)` via the driver again | 160 W | 1855 MHz |
+| `PWUP(4)` via the driver | 175 W | 2114–2144 MHz |
+| `PWUP(5)` via the driver | 175 W | 2101–2193 MHz |
 
-## Формат вызова WMI
+## WMI call format
 
 ```
-класс     root\WMI\AcpiTest_MULong, экземпляр ACPI\PNP0C14\1_1 (всего 10, рабочий любой)
-метод     GetSetULong(UInt64 Data) -> UInt32 Return
-чтение    Data = (1 << 40) | адрес           байт = Return & 0xFF
-запись    Data = (значение << 16) | адрес
-прочее    Data = 0x3_0000_0000_0x — команды iGPU-only (на Tsunami отвечают эхом)
-права     администратор (иначе WBEM_E_ACCESS_DENIED 0x80041003)
+class     root\WMI\AcpiTest_MULong, instance ACPI\PNP0C14\1_1 (10 instances, any works)
+method    GetSetULong(UInt64 Data) -> UInt32 Return
+read      Data = (1 << 40) | address         byte = Return & 0xFF
+write     Data = (value << 16) | address
+other     Data = 0x3_0000_0000_0x — iGPU-only commands (echoed on the Tsunami)
+rights    administrator (otherwise WBEM_E_ACCESS_DENIED 0x80041003)
 ```
 
-## Вывод для open-uniwill-cc
+## Conclusion for open-uniwill-cc
 
-1. OEM-драйвер — основной канал: быстрый и даёт `SMRW` и `PWUP`.
-2. WMI — запасной канал без проприетарных файлов: всё управление работает, медленнее; без прибавки видеокарте от СЖО
-   и с пределами по умолчанию вместо `SMRW`.
-3. Служба выбирает канал автоматически и показывает в окне, какой используется и что в нём недоступно.
+1. The OEM driver is the main path: fast, and the only way to `SMRW` and `PWUP`.
+2. WMI is a fallback without proprietary files: all control works, slower; no extra GPU power with the liquid cooler and
+   default limits instead of `SMRW`.
+3. The service picks the path automatically and shows in the window which one is used and what it lacks.
