@@ -6,6 +6,8 @@
 
 <p align="center"><b>Open Control Center for Uniwill-based laptops — modes, fans, power, lighting, liquid cooling. No tracking.</b></p>
 
+<p align="center"><b>Possibly the first 100&nbsp;% open Control Center for Windows and Linux that needs no third-party drivers.</b></p>
+
 <p align="center"><b>English</b> · <a href="README.ru.md">Русский</a> · <a href="docs/STRUCTURE.md">Project structure</a> · <a href="docs/CLI.md">Command line</a></p>
 
 <p align="center">
@@ -20,6 +22,8 @@
   <img src="https://img.shields.io/badge/Python-3.9+-3776ab?logo=python&logoColor=white" alt="Python 3.9+">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-4c1" alt="license MIT"></a>
   <img src="https://img.shields.io/badge/telemetry-none-4c1" alt="telemetry none">
+  <img src="https://img.shields.io/badge/third--party%20drivers-none%20(free%20build)-4c1" alt="no third-party drivers">
+  <img src="https://img.shields.io/badge/EC%20access-WMI%20%7C%20OEM%20%7C%20kernel%20module-0078d4" alt="EC access: WMI, OEM driver, kernel module">
 </p>
 
 An open replacement for the **Uniwill "Control Center"** (5.52.x) of Uniwill-based gaming laptops, for
@@ -30,6 +34,29 @@ hardware switches — plus Bluetooth control of the **XMG Oasis** liquid cooler 
 your settings at boot and after sleep and keeps the fan curves, power limits and the liquid cooler working with no
 window open — without the original OEM service and its Microsoft Store app. The window, the tray app and
 the `uwccctl` command line are only remote controls for it.
+
+## 100 % open, no third-party drivers
+
+As far as we know, this is **the first Control Center for Uniwill laptops that runs fully on open code, on Windows and
+on Linux, without the manufacturer's driver or any other third-party driver**:
+
+| | How the program reaches the embedded controller (EC) | Proprietary files |
+|---|---|---|
+| **Windows — free build** | **WMI**: the firmware's own WMI interface (`root\WMI AcpiTest_MULong`) through the driver built into Windows | **none** |
+| Windows — non-free build | the manufacturer's OEM driver `UWACPIDriver.sys` (fastest, all functions), WMI as a fallback | OEM driver |
+| **Linux** | the open kernel module `uwcc` (DKMS, source in [`kernel/`](kernel)), fallback `acpi_call` | **none** |
+
+**Key feature — EC access through WMI.** Windows already ships the driver the firmware needs (`wmiacpi.sys`), so the
+free build controls modes, power limits, cTGP / Dynamic Boost, Fan Boost, fan curves, battery protection, switches,
+the light bar and the liquid cooler **without installing any driver**. It is slower (~125 ms per EC access: the mode is
+applied first, the fan curve follows in the background) and two firmware methods stay with the OEM driver — the
+liquid-cooling power level (`PWUP`) and the firmware limit table (`SMRW`, replaced by the platform profile). Details,
+measurements and the register map: [docs/EC](docs/EC/README.md).
+
+Around it: **EC Manager** (choose OEM / WMI, administrator-only settings, hard power caps), **platform profiles** as data
+files and a **self-check** that tells what works on your laptop and makes a profile you can send for a new model —
+[docs/EC/Platforms.md](docs/EC/Platforms.md). WMI access is tested on MAIBENBEN Tsunami X629 / Mechrevo Questyle 16
+Super / XMG NEO 16 (E23); on other models every function stays off until the self-check confirms it.
 
 > **Unofficial.** Not affiliated with or supported by Uniwill or any laptop vendor. It writes to the embedded
 > controller (EC) of your laptop exactly like the original service does, but use it at your own risk.
@@ -51,6 +78,8 @@ the `uwccctl` command line are only remote controls for it.
 
 ## Features
 
+- **Open EC access on Windows through WMI** — no OEM or other third-party driver needed (free build); or the OEM driver
+  for full speed. **EC Manager**, platform profiles, self-check — see [above](#100--open-no-third-party-drivers)
 - **Modes** Office / Gaming / Turbo (and **Custom** with 5 named slots on platforms that have it), the Fn mode key, Fan Boost;
   **super performance** in any mode (Turbo fans, maximum graphics power) and **RAM overclocking** where the BIOS supports it
 - **Power limits** PL1 / PL2 / PL4, NVIDIA cTGP and Dynamic Boost — within the limits the firmware reports
@@ -139,7 +168,8 @@ right to use the file.
 Portable zip: unpack, then in PowerShell `powershell -ExecutionPolicy Bypass -File .\install.ps1` (asks for admin rights).
 
 What gets installed: the `uwccd` service (LocalSystem), `ControlCenter.exe` (tray / window),
-`uwccctl.exe` (console), and the OEM ACPI driver `UWACPIDriver` if it is not installed yet (not with *WMI only*).
+`uwccctl.exe` (console), and — non-free build only — the OEM ACPI driver `UWACPIDriver` if it is not installed yet
+(not with *WMI only*). The free build installs no driver at all.
 Details: [README.windows.md](README.windows.md).
 
 ### Linux

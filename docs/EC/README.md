@@ -5,6 +5,9 @@
 Documentation and a test tool for the embedded controller (EC) of the MAIBENBEN Tsunami X629 laptop
 (Uniwill, project `0x10`).
 
+This is the base of the program's key feature: **EC access through WMI** — the firmware's own WMI interface and the
+driver built into Windows, so the free Windows build needs no OEM or other third-party driver.
+
 | File | Contents |
 |---|---|
 | [Registers.md](Registers.md) | EC register reference: addresses, bits, values read on the Tsunami, fan table, liquid cooler, firmware methods, examples |

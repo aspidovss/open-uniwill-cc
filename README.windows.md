@@ -5,6 +5,11 @@
 The Windows build of open-uniwill-cc: the same service code, web interface and settings as on Linux.
 It replaces the original Control Center (GCUService + UWP app) on Uniwill-based laptops.
 
+Two builds: **free** — reaches the EC through the firmware's WMI interface and the driver built into Windows, with no
+OEM or other third-party driver (possibly the first fully open Control Center for these laptops on Windows); and
+**non-free** — with the manufacturer's OEM driver `UWACPIDriver.sys` (faster, plus the liquid-cooling power level),
+WMI as a fallback. See [docs/EC](docs/EC/README.md).
+
 > Tested on a MAIBENBEN Tsunami Series (project `0x10`) with Windows 11 24H2. Keep the original Control Center
 > installer at hand; the uninstaller turns the original GCUService back on.
 
@@ -12,7 +17,7 @@ It replaces the original Control Center (GCUService + UWP app) on Uniwill-based 
 
 | Part | What it is |
 |---|---|
-| `uwccd.exe` | Windows service **uwccd** (LocalSystem, automatic start). Talks to the EC through the OEM driver `\\.\ACPIDriver` (UWACPIDriver.sys, the same IOCTLs as GCUService), listens to hot keys over WMI `AcpiTest_EventULong`, serves the API and UI on `127.0.0.1:47321`. |
+| `uwccd.exe` | Windows service **uwccd** (LocalSystem, automatic start). Talks to the EC through the OEM driver `\\.\ACPIDriver` (UWACPIDriver.sys, the same IOCTLs as GCUService) or, without it, through WMI `AcpiTest_MULong` (EC Manager), listens to hot keys over WMI `AcpiTest_EventULong`, serves the API and UI on `127.0.0.1:47321`. |
 | `ControlCenter.exe` | Tray application (GUI). **Starts with Windows, hidden in the notification area.** Left click / "Open" opens the window (Edge in app mode); the menu switches mode, Fan Boost, keyboard backlight, liquid cooler, language, autostart. Shows the OSD notifications. |
 | `uwccctl.exe` | Console version: `uwccctl status`, `uwccctl mode gaming`, `uwccctl boost on`, `uwccctl lc mode auto`, … (same commands as on Linux). |
 

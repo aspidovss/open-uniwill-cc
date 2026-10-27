@@ -3,6 +3,15 @@
 **English** · details of what open-uniwill-cc does and how (EC registers, ACPI methods, WMI events).
 Windows differences: [README.windows.md](../README.windows.md#differences-from-linux). Protocol: [PROTOCOL.md](PROTOCOL.md) (Russian).
 
+## EC access without third-party drivers
+
+The key difference from the original Control Center: on **Windows** the free build reaches the EC through the firmware's
+own WMI method (`root\WMI AcpiTest_MULong.GetSetULong` → DSDT `WMBC` → `RKBC` / `WKBC`) and the WMI driver built into
+Windows — no OEM driver and no other third-party driver; on **Linux** through the open kernel module `uwcc`. The OEM
+driver stays an option for speed and for `PWUP` / `SMRW`. Comparison and measurements:
+[EC/WMI-vs-Driver.md](EC/WMI-vs-Driver.md); EC Manager, platform profiles and the self-check:
+[EC/Platforms.md](EC/Platforms.md).
+
 ## Modes: two kinds of platforms
 
 The original service has two different mode managers and picks one by the project ID from the EC; this port does the same:
