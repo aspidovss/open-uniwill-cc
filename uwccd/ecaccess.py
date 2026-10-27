@@ -280,11 +280,14 @@ def oem_driver_dirs():
 
 def oem_driver_package():
     for d in oem_driver_dirs():
-        inf = os.path.join(d, "UWACPIDriver.inf")
-        if os.path.isfile(inf):
+        try:
             files = os.listdir(d)
-            return {"dir": d, "inf": inf, "sys": "UWACPIDriver.sys" in files,
-                    "cat": any(f.lower().endswith(".cat") for f in files)}
+        except OSError:
+            continue
+        low = {f.lower(): f for f in files}            # the Windows driver store keeps lower-case names
+        if "uwacpidriver.inf" in low:
+            return {"dir": d, "inf": os.path.join(d, low["uwacpidriver.inf"]), "sys": "uwacpidriver.sys" in low,
+                    "cat": any(f.endswith(".cat") for f in low)}
     return None
 
 

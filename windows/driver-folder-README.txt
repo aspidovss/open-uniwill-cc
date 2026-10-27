@@ -13,6 +13,10 @@ into this folder:
     UWACPIDriver.sys
     UWACPIDriver.cat
 
+Where to get them (repository, your own laptop's driver store, the
+manufacturer's installer):
+https://github.com/aspidovss/open-uniwill-cc#where-to-get-the-oem-driver
+
 then open Control Center -> EC Manager -> "Install the OEM driver"
 (or run "uwccctl ec install-driver" as administrator).
 By installing it you confirm that you have the right to use this file.
@@ -33,6 +37,10 @@ By installing it you confirm that you have the right to use this file.
     UWACPIDriver.inf
     UWACPIDriver.sys
     UWACPIDriver.cat
+
+Где их взять (репозиторий, хранилище драйверов своего ноутбука, установщик
+производителя):
+https://github.com/aspidovss/open-uniwill-cc/blob/main/README.ru.md#где-взять-oem-драйвер
 
 затем открыть Control Center -> Менеджер EC -> «Установить OEM-драйвер»
 (или выполнить "uwccctl ec install-driver" от имени администратора).

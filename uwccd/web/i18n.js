@@ -648,5 +648,6 @@ Object.assign(RU, {
   "No driver package in {0} yet.": "В папке {0} пакета драйвера пока нет.",
   "Install the OEM driver from {0}? The service restarts and uses it.": "Установить OEM-драйвер из {0}? Служба перезапустится и будет использовать его.",
   "put the OEM driver (UWACPIDriver.inf, .sys, .cat from the manufacturer's Control Center) into {0} and install it in EC Manager.": "положите OEM-драйвер (UWACPIDriver.inf, .sys, .cat из Control Center производителя) в {0} и установите его в менеджере EC.",
+  "Where to get the OEM driver: this repository, your laptop's driver store, the manufacturer's installer": "Где взять OEM-драйвер: в репозитории, в хранилище драйверов вашего ноутбука, в установщике производителя",
   "Install the OEM driver": "Установить OEM-драйвер", "Installed": "Установлено",
 });

@@ -170,6 +170,35 @@ MAC-адресов и имён пользователей (их можно от�
 3. В области уведомлений появится значок. Программа **запускается вместе с Windows и скрыта в трее**;
    окно открывается щелчком по значку или через *Пуск → UWCC Control Center*.
 
+#### Где взять OEM-драйвер
+
+Драйвер **не под MIT** — используйте его, только если у вас есть на это право (например, ноутбук продавался с
+Control Center производителя). В несвободной сборке он уже есть. Для свободной сборки положите три файла
+`UWACPIDriver.inf`, `UWACPIDriver.sys`, `uwacpidriver.cat` в `C:\ProgramData\UWCC\driver`, затем
+*Менеджер EC → Установить OEM-драйвер* (или `uwccctl ec install-driver` от имени администратора). Где их взять:
+
+1. **В этом репозитории:** [`proprietary/driver`](https://github.com/aspidovss/open-uniwill-cc/tree/main/proprietary/driver)
+   (Control Center 5.52.49.6, без изменений; см. [proprietary/LICENSE](proprietary/LICENSE)).
+2. **Со своего ноутбука**, если Control Center производителя установлен или был установлен — Windows хранит драйвер в
+   хранилище драйверов. PowerShell от имени администратора:
+   ```powershell
+   pnputil /enum-drivers | Select-String -Context 1,4 uwacpidriver      # есть ли он? (Original Name: uwacpidriver.inf)
+   $src = Get-ChildItem C:\Windows\System32\DriverStore\FileRepository -Directory -Filter "uwacpidriver.inf_amd64_*" |
+          Sort-Object LastWriteTime | Select-Object -Last 1
+   New-Item -ItemType Directory -Force C:\ProgramData\UWCC\driver | Out-Null
+   Copy-Item "$($src.FullName)\*" C:\ProgramData\UWCC\driver\
+   Get-ChildItem C:\ProgramData\UWCC\driver                          # uwacpidriver.inf, .sys, .cat
+   ```
+3. **Из установщика Control Center производителя** (`ControlCenter_*.exe` со страницы поддержки ноутбука) с помощью
+   [innoextract](https://constexpr.org/innoextract/):
+   ```powershell
+   innoextract -d cc -I ZipFiles/UWACPIDriver.zip .\ControlCenter_5.52.49.6_MBB.exe
+   $zip = Get-ChildItem cc -Recurse -Filter UWACPIDriver.zip | Select-Object -First 1
+   Expand-Archive $zip.FullName cc\drv -Force
+   New-Item -ItemType Directory -Force C:\ProgramData\UWCC\driver | Out-Null
+   Get-ChildItem cc\drv -Recurse -Include *.inf,*.sys,*.cat | Copy-Item -Destination C:\ProgramData\UWCC\driver\
+   ```
+
 Portable zip: распакуйте и выполните в PowerShell `powershell -ExecutionPolicy Bypass -File .\install.ps1` (попросит права администратора).
 
 Что ставится: служба `uwccd` (LocalSystem), `ControlCenter.exe` (трей / окно), `uwccctl.exe` (консоль) и — только в

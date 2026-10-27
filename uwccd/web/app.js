@@ -2046,6 +2046,9 @@ function renderEdition(a) {
       h("p", {}, t("This build does not contain the original OEM driver and is distributed completely freely (open source, MIT licence). Without the driver the program works through the open WMI implementation (beta).")),
       h("p", {}, h("b", {}, t("Recommended:")), " ", t("put the OEM driver of the manufacturer's Control Center (UWACPIDriver.inf, UWACPIDriver.sys, UWACPIDriver.cat) into this folder and install it with the button below:")),
       h("pre", { class: "code" }, a.driver_dir || "C:\\ProgramData\\UWCC\\driver"),
+      h("p", {}, h("a", { href: LANG === "ru" ? "https://github.com/aspidovss/open-uniwill-cc/blob/main/README.ru.md#где-взять-oem-драйвер"
+        : "https://github.com/aspidovss/open-uniwill-cc#where-to-get-the-oem-driver", target: "_blank", rel: "noopener" },
+        t("Where to get the OEM driver: this repository, your laptop's driver store, the manufacturer's installer"))),
       h("p", { class: "muted tiny" }, t("By installing the OEM driver you confirm that you have the right to use this file (UWACPIDriver.sys, part of the laptop manufacturer's Control Center).")));
   } else {
     kids.push(h("h3", {}, t("OEM driver package")));

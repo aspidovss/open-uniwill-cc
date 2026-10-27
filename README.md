@@ -165,6 +165,35 @@ Without the driver it works through WMI (beta). Recommended: put the OEM driver 
 *EC Manager → Install the OEM driver* (`uwccctl ec install-driver`). By installing it you confirm that you have the
 right to use the file.
 
+#### Where to get the OEM driver
+
+The driver is **not MIT** — use it only if you have the right to (for example, your laptop shipped with the
+manufacturer's Control Center). The non-free build already contains it. For the free build put the three files
+`UWACPIDriver.inf`, `UWACPIDriver.sys`, `uwacpidriver.cat` into `C:\ProgramData\UWCC\driver`, then
+*EC Manager → Install the OEM driver* (or `uwccctl ec install-driver` as administrator). Ways to get them:
+
+1. **From this repository:** [`proprietary/driver`](https://github.com/aspidovss/open-uniwill-cc/tree/main/proprietary/driver)
+   (Control Center 5.52.49.6, unmodified; see [proprietary/LICENSE](proprietary/LICENSE)).
+2. **From your own laptop**, if the manufacturer's Control Center is or was installed — Windows keeps the driver in its
+   driver store. PowerShell as administrator:
+   ```powershell
+   pnputil /enum-drivers | Select-String -Context 1,4 uwacpidriver      # is it there? (Original Name: uwacpidriver.inf)
+   $src = Get-ChildItem C:\Windows\System32\DriverStore\FileRepository -Directory -Filter "uwacpidriver.inf_amd64_*" |
+          Sort-Object LastWriteTime | Select-Object -Last 1
+   New-Item -ItemType Directory -Force C:\ProgramData\UWCC\driver | Out-Null
+   Copy-Item "$($src.FullName)\*" C:\ProgramData\UWCC\driver\
+   Get-ChildItem C:\ProgramData\UWCC\driver                          # uwacpidriver.inf, .sys, .cat
+   ```
+3. **From the manufacturer's Control Center installer** (`ControlCenter_*.exe` from the laptop's support page), with
+   [innoextract](https://constexpr.org/innoextract/):
+   ```powershell
+   innoextract -d cc -I ZipFiles/UWACPIDriver.zip .\ControlCenter_5.52.49.6_MBB.exe
+   $zip = Get-ChildItem cc -Recurse -Filter UWACPIDriver.zip | Select-Object -First 1
+   Expand-Archive $zip.FullName cc\drv -Force
+   New-Item -ItemType Directory -Force C:\ProgramData\UWCC\driver | Out-Null
+   Get-ChildItem cc\drv -Recurse -Include *.inf,*.sys,*.cat | Copy-Item -Destination C:\ProgramData\UWCC\driver\
+   ```
+
 Portable zip: unpack, then in PowerShell `powershell -ExecutionPolicy Bypass -File .\install.ps1` (asks for admin rights).
 
 What gets installed: the `uwccd` service (LocalSystem), `ControlCenter.exe` (tray / window),
