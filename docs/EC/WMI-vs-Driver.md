@@ -47,7 +47,7 @@ The WMI delay is built into the firmware (wait loops with `Sleep(50)` inside `RK
 | Situation | Loss without the driver |
 |---|---|
 | No liquid cooler | nothing significant in the measurements; slower polling and table writes |
-| Liquid cooler connected | no `PWUP`: GPU limit 160 W instead of 175 W, clock ~1860 instead of ~2120 MHz (**−13…15 %**) in Turbo + Super performance |
+| Liquid cooler connected | no `PWUP`: GPU limit 150 W instead of 175 W, clock ~1860 instead of ~2120 MHz (**−13…15 %**) in Turbo + Super performance |
 | PL / TCC / DB sliders | without `SMRW` the limits come from the factory PL in the EC (`pl1_max` = Turbo PL1) and defaults (TCC, DB 25 W) |
 
 `PWUP` measurement (Turbo + Super performance + FanBoost + Dynamic Boost, full GPU load):
@@ -55,9 +55,9 @@ The WMI delay is built into the firmware (wait loops with `Sleep(50)` inside `RK
 | Phase | Limit | Clock |
 |---|---|---|
 | Office, EC level 4 | 150 W | 2002 MHz |
-| `PWUP(0)` via the driver | 160 W | 1859 MHz |
-| "level 5" via WMI after `PWUP(0)` | 160 W | 1868 MHz — no effect |
-| `PWUP(0)` via the driver again | 160 W | 1855 MHz |
+| `PWUP(0)` via the driver | 150 W | 1859 MHz |
+| "level 5" via WMI after `PWUP(0)` | 150 W | 1868 MHz — no effect |
+| `PWUP(0)` via the driver again | 150 W | 1855 MHz |
 | `PWUP(4)` via the driver | 175 W | 2114–2144 MHz |
 | `PWUP(5)` via the driver | 175 W | 2101–2193 MHz |
 

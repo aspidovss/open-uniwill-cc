@@ -292,3 +292,12 @@ pre.code{margin:0;padding:10px 12px;background:var(--bg0);border:1px solid var(-
 @media (max-width:900px){.help-wrap{grid-template-columns:1fr}.help-toc{position:static}}
 .h-help{display:inline-flex;align-items:center;gap:2px}.h-help h3{margin:0}
 .busy-backup{margin:0;padding:10px 12px;border:1px solid var(--acc);border-radius:10px;background:rgba(50,219,190,.08);font-size:13px;overflow-wrap:anywhere}
+/* EC Manager: folding cards, spacing under the header buttons */
+#page-driver .card-head{margin-bottom:12px}
+#page-driver .card.folded .card-head{margin-bottom:0}
+#page-driver .card.folded > :not(.card-head){display:none!important}
+#page-driver .card.folded .card-head .row:not(.h-help){display:none}
+.fold-title{cursor:pointer;user-select:none}
+.fold-title::before{content:"▾";display:inline-block;width:16px;color:var(--muted);transition:transform .15s}
+.card.folded .fold-title::before{transform:rotate(-90deg)}
+.fold-title:hover{color:var(--acc)}

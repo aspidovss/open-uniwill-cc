@@ -13,8 +13,9 @@ open-uniwill-cc can reach the embedded controller (EC) on Windows in two ways:
 The path is chosen in the installer, in **EC Manager** in the window, or with `uwccctl driver use auto|oem|wmi`.
 The WMI path is used only after the warning in the window was accepted.
 
-> ⚠ **We do not recommend the WMI path on platforms other than MAIBENBEN Tsunami X629 / Mechrevo Questyle 16 Super /
-> XMG NEO 16 (E23)** (Uniwill project `0x10`). On another model the same WMI call may mean something else.
+> ⚠ **The settings were made for MAIBENBEN Tsunami X629 / Mechrevo Questyle 16 Super / XMG NEO 16 (E23)** (Uniwill
+> project `0x10`) and similar systems; we have not tested other platforms. You can check which functions work on your
+> laptop with the self-check (EC Manager → Self-check, see [Platforms.md](Platforms.md)).
 
 What the WMI path can and cannot do, and the measurements behind it: [WMI-vs-Driver.md](WMI-vs-Driver.md).
 Register reference: [Registers.md](Registers.md).

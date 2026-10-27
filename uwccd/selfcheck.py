@@ -99,6 +99,7 @@ class SelfCheck:
         self.lock = threading.Lock()
         self.running = None
         self.last = store.load_json(store.path(LAST))
+        self.stage1_done = None          # EC path of a stage 1 finished without error since the service started
 
     # -- helpers ---------------------------------------------------------------------------------
     @staticmethod
@@ -121,7 +122,7 @@ class SelfCheck:
         counts = {}
         for it in r.get("items", []):
             counts[it["status"]] = counts.get(it["status"], 0) + 1
-        return {"running": self.running,
+        return {"running": self.running, "stage1_done": self.stage1_done == self.svc.ec_info.get("active"),
                 "last": {"time": r.get("time"), "stage": r.get("stage"), "path": r.get("path"), "counts": counts,
                          "unknowns": len(r.get("unknowns", []))} if r else None}
 
@@ -132,6 +133,8 @@ class SelfCheck:
                 raise LookupError("the self-check is already running")
             if self.svc.ec_info.get("active") == "none":
                 raise LookupError("no EC access")
+            if stage == 2 and self.stage1_done != self.svc.ec_info.get("active"):
+                raise LookupError("run stage 1 (read only) first")
             if stage == 2 and not self.svc.monitor.ac_online():
                 raise ValueError("connect the charger: the check with writes runs on AC power only")
             self.running = stage
@@ -143,6 +146,7 @@ class SelfCheck:
                 r = self.run(stage)
             self.last = r
             store.save_json(store.path(LAST), r)
+            self.stage1_done = r.get("path")
             log.info("self-check stage %d: %s", stage, self.summary()["last"]["counts"])
         except Exception as e:  # noqa: BLE001
             log.exception("self-check")

@@ -151,10 +151,10 @@
       <div class="card" id="dm-selfcheck">
         <div class="row between wrap"><h3 data-i>Self-check</h3>
           <div class="row wrap">
-            <button class="btn ghost" id="dm-sc-export" data-i>Export for GitHub</button>
+            <button class="btn" id="dm-sc-1" data-i>Stage 1: read only</button>
+            <button class="btn ghost" id="dm-sc-2" disabled data-i>Stage 2: with writes</button>
             <button class="btn ghost" id="dm-sc-apply" disabled data-i>Apply as platform profile</button>
-            <button class="btn ghost" id="dm-sc-2" data-i>Stage 2: with writes</button>
-            <button class="btn" id="dm-sc-1" data-i>Stage 1: read only</button></div></div>
+            <button class="btn ghost" id="dm-sc-export" data-i>Export for GitHub</button></div></div>
         <p class="muted tiny" data-i>Stage 1 only reads: identity, access paths (both compared byte by byte when the OEM driver and WMI are present), plausibility of known registers, time per access, firmware methods. Stage 2 (administrator, on AC power) switches every function a little and back with read-back: mode, Fan Boost, PL1, cTGP, charge limit, Fn Lock, the fan-table handshake; the registers are saved first and restored even after a crash. The result lists what works, what is not clear, and a draft platform profile.</p>
         <p class="muted" id="dm-sc-state"></p>
         <div id="dm-sc-out"></div>

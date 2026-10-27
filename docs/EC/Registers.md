@@ -172,7 +172,7 @@ ACPI device `INOU0000`, methods in the DSDT:
 
 | Level | GPU limit | Clock | Temp. |
 |---|---|---|---|
-| 0 | 160 W | 1855–1859 MHz | 71 °C |
+| 0 | 150 W | 1855–1859 MHz | 71 °C |
 | 4 | 175 W | 2114–2144 MHz | 79 °C |
 | 5 | 175 W | 2101–2193 MHz | 76–80 °C |
 | Office, level 4 (for comparison) | 150 W | 2002–2058 MHz | 72 °C |

@@ -172,7 +172,7 @@ const RU = {
   "This laptop reports a different platform!": "Этот ноутбук сообщает другую платформу!",
   "Use WMI (beta)…": "Включить WMI (бета)…",
   "Use only the open WMI implementation? Not recommended: it is slow and some functions are unavailable.": "Использовать только открытую реализацию через WMI? Не рекомендуется: она медленная, и часть функций недоступна.",
-  "WE DO NOT RECOMMEND using this function on platforms other than {0}.": "НЕ РЕКОМЕНДУЕМ использовать эту функцию на платформах, отличных от {0}.",
+  "The settings were made for {0} and similar systems; we have not tested other platforms. You can check which functions work on your laptop with the self-check (EC Manager).": "Настройки сделаны для {0} и подобных систем; работу на других платформах мы не проверяли. Совместимость функций с вашим ноутбуком можно проверить самопроверкой (менеджер EC).",
   "WMI call timeout, s": "Тайм-аут вызова WMI, с",
   "WMI instance (suffix)": "Экземпляр WMI (окончание)",
   "WMI only — open implementation": "Только WMI — открытая реализация",
@@ -687,4 +687,5 @@ Object.assign(RU, {
   "{0} of {1} controller values read back equal after the test.": "После проверки {0} из {1} значений контроллера совпали с сохранёнными.",
   "The controller may change some values itself (fans, mode bits). The current mode profile was applied again.": "Контроллер может сам менять некоторые значения (вентиляторы, биты режима). Текущий профиль режима применён заново.",
   "Backup file: {0}": "Файл копии: {0}", "EC backup": "Резервная копия EC",
+  "Run stage 1 (read only) first": "Сначала выполните ступень 1 (только чтение)",
 });

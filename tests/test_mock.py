@@ -428,6 +428,8 @@ class EcAccessService(MockService):
         self.post("setting", {"key": "monitor_off_wmi", "value": False})
         self.assertEqual(self.get("state")["monitoring"], "full")
         # self-check: stage 1 reads; stage 2 needs the administrator key, writes and restores
+        self.assertEqual(self.apost("selfcheck", {"stage": 2})[0], 409)          # stage 1 first
+        self.assertFalse(self.get("selfcheck")["stage1_done"])
         code, _ = self.post("selfcheck", {"stage": 1})
         self.assertEqual(code, 200)
         r = self.wait_selfcheck()["result"]

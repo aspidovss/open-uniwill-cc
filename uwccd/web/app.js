@@ -1637,7 +1637,7 @@ function renderDriver() {
   for (const p of EC_PATHS) box.append(h("div", { class: "choice" + (a.setting === p.id ? " on" : "") + (p.id === "wmi" ? " risky" : "") + (p.rec ? " rec" : ""),
     onclick: () => chooseEcPath(p.id) },
     h("h4", {}, t(p.name), p.tag ? h("span", { class: "tag" + (p.id === "wmi" ? " bad" : "") + (p.rec ? " good" : "") }, t(p.tag)) : null), h("p", {}, t(p.desc))));
-  renderAdmin(); renderEdition(a); renderPlatform(a); renderMonitoring(a); renderSelfcheck(a);
+  renderAdmin(); renderEdition(a); renderPlatform(a); renderMonitoring(a); renderSelfcheck(a); setupCollapsible();
   // info page block
   $("#info-ec").classList.remove("hidden");
   dl($("#info-ec-kv"), ecKv(a));
@@ -1756,7 +1756,7 @@ function showWmiWarning() {
           h("p", {}, t("Changing these settings needs administrator rights: Windows will ask for them (UAC).")),
           h("p", {}, h("b", {}, t("Risks"))),
           h("p", {}, t("This is a beta. On another laptop model the same WMI call may mean something else: a wrong write to the EC can disturb fans, charging or power until the laptop is fully powered off. Use it at your own risk; we recommend the OEM driver.")),
-          h("p", { class: "red-warn" }, t("WE DO NOT RECOMMEND using this function on platforms other than {0}.", a ? a.tested_names : "")),
+          h("p", { class: "red-warn" }, t("The settings were made for {0} and similar systems; we have not tested other platforms. You can check which functions work on your laptop with the self-check (EC Manager).", a ? a.tested_names : "")),
           other ? h("p", { class: "red-warn" }, t("This laptop reports a different platform!")) : null,
           h("p", {}, h("a", { href: a ? a.docs : "#", target: "_blank", rel: "noopener" }, t("Documentation: EC registers, OEM driver vs WMI (GitHub)")))),
         h("div", { class: "eula-foot" }, h("label", { class: "eula-check" }, chk, h("span", {}, t("I understand the risks"))), h("div", { class: "row" }, cancel, ok))));
@@ -2020,6 +2020,9 @@ let scLoaded = null;
 async function renderSelfcheck(a) {
   const sc = a.selfcheck || {};
   const last = sc.last;
+  const s2 = $("#dm-sc-2");
+  s2.disabled = !sc.stage1_done || !!sc.running;
+  s2.title = sc.stage1_done ? "" : t("Run stage 1 (read only) first");
   $("#dm-sc-state").textContent = sc.running ? t("Running stage {0}…", sc.running)
     : last ? t("Last check: stage {0}, {1}", last.stage, new Date(last.time * 1000).toLocaleString(LANG === "ru" ? "ru-RU" : "en-GB")) : t("Not run yet.");
   const key = last ? last.time : null;
@@ -2211,3 +2214,32 @@ $(`#nav a[data-page="help"]`)?.addEventListener("click", () => { if (!helpCur) o
     el.before(wrap); wrap.append(el, helpLink(id, a));
   }
 })();
+
+// ---------------------------------------------------------------- EC Manager: cards fold by a click on their title
+function setupCollapsible() {
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem("uwcc-folded") || "{}"); } catch (_) {}
+  for (const card of $$("#page-driver > .card")) {
+    const h3 = card.querySelector("h3");
+    if (!h3) continue;
+    let head = h3;                                   // the direct child of the card that holds the title
+    while (head.parentElement && head.parentElement !== card) head = head.parentElement;
+    head.classList.add("card-head");
+    const key = card.id || h3.dataset.en || h3.textContent;
+    if (!h3.dataset.fold) {
+      h3.dataset.fold = "1";
+      h3.classList.add("fold-title");
+      h3.setAttribute("role", "button");
+      h3.tabIndex = 0;
+      const toggle = () => {
+        const on = !card.classList.contains("folded");
+        card.classList.toggle("folded", on);
+        try { const m = JSON.parse(localStorage.getItem("uwcc-folded") || "{}"); m[key] = on; localStorage.setItem("uwcc-folded", JSON.stringify(m)); } catch (_) {}
+      };
+      h3.addEventListener("click", toggle);
+      h3.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } });
+      card.classList.toggle("folded", !!saved[key]);
+    }
+    h3.setAttribute("aria-expanded", String(!card.classList.contains("folded")));
+  }
+}
