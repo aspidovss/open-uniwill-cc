@@ -278,29 +278,47 @@ def oem_driver_dirs():
     return dirs
 
 
-def oem_driver_package():
+def oem_driver_package(check=False):
+    from .drivercheck import FILES, _files, verify_cached
     for d in oem_driver_dirs():
-        try:
-            files = os.listdir(d)
-        except OSError:
-            continue
-        low = {f.lower(): f for f in files}            # the Windows driver store keeps lower-case names
-        if "uwacpidriver.inf" in low:
-            return {"dir": d, "inf": os.path.join(d, low["uwacpidriver.inf"]), "sys": "uwacpidriver.sys" in low,
-                    "cat": any(f.endswith(".cat") for f in low)}
+        files = _files(d)
+        if "uwacpidriver.inf" in files:
+            pkg = {"dir": d, "inf": files["uwacpidriver.inf"], "sys": "uwacpidriver.sys" in files,
+                   "cat": "uwacpidriver.cat" in files, "complete": len(files) == len(FILES)}
+            if check:
+                pkg["check"] = verify_cached(d)
+            return pkg
     return None
 
 
-def install_oem_driver(mock=False):
-    """pnputil /add-driver UWACPIDriver.inf /install (the service runs as SYSTEM)."""
+def fetch_oem_driver(mock=False):
+    """Copy the OEM driver out of the Windows driver store into the recommended folder."""
+    from .drivercheck import fetch_from_system
+    dest = oem_driver_dirs()[0]
+    src = os.environ.get("UWCC_MOCK_DRIVERSTORE") if mock else None
+    if mock and not src:
+        raise LookupError("mock: no driver store")
+    return fetch_from_system(dest, src)
+
+
+def install_oem_driver(mock=False, accept_risks=False):
+    """Check the package, then pnputil /add-driver UWACPIDriver.inf /install (the service runs as SYSTEM)."""
+    from .drivercheck import allowed, verify_cached
     pkg = oem_driver_package()
     if not pkg:
         raise LookupError("no OEM driver package: put UWACPIDriver.inf, .sys and .cat into " + oem_driver_dirs()[0])
-    if not pkg["sys"]:
-        raise LookupError("UWACPIDriver.sys is missing next to UWACPIDriver.inf in " + pkg["dir"])
+    chk = verify_cached(pkg["dir"])
+    if not allowed(chk, accept_risks):
+        if chk["level"] == "hard":
+            raise ValueError("the driver package cannot be used: " +
+                             "; ".join(c["detail"] for c in chk["checks"] if c["status"] == "hard"))
+        raise PermissionError("the driver check found problems (" + chk["level"] + "): confirm that you want to use"
+                              " this driver and understand the risk")
+    if chk["level"] != "ok":
+        log.warning("OEM driver installed despite the check (%s) — the user accepted the risk", chk["level"])
     if mock or not IS_WIN:
         log.warning("OEM driver install simulated: %s", pkg["inf"])
-        return {"installed": True, "simulated": True, "dir": pkg["dir"], "output": ""}
+        return {"installed": True, "simulated": True, "dir": pkg["dir"], "output": "", "check": chk}
     import subprocess
     from .win.winplat import CREATE_NO_WINDOW
     r = subprocess.run([os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32", "pnputil.exe"),
@@ -310,7 +328,8 @@ def install_oem_driver(mock=False):
     log.warning("OEM driver install from %s: rc=%d %s", pkg["dir"], r.returncode, out.strip()[-300:])
     if r.returncode not in (0, 3010):                    # 3010: installed, reboot required
         raise RuntimeError(f"pnputil failed ({r.returncode}): {out.strip()[-300:]}")
-    return {"installed": True, "reboot": r.returncode == 3010, "dir": pkg["dir"], "output": out.strip()[-1000:]}
+    return {"installed": True, "reboot": r.returncode == 3010, "dir": pkg["dir"], "output": out.strip()[-1000:],
+            "check": chk}
 
 
 def oem_driver_info():
@@ -329,6 +348,16 @@ def oem_driver_info():
     except Exception as e:  # noqa: BLE001
         log.debug("driver info: %s", e)
         return None
+
+
+def _driver_store(svc):
+    """Is the OEM driver in the Windows driver store (can be fetched from the system)?"""
+    if svc.mock:
+        return bool(os.environ.get("UWCC_MOCK_DRIVERSTORE"))
+    if not IS_WIN:
+        return False
+    from .drivercheck import driver_store_dir
+    return driver_store_dir() is not None
 
 
 def monitoring(settings, active):
@@ -375,7 +404,9 @@ def status(svc):
         "driver": getattr(svc, "oem_driver", None),
         "edition": edition(),
         "driver_dir": oem_driver_dirs()[0],
-        "driver_package": oem_driver_package(),
+        "driver_package": oem_driver_package(check=True),
+        "driver_store": _driver_store(svc),
+        "history": svc.sampler.info() if getattr(svc, "sampler", None) else None,
         "monitoring": {"level": monitoring(st, info.get("active")),
                        "off_oem": bool(st.get("monitor_off_oem", False)), "off_wmi": bool(st.get("monitor_off_wmi", False)),
                        "off_all": bool(st.get("monitor_off_all", False))},

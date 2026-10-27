@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.6.2
+
+- **Built-in help** (*Help* in the side bar): the documentation inside the program, offline, in English and Russian —
+  EC Manager and platform profiles, getting the OEM driver, OEM driver vs WMI, the WMI settings, the EC registers, the
+  EC test tool, the features and the command line. **?** next to the EC Manager cards opens the matching section.
+- **OEM driver for the free build** — three ways in EC Manager: *Get the driver from this system* (copies it from the
+  Windows driver store when the manufacturer's Control Center is or was installed; `uwccctl ec fetch-driver`),
+  *Driver in the repository* (link to `proprietary/driver`) and *How to get the driver* (help page
+  `docs/EC/OEM-driver.md`, also with the manual PowerShell / innoextract commands as one-liners).
+- **Check of the driver before it is installed** — in EC Manager, the installer, `install.ps1` and the self-check:
+  the three files and their sizes, the INF is the `UWACPIDriver` for `ACPI\INOU0000` (amd64), the signatures of the
+  catalog and the driver, SHA-256 against the known version (17.53.43.609). An unknown version or a signature problem
+  needs *I still want to use this driver and understand the risk* (`--accept-risks`); a package for another device or
+  with missing files is never installed. `uwccctl ec check-driver`, `uwccctl driver-verify DIR` (works without the
+  service; exit codes 0 / 10 / 11 / 12).
+- **Monitoring card** in EC Manager is compact: one drop-down (full / off with the OEM driver / off with WMI / off with
+  both / all off), the **sampling interval** (automatic or 1–60 s), and the **history**: size on disk, **maximum size**
+  (the oldest minutes are dropped beyond it; the file is written compactly now), **folder** (administrator) and
+  **Clear the history**.
+- **Self-check stage 2 backs up every value it writes first** — 106 EC values (the switched registers, the fan-table
+  handshake and the fan table): to the crash snapshot and a dated copy `selfcheck-backups/ec-backup-*.json` (the last
+  ten are kept), both read back before anything is written; no backup — no test writes. The window shows *EC backup
+  saved* with the file while the check runs, and at the end how many values read back equal after the restore.
+- New screenshots (English and Russian), including EC Manager and the help.
+
 ## 1.6.1
 
 - **Mode switches on the WMI path no longer look frozen.** The window covers itself with *Applying…* until the

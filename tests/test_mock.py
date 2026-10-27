@@ -318,6 +318,12 @@ class EcAccessService(MockService):
     def setUpClass(cls):
         os.environ["UWCC_MOCK_PROJECT"] = "0x10"
         os.environ["UWCC_MOCK_OEM"] = "0"
+        store = tempfile.mkdtemp(prefix="uwcc-drvstore-")
+        for f in ("UWACPIDriver.inf", "UWACPIDriver.sys", "uwacpidriver.cat"):
+            with open(os.path.join(store, f.lower()), "wb") as fh:
+                fh.write(b"[Version]\r\nDriverVer = 09/13/2022,17.53.43.609\r\n[Standard.NTamd64]\r\nx=y, ACPI\\INOU0000\r\n"
+                         b"AddService = UWACPIDriver\r\n" + b";" * 600 if f.endswith(".inf") else b"\0" * 8192)
+        os.environ["UWCC_MOCK_DRIVERSTORE"] = store
         super().setUpClass()
 
     @classmethod
@@ -325,6 +331,7 @@ class EcAccessService(MockService):
         super().tearDownClass()
         os.environ.pop("UWCC_MOCK_PROJECT", None)
         os.environ.pop("UWCC_MOCK_OEM", None)
+        os.environ.pop("UWCC_MOCK_DRIVERSTORE", None)
 
     @classmethod
     def restart(cls):
@@ -435,6 +442,9 @@ class EcAccessService(MockService):
         for k in ("fn_lock", "touchpad", "modes", "power_limits", "gpu_power", "battery", "fan_tables"):
             self.assertEqual(ids[k], "ok", k)
         self.assertEqual(ids["pwup"], "fail")
+        self.assertEqual((ids["backup"], ids["restore"]), ("ok", "ok"))                 # forced backup, verified restore
+        self.assertTrue(os.path.isfile(r["backup"]["path"]) and r["backup"]["count"] > 100)
+        self.assertEqual(r["backup"]["restored"], r["backup"]["count"])
         self.assertEqual((self.ec(0x74E), self.ec(0x783)), (fn_before, pl1_before))   # restored
         self.assertFalse(os.path.exists(os.path.join(self.tmp, "data", "selfcheck-snapshot.json")))
         self.assertEqual(r["features"]["fan_tables"], "slow")
@@ -471,10 +481,65 @@ class EcAccessService(MockService):
         for f in ("UWACPIDriver.inf", "UWACPIDriver.sys", "uwacpidriver.cat"):
             open(os.path.join(drv, f), "w").close()
         self.assertEqual(self.get("ec-access")["driver_package"]["dir"], drv)
+        self.assertEqual(self.get("ec-access")["driver_package"]["check"]["level"], "hard")   # empty files
+        self.assertEqual(self.apost("ec-access/install-driver", {"accept_risks": True})[0], 400)
+        for f in os.listdir(drv):
+            os.remove(os.path.join(drv, f))
+        store = os.environ["UWCC_MOCK_DRIVERSTORE"]
+        for f in os.listdir(store):
+            with open(os.path.join(store, f), "rb") as a, open(os.path.join(drv, f), "wb") as b:
+                b.write(a.read())
+        self.assertEqual(self.get("ec-access")["driver_package"]["check"]["level"], "warn")    # not a known version
         self.assertEqual(self.post("ec-access/install-driver", {})[0], 403)
-        code, r = self.apost("ec-access/install-driver", {})
+        code, r = self.apost("ec-access/install-driver", {"accept_risks": True})
         self.assertEqual((code, r["installed"], r["restart_needed"]), (200, True, True))
         self.assertEqual(self.get("ec-access")["setting"], "auto")
+        # 1.6.2: the package is checked; an unknown version needs "I understand the risk"
+        import shutil as _sh
+        for f in os.listdir(drv):
+            os.remove(os.path.join(drv, f))
+        for f in os.listdir(os.path.join(ROOT, "proprietary", "driver")) if os.path.isdir(os.path.join(ROOT, "proprietary", "driver")) else []:
+            _sh.copy(os.path.join(ROOT, "proprietary", "driver", f), drv)
+        if os.listdir(drv):
+            pkg = self.get("ec-access")["driver_package"]
+            self.assertEqual(pkg["check"]["level"], "ok")
+            with open(os.path.join(drv, "UWACPIDriver.sys"), "ab") as f:
+                f.write(b"x")                                       # another (unknown) version
+            pkg = self.get("ec-access")["driver_package"]
+            self.assertEqual(pkg["check"]["level"], "warn")
+            r = self.apost("ec-access/install-driver", {})[1]
+            self.assertTrue(r["risk_required"] and not r["installed"])
+            r = self.apost("ec-access/install-driver", {"accept_risks": True})[1]
+            self.assertTrue(r["installed"])
+        # fetch from the driver store (simulated by UWCC_MOCK_DRIVERSTORE in setUpClass)
+        for f in os.listdir(drv):
+            os.remove(os.path.join(drv, f))
+        self.assertEqual(self.post("ec-access/fetch-driver", {})[0], 403)
+        code, r = self.apost("ec-access/fetch-driver", {})
+        self.assertEqual((code, sorted(x.lower() for x in r["files"])), (200, ["uwacpidriver.cat", "uwacpidriver.inf", "uwacpidriver.sys"]))
+        self.assertEqual(r["package"]["check"]["checks"][0]["id"], "files")
+        # monitoring settings, history size / clear / folder
+        self.post("setting", {"key": "monitoring", "value": "off_both"})
+        m = self.get("ec-access")["monitoring"]
+        self.assertEqual((m["off_oem"], m["off_wmi"], m["off_all"]), (True, True, False))
+        self.post("setting", {"key": "monitoring", "value": "full"})
+        self.assertEqual(self.post("setting", {"key": "monitor_interval", "value": 99})[0], 400)
+        self.post("setting", {"key": "monitor_interval", "value": 3})
+        self.assertEqual(self.get("ec-access")["history"]["interval"], 3)
+        self.post("setting", {"key": "history_max_kb", "value": 64})
+        self.assertEqual(self.get("ec-access")["history"]["max_kb"], 64)
+        self.assertEqual(self.post("history/clear", {})[1]["points"]["day"], 0)
+        newdir = os.path.join(self.tmp, "hist")
+        self.assertEqual(self.post("history/config", {"dir": newdir})[0], 403)
+        code, r = self.apost("history/config", {"dir": newdir})
+        self.assertEqual((code, r["dir"]), (200, newdir))
+        self.assertEqual(self.apost("history/config", {"dir": "relative"})[0], 400)
+        # built-in help: the documentation is served, nothing outside docs/
+        hr = urllib.request.urlopen(f"http://127.0.0.1:{self.port}/help/EC/OEM-driver.md", timeout=10)
+        self.assertIn("UWACPIDriver", hr.read().decode())
+        for bad in ("/help/../uwccd/api.py", "/help/EC/../../LICENSE", "/help/%2e%2e/README.md"):
+            with self.assertRaises(urllib.error.HTTPError):
+                urllib.request.urlopen(f"http://127.0.0.1:{self.port}{bad}", timeout=10)
 
 
 for _n in [n for n in dir(MockService) if n.startswith("test_")]:
@@ -1012,6 +1077,49 @@ class EditionUnit(unittest.TestCase):
                 os.environ.pop("UWCC_EDITION", None)
         from uwccd import edition
         self.assertEqual(edition(), "source")
+
+
+class DriverCheckUnit(unittest.TestCase):
+    def _pkg(self):
+        d = tempfile.mkdtemp()
+        src = os.path.join(ROOT, "proprietary", "driver")
+        if not os.path.isdir(src):
+            self.skipTest("proprietary/driver is not in this checkout")
+        import shutil
+        for f in os.listdir(src):
+            shutil.copy(os.path.join(src, f), d)
+        return d
+
+    def test_levels(self):
+        from uwccd import drivercheck as dc
+        d = self._pkg()
+        r = dc.verify(d)
+        self.assertEqual((r["level"], r["version"]), ("ok", "17.53.43.609"))
+        self.assertTrue(dc.allowed(r))
+        with open(os.path.join(d, "UWACPIDriver.sys"), "ab") as f:
+            f.write(b"x")
+        r = dc.verify(d)
+        self.assertEqual(r["level"], "warn")
+        self.assertFalse(dc.allowed(r))
+        self.assertTrue(dc.allowed(r, accept_risks=True))
+        inf = os.path.join(d, "UWACPIDriver.inf")
+        with open(inf, "rb") as f:
+            data = f.read()
+        with open(inf, "wb") as f:
+            f.write(data.replace(b"INOU0000", b"ABCD0000"))
+        r = dc.verify(d)
+        self.assertEqual(r["level"], "hard")
+        self.assertFalse(dc.allowed(r, accept_risks=True))           # another device: never
+        os.remove(os.path.join(d, "uwacpidriver.cat"))
+        self.assertEqual(dc.verify(d)["level"], "hard")
+        self.assertEqual(dc.main([d]), 12)
+
+
+class MarkdownHelpUnit(unittest.TestCase):
+    def test_docs_exist(self):
+        for f in ("EC/Platforms.md", "EC/Platforms.ru.md", "EC/OEM-driver.md", "EC/OEM-driver.ru.md", "EC/WMI-config.md",
+                  "EC/WMI-vs-Driver.md", "EC/Registers.md", "EC/README.md", "FEATURES.md", "CLI.md", "CLI.ru.md"):
+            self.assertTrue(os.path.isfile(os.path.join(ROOT, "docs", f)), f)
 
 
 class SnapshotUnit(unittest.TestCase):

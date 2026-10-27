@@ -76,6 +76,8 @@ OEM-драйвером — уровень мощности с СЖО (`PWUP`) и
   <img src="docs/screenshots/ru/light.png" width="49%" alt="Подсветка клавиатуры">
   <img src="docs/screenshots/ru/battery.png" width="49%" alt="Защита аккумулятора">
   <img src="docs/screenshots/info-windows.png" width="49%" alt="Информация о системе в Windows">
+  <img src="docs/screenshots/ru/ec-manager.png" width="49%" alt="Менеджер EC: свободная сборка, путь WMI">
+  <img src="docs/screenshots/ru/help.png" width="49%" alt="Встроенная справка">
 </p>
 
 ## Возможности
@@ -105,6 +107,7 @@ OEM-драйвером — уровень мощности с СЖО (`PWUP`) и
   суммы и установка из окна или трея
 - **Диагностический отчёт** для сообщений об ошибках и новых ноутбуков (выбор личных данных, отправка через GitHub или почту)
 - Консольная утилита **`uwccctl`** в обеих системах
+- **Встроенная справка**: эта документация внутри программы, без интернета, на русском и английском («Справка»)
 
 Полный список с регистрами EC: [docs/FEATURES.md](docs/FEATURES.md) (англ.).
 
@@ -173,31 +176,19 @@ MAC-адресов и имён пользователей (их можно от�
 #### Где взять OEM-драйвер
 
 Драйвер **не под MIT** — используйте его, только если у вас есть на это право (например, ноутбук продавался с
-Control Center производителя). В несвободной сборке он уже есть. Для свободной сборки положите три файла
-`UWACPIDriver.inf`, `UWACPIDriver.sys`, `uwacpidriver.cat` в `C:\ProgramData\UWCC\driver`, затем
-*Менеджер EC → Установить OEM-драйвер* (или `uwccctl ec install-driver` от имени администратора). Где их взять:
+Control Center производителя). В несвободной сборке он уже есть. Для свободной сборки:
 
-1. **В этом репозитории:** [`proprietary/driver`](https://github.com/aspidovss/open-uniwill-cc/tree/main/proprietary/driver)
-   (Control Center 5.52.49.6, без изменений; см. [proprietary/LICENSE](proprietary/LICENSE)).
-2. **Со своего ноутбука**, если Control Center производителя установлен или был установлен — Windows хранит драйвер в
-   хранилище драйверов. PowerShell от имени администратора:
-   ```powershell
-   pnputil /enum-drivers | Select-String -Context 1,4 uwacpidriver      # есть ли он? (Original Name: uwacpidriver.inf)
-   $src = Get-ChildItem C:\Windows\System32\DriverStore\FileRepository -Directory -Filter "uwacpidriver.inf_amd64_*" |
-          Sort-Object LastWriteTime | Select-Object -Last 1
-   New-Item -ItemType Directory -Force C:\ProgramData\UWCC\driver | Out-Null
-   Copy-Item "$($src.FullName)\*" C:\ProgramData\UWCC\driver\
-   Get-ChildItem C:\ProgramData\UWCC\driver                          # uwacpidriver.inf, .sys, .cat
-   ```
-3. **Из установщика Control Center производителя** (`ControlCenter_*.exe` со страницы поддержки ноутбука) с помощью
-   [innoextract](https://constexpr.org/innoextract/):
-   ```powershell
-   innoextract -d cc -I ZipFiles/UWACPIDriver.zip .\ControlCenter_5.52.49.6_MBB.exe
-   $zip = Get-ChildItem cc -Recurse -Filter UWACPIDriver.zip | Select-Object -First 1
-   Expand-Archive $zip.FullName cc\drv -Force
-   New-Item -ItemType Directory -Force C:\ProgramData\UWCC\driver | Out-Null
-   Get-ChildItem cc\drv -Recurse -Include *.inf,*.sys,*.cat | Copy-Item -Destination C:\ProgramData\UWCC\driver\
-   ```
+1. **С этого ноутбука, одной кнопкой:** *Менеджер EC → Взять драйвер из системы* — копирует драйвер из хранилища
+   драйверов Windows (если Control Center производителя установлен или был установлен) в `C:\ProgramData\UWCC\driver`
+   (`uwccctl ec fetch-driver`).
+2. **Из этого репозитория:** [`proprietary/driver`](https://github.com/aspidovss/open-uniwill-cc/tree/main/proprietary/driver)
+   (17.53.43.609 из Control Center 5.52.49.6, без изменений) → `C:\ProgramData\UWCC\driver`.
+3. **Вручную** (хранилище драйверов, установщик производителя через innoextract): [docs/EC/OEM-driver.ru.md](docs/EC/OEM-driver.ru.md),
+   то же в программе: *Справка → Как получить OEM-драйвер*.
+
+Затем *Менеджер EC → Установить OEM-драйвер* (`uwccctl ec install-driver`). Сначала пакет проверяется — файлы, INF для
+`ACPI\INOU0000`, подпись, известная версия; для неизвестной версии или проблемы с подписью нужна галочка *Я всё равно
+хочу использовать этот драйвер и понимаю риск* (`--accept-risks`).
 
 Portable zip: распакуйте и выполните в PowerShell `powershell -ExecutionPolicy Bypass -File .\install.ps1` (попросит права администратора).
 

@@ -14,22 +14,36 @@ import time
 import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 
 log = logging.getLogger("uwccd.api")
 
 # changes that need administrator rights (admin.py): how the EC is reached, its settings, platform profiles
-ADMIN_PATHS = ("/api/ec-access", "/api/ec-access/config", "/api/ec-access/install-driver", "/api/platform/import",
+ADMIN_PATHS = ("/api/ec-access", "/api/ec-access/config", "/api/ec-access/install-driver", "/api/ec-access/fetch-driver",
+               "/api/history/config", "/api/platform/import",
                "/api/platform/apply-draft", "/api/platform/reset")
 # refused while a mode / profile is being applied (the window shows "Applying…")
 BUSY_PATHS = ("/api/mode", "/api/profile", "/api/fanboost", "/api/restore")
 BUSY_SETTINGS = ("super_performance", "tcc_extended")
 
-for _ext, _type in ((".js", "text/javascript"), (".css", "text/css"), (".svg", "image/svg+xml"), (".html", "text/html")):
+for _ext, _type in ((".js", "text/javascript"), (".css", "text/css"), (".svg", "image/svg+xml"), (".html", "text/html"),
+                    (".md", "text/markdown")):
     mimetypes.add_type(_type, _ext)      # the Windows registry may map .js to text/plain
 
 WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
+
+
+def _docs_dir():
+    """docs/ next to the package (source, Linux /opt/uwcc), or bundled by PyInstaller (Windows)."""
+    for d in (os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "docs"),
+              os.path.join(getattr(sys, "_MEIPASS", ""), "docs")):
+        if os.path.isdir(os.path.join(d, "EC")):
+            return os.path.normpath(d)
+    return None
+
+
+DOCS_DIR = _docs_dir()
 if sys.platform == "win32":
     RUN_DIR = os.environ.get("UWCC_RUN", os.path.join(os.environ.get("ProgramData", r"C:\ProgramData"), "UWCC", "run"))
 else:
@@ -103,8 +117,13 @@ class Handler(BaseHTTPRequestHandler):
     def _static(self, path):
         if path in ("", "/"):
             path = "/index.html"
-        fp = os.path.normpath(os.path.join(WEB_DIR, path.lstrip("/")))
-        if not fp.startswith(WEB_DIR) or not os.path.isfile(fp):
+        base = WEB_DIR
+        if path.startswith("/help/"):                    # built-in help: the documentation (Markdown) of docs/
+            base, path = DOCS_DIR, unquote(path[5:])
+            if not base or not path.endswith(".md"):
+                return self._json(404, {"error": "not found"})
+        fp = os.path.normpath(os.path.join(base, path.lstrip("/")))
+        if not fp.startswith(base + os.sep) or not os.path.isfile(fp):
             return self._json(404, {"error": "not found"})
         with open(fp, "rb") as f:
             data = f.read()
@@ -353,6 +372,11 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(200, s.updater.request_install())
             elif path == "/api/service/restart":
                 return self._json(200, {"restarting": s.restart_service("restart button")})
+            elif path == "/api/history/clear":
+                s.sampler.clear()
+                return self._json(200, s.sampler.info())
+            elif path == "/api/history/config":
+                return self._json(200, s.sampler.move_to(str(b.get("dir") or "")))
             elif path == "/api/admin/unlock":
                 if not s.admin.valid(self.headers.get("X-UWCC-Admin")):
                     return self._json(403, {"error": "administrator key required", "admin_required": True})
@@ -501,8 +525,17 @@ class Handler(BaseHTTPRequestHandler):
             s.emit("status", {})
             return {"effective": ecaccess.config(), "user": ecaccess.user_config(),
                     "restart_needed": s.ec_info.get("active") == "wmi"}
+        if path == "/api/ec-access/fetch-driver":
+            r = ecaccess.fetch_oem_driver(mock=s.mock)
+            pkg = ecaccess.oem_driver_package(check=True)
+            s.emit("status", {})
+            return {**r, "package": pkg}
         if path == "/api/ec-access/install-driver":
-            r = ecaccess.install_oem_driver(mock=s.mock)
+            try:
+                r = ecaccess.install_oem_driver(mock=s.mock, accept_risks=bool(b.get("accept_risks")))
+            except PermissionError as e:
+                pkg = ecaccess.oem_driver_package(check=True)
+                return {"installed": False, "risk_required": True, "error": str(e), "check": (pkg or {}).get("check")}
             restart = s.ec_info.get("active") != "oem"
             if restart and st.get("ec_backend", "auto") == "wmi":
                 st.set("ec_backend", "auto")                  # the OEM driver is there now: the recommended path
@@ -606,6 +639,27 @@ class Handler(BaseHTTPRequestHandler):
             s.settings_store.set("fan_manager", value)
             log.info("fan manager set to %s — restarting the service", value)
             s.restart_service("fan manager changed")          # the manager is chosen at start-up
+        elif key == "monitoring":                         # EC Manager drop-down: all three switches at once
+            flags = {"full": (0, 0, 0), "off_oem": (1, 0, 0), "off_wmi": (0, 1, 0), "off_both": (1, 1, 0),
+                     "off_all": (0, 0, 1)}.get(value)
+            if flags is None:
+                raise ValueError("monitoring: full | off_oem | off_wmi | off_both | off_all")
+            for k, v in zip(("monitor_off_oem", "monitor_off_wmi", "monitor_off_all"), flags):
+                s.settings_store.set(k, bool(v))
+            log.info("monitoring: %s -> %s", value, s.monitor_level())
+            s.sampler.wake()
+        elif key == "monitor_interval":
+            v = float(value or 0)
+            if v and not 1 <= v <= 60:
+                raise ValueError("monitor_interval: 0 (automatic) or 1..60 s")
+            s.settings_store.set("monitor_interval", v)
+            s.sampler.wake()
+        elif key == "history_max_kb":
+            v = int(value)
+            if not 64 <= v <= 512000:
+                raise ValueError("history_max_kb: 64..512000")
+            s.settings_store.set("history_max_kb", v)
+            s.sampler.save_day()
         elif key in ("monitor_off_oem", "monitor_off_wmi", "monitor_off_all"):
             s.settings_store.set(key, bool(value))
             log.info("monitoring setting %s = %s -> %s", key, bool(value), s.monitor_level())

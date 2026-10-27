@@ -77,9 +77,21 @@ $inf = @("$InstallDir\driver\UWACPIDriver.inf", "$userDrv\UWACPIDriver.inf") | W
 if (Get-Service UWACPIDriver -ErrorAction SilentlyContinue) {
     Say "ACPI driver already installed"
 } elseif ($inf) {
-    Say "Installing the ACPI driver (ACPI\INOU0000) from $(Split-Path $inf)"
-    & pnputil.exe /add-driver $inf /install
-    if ($LASTEXITCODE -and $LASTEXITCODE -ne 3010) { Warn "pnputil exit code $LASTEXITCODE" }
+    # minimal check before pnputil: files, INF for ACPI\INOU0000, signature, known SHA-256
+    & "$InstallDir\uwccctl.exe" driver-verify (Split-Path $inf)
+    $rc = $LASTEXITCODE
+    $go = $rc -eq 0
+    if ($rc -eq 10 -or $rc -eq 11) {
+        Warn "The driver check found problems (see above)."
+        $go = (Read-Host "I still want to use this driver and understand the risk - install it? (yes/no)") -eq "yes"
+    } elseif ($rc -ne 0) {
+        Warn "The driver package cannot be used - not installed, the program uses WMI"
+    }
+    if ($go) {
+        Say "Installing the ACPI driver (ACPI\INOU0000) from $(Split-Path $inf)"
+        & pnputil.exe /add-driver $inf /install
+        if ($LASTEXITCODE -and $LASTEXITCODE -ne 3010) { Warn "pnputil exit code $LASTEXITCODE" }
+    }
 } elseif ((Test-Path "$Src\EDITION") -and ((Get-Content "$Src\EDITION") -eq "free")) {
     Warn "Free build: no OEM driver inside. Recommended: put UWACPIDriver.inf/.sys/.cat into $userDrv and install it in EC Manager (the program uses WMI until then)"
 } else {

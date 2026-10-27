@@ -167,5 +167,7 @@ uwccctl kb effect single --color 00A0FF --light 2
 | `driver platform [export\|import ФАЙЛ\|reset\|apply-draft]` | профиль платформы ([EC/Platforms.ru.md](EC/Platforms.ru.md)) |
 | `driver selfcheck [1\|2] [--export ФАЙЛ]` | самопроверка: только чтение / с записью (администратор, от сети) |
 | `ec …` | то же, что `driver …` (менеджер EC); `ec read АДРЕС` читает один регистр |
+| `ec fetch-driver` / `ec check-driver` / `ec install-driver [--accept-risks]` | OEM-драйвер: скопировать из хранилища драйверов Windows, проверить, установить ([EC/OEM-driver.ru.md](EC/OEM-driver.ru.md)) |
+| `driver-verify ПАПКА [--json]` | проверка любого пакета драйвера без службы (коды 0 / 10 / 11 / 12) |
 | `ec-direct read АДРЕС [N]` / `ec-direct dump БАЗА` | EC без службы (root) |
 | `release` | вернуть управление вентиляторами EC (root, удаление) |

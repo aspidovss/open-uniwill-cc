@@ -89,6 +89,12 @@ en.FreeFound=Driver files found in C:\ProgramData\UWCC\driver — they will be i
 ru.FreeFound=Файлы драйвера найдены в C:\ProgramData\UWCC\driver — они будут установлены при выборе OEM.
 en.FreeMissing=No driver files in C:\ProgramData\UWCC\driver yet (a driver installed by the manufacturer's Control Center is used if present). You can put them there later and install them in EC Manager.
 ru.FreeMissing=В C:\ProgramData\UWCC\driver пока нет файлов драйвера (если драйвер уже установлен Control Center производителя, используется он). Их можно положить туда позже и установить в менеджере EC.
+en.DrvRisk10=The OEM driver check: this driver version is not in the list of known versions (the signature is valid).%n%nI still want to use this driver and understand the risk — install it?
+ru.DrvRisk10=Проверка OEM-драйвера: этой версии драйвера нет в списке известных (подпись действительна).%n%nЯ всё равно хочу использовать этот драйвер и понимаю риск — установить его?
+en.DrvRisk11=The OEM driver check: the signature of the driver is not valid or could not be checked.%n%nI still want to use this driver and understand the risk — install it?
+ru.DrvRisk11=Проверка OEM-драйвера: подпись драйвера недействительна или её не удалось проверить.%n%nЯ всё равно хочу использовать этот драйвер и понимаю риск — установить его?
+en.DrvBad=The OEM driver package cannot be used (files missing or it is a driver for another device). It is not installed; the program uses WMI. Details: uwccctl driver-verify "FOLDER".
+ru.DrvBad=Пакет OEM-драйвера нельзя использовать (не хватает файлов или это драйвер другого устройства). Он не установлен; программа работает через WMI. Подробности: uwccctl driver-verify "ПАПКА".
 en.Svc=Registering the service...
 ru.Svc=Регистрация службы...
 
@@ -253,8 +259,23 @@ begin
 end;
 
 function NeedDriver: Boolean;
+var
+  RC: Integer;
 begin
-  Result := UseOem and (not ServiceExists('UWACPIDriver')) and FileExists(DriverInf(''));
+  Result := False;
+  if not (UseOem and (not ServiceExists('UWACPIDriver')) and FileExists(DriverInf(''))) then
+    exit;
+  { minimal check before pnputil: files, INF for ACPI\INOU0000, signature, known SHA-256 (uwccd/drivercheck.py) }
+  if not Exec(ExpandConstant('{app}\uwccctl.exe'), 'driver-verify "' + ExtractFileDir(DriverInf('')) + '"', '',
+              SW_HIDE, ewWaitUntilTerminated, RC) then
+    RC := 11;
+  case RC of
+    0: Result := True;
+    10, 11: Result := SuppressibleMsgBox(CustomMessage('DrvRisk' + IntToStr(RC)), mbConfirmation,
+                                         MB_YESNO or MB_DEFBUTTON2, IDNO) = IDYES;
+  else
+    SuppressibleMsgBox(CustomMessage('DrvBad'), mbError, MB_OK, IDOK);
+  end;
 end;
 
 function NeedsAddPath(Dir: String): Boolean;

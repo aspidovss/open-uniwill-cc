@@ -110,8 +110,12 @@ time per access; firmware methods in the ACPI tables (`WMBC`, `RKBC`, `WKBC`, `S
 | Charge limit | `0x7B9` | 95 % (or 100 %) |
 | Fan-table handshake | `0xF5D–0xF5F` | the EC copies its factory table; then the profile's table is written again |
 
-Before stage 2 the registers are saved to `selfcheck-snapshot.json`; if the service stops in the middle, the next
-start restores them. At the end the current mode profile is applied again.
+Before stage 2 **every value it writes is backed up** — the registers above, the fan-table handshake `0xF5D–0xF5F`
+and the fan table `0xF00–0xF5C` (106 values): to `selfcheck-snapshot.json` (restored on the next start if the service
+stops in the middle) and to a dated copy `selfcheck-backups/ec-backup-YYYYMMDD-HHMMSS.json` in the data folder (the last
+ten are kept). The files are read back first; if the backup cannot be saved, nothing is written. The window shows that
+the backup was made while the check runs. At the end the values are written back, read back and compared — the
+window shows how many match — and the current mode profile is applied again.
 
 **Result:** every check with ✓ / ! / ✕ / – and its evidence, the list **Not clear**, the functions for a draft
 profile. *Export for GitHub* writes `uwcc-selfcheck.json` (no serial numbers): attach it to an issue to have your
@@ -132,7 +136,13 @@ uwccctl ec platform export my-laptop.json
 | Off for the OEM driver / for WMI | no sensor polling through that path: the Monitor page and the history stop; the temperatures for the liquid cooler and the overheat alerts are read every 20 s |
 | All off | nothing is read: no Monitor page, history or alerts; the liquid cooler in the automatic mode runs the fixed *Medium* preset |
 
+In the window it is one drop-down: full / off with the OEM driver / off with WMI / off with both / all off;
 `uwccctl ec monitor oem|wmi|all on|off`.
+
+The same card sets the **sampling interval** (automatic: 2 s with the OEM driver, 5 s with WMI; or 1–60 s) and the
+**history** of the last 24 hours: its size on disk, the **maximum size** (default 2 MB; beyond it the oldest minutes are
+dropped), the **folder** (`history-24h.json`, default in the data folder; moving it needs administrator rights) and
+**Clear the history**.
 
 ## Slow path: "Applying…"
 

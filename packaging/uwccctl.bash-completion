@@ -131,7 +131,7 @@ _uwccctl() {
                 *) COMPREPLY=($(compgen -W "--private --sections --full" -- "$cur") $(compgen -f -- "$cur")) ;;
             esac ;;
         ec|driver)
-            if ((n == 1)); then COMPREPLY=($(compgen -W "use config test unlock lock install-driver monitor platform selfcheck$([[ $cmd == ec ]] && echo ' read')" -- "$cur"))
+            if ((n == 1)); then COMPREPLY=($(compgen -W "use config test unlock lock fetch-driver check-driver install-driver monitor platform selfcheck$([[ $cmd == ec ]] && echo ' read')" -- "$cur"))
             elif ((n == 2)) && [[ $sub == use ]]; then COMPREPLY=($(compgen -W "auto oem wmi" -- "$cur"))
             elif ((n == 2)) && [[ $sub == config ]]; then COMPREPLY=($(compgen -W "export import reset" -- "$cur"))
             elif ((n == 2)) && [[ $sub == monitor ]]; then COMPREPLY=($(compgen -W "oem wmi all" -- "$cur"))

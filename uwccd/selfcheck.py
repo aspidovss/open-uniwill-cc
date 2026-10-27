@@ -31,12 +31,47 @@ COMPARE = [0x740, 0x74C, 0x741, 0x742, 0x73C, 0x766, 0x771, 0x772, 0x782, 0x78E,
            0x730, 0x731, 0x732, 0x734, 0x735, 0x736, 0x7A7, 0x7A8, 0x7A9, 0x751, 0x783, 0x784, 0x785, 0x786,
            0x74E, 0x7A6, 0x7B9, 0x7D0, 0x744]
 SNAP_REGS = [0x74E, 0x7A6, 0x7B9, 0x751, 0x783, 0x784, 0x785, 0x743, 0x744, 0x726]
+# everything stage 2 writes or makes the EC overwrite: the registers above, the fan-table handshake 0xF5D–0xF5F and the
+# fan table 0xF00–0xF5C itself (the handshake copies the factory table there)
+TABLE_REGS = list(range(0xF00, 0xF5D))
+HANDSHAKE_REGS = [0xF5F, 0xF5D, 0xF5E]
+BACKUP_REGS = SNAP_REGS + TABLE_REGS + HANDSHAKE_REGS
+BACKUP_DIR = "selfcheck-backups"
 FIRMWARE_NAMES = ("WMBC", "OEMG", "RKBC", "WKBC", "ECRR", "ECRW", "SMRW", "PWUP")
 KNOWN_MODE_BYTES = (0x00, 0x10, 0x80, 0xA0, 0x20)
 
 
 def _item(iid, group, name, status, detail=""):
     return {"id": iid, "group": group, "name": name, "status": status, "detail": detail}
+
+
+def write_back(ec, regs):
+    """Put saved EC values back: fan table first, then the handshake (never the 0xFD / 0xC9 trigger), then the rest.
+    Returns the addresses whose read-back differs."""
+    regs = {int(a, 16) if isinstance(a, str) else int(a): int(v) & 0xFF for a, v in regs.items()}
+    order = [a for a in TABLE_REGS if a in regs] + [a for a in HANDSHAKE_REGS if a in regs] + \
+        [a for a in regs if a not in TABLE_REGS and a not in HANDSHAKE_REGS]
+    for a in order:
+        if a in (0xF5D, 0xF5E) and regs[a] in (0xFD, 0xC9):
+            continue                                   # would start a new fan-table handshake
+        try:
+            ec.write(a, regs[a])
+        except Exception as e:  # noqa: BLE001
+            log.error("restore 0x%03X: %s", a, e)
+    inv = getattr(ec, "invalidate", None)
+    if inv:
+        inv()
+    bad = []
+    for a in order:
+        if a in (0xF5D, 0xF5E):
+            continue
+        try:
+            rb = (ec._read(a) if hasattr(ec, "_read") else ec.read(a)) & 0xFF
+        except Exception:  # noqa: BLE001
+            rb = None
+        if rb != regs[a]:
+            bad.append(f"0x{a:03X}: saved 0x{regs[a]:02X}, now " + ("?" if rb is None else f"0x{rb:02X}"))
+    return bad
 
 
 def restore_snapshot(ec):
@@ -46,9 +81,9 @@ def restore_snapshot(ec):
     if not snap:
         return False
     try:
-        for a, v in (snap.get("regs") or {}).items():
-            ec.write(int(a, 16), int(v))
-        log.warning("self-check was interrupted — %d registers restored", len(snap.get("regs") or {}))
+        bad = write_back(ec, snap.get("regs") or {})
+        log.warning("self-check was interrupted — %d registers restored%s", len(snap.get("regs") or {}),
+                    f", {len(bad)} differ: {'; '.join(bad[:5])}" if bad else "")
     except Exception as e:  # noqa: BLE001
         log.error("restore after an interrupted self-check: %s", e)
     try:
@@ -189,6 +224,18 @@ class SelfCheck:
             except Exception:  # noqa: BLE001
                 pass
 
+        try:
+            from .ecaccess import oem_driver_package
+            pkg = oem_driver_package(check=True)
+        except Exception:  # noqa: BLE001
+            pkg = None
+        if pkg and pkg.get("check"):
+            c = pkg["check"]
+            add(_item("oem_package", "paths", "OEM driver package", {"ok": "ok", "warn": "warn"}.get(c["level"], "fail"),
+                      f"{pkg['dir']}: " + "; ".join(x["detail"] for x in c["checks"])))
+            if c["level"] != "ok":
+                unk.append("OEM driver package: " + c["level"])
+
         # plausibility
         self._progress(35, "registers")
         caps = self.rd(ec, R.EC_CAPS_78E)
@@ -306,17 +353,50 @@ class SelfCheck:
                       ", ".join(str(x.InstanceName) for x in rows) if rows else "not found"))
 
     # -- stage 2 -------------------------------------------------------------------------------------
+    def backup(self):
+        """Forced backup of every EC value stage 2 writes: read, save (snapshot for a crash + a dated copy), read the
+        files back. Raises when it cannot be saved — then nothing is written."""
+        ec = self.svc.ec
+        self._progress(62, "backup")
+        regs = {f"0x{a:03X}": self.rd(ec, a) for a in BACKUP_REGS}
+        data = {"time": time.time(), "program": __import__("uwccd").version_string(), "path": self.svc.ec_info.get("active"),
+                "project": f"0x{self.rd(ec, R.PROJECT_ID):02X}", "regs": regs}
+        d = store.path(BACKUP_DIR)
+        os.makedirs(d, exist_ok=True)
+        path = os.path.join(d, time.strftime("ec-backup-%Y%m%d-%H%M%S.json"))
+        store.save_json(store.path(SNAPSHOT), data)
+        store.save_json(path, data)
+        for p in (path, store.path(SNAPSHOT)):
+            if (store.load_json(p) or {}).get("regs") != regs:
+                raise RuntimeError(f"the EC backup could not be saved ({p}) — no test writes were made")
+        old = sorted(f for f in os.listdir(d) if f.startswith("ec-backup-"))
+        for f in old[:-10]:                              # keep the last ten
+            try:
+                os.remove(os.path.join(d, f))
+            except OSError:
+                pass
+        log.warning("self-check: %d EC registers backed up to %s", len(regs), path)
+        info = {"path": path, "count": len(regs)}
+        self.svc.emit("selfcheck_backup", info)
+        return regs, info
+
     def stage2(self, r):
-        svc, ec, add = self.svc, self.svc.ec, r["items"].append
+        svc, add = self.svc, r["items"].append
         unk = r["unknowns"]
-        snap = {f"0x{a:03X}": self.rd(ec, a) for a in SNAP_REGS}
-        store.save_json(store.path(SNAPSHOT), {"time": time.time(), "regs": snap})
-        orig = {int(k, 16): v for k, v in snap.items()}
+        try:
+            regs, info = self.backup()
+        except Exception as e:  # noqa: BLE001
+            add(_item("backup", "write", "EC backup", "fail", str(e)))
+            unk.append(str(e))
+            r["backup"] = {"error": str(e)}
+            return
+        add(_item("backup", "write", "EC backup", "ok", f"{info['count']} registers → {info['path']}"))
+        orig = {int(k, 16): v for k, v in regs.items()}
         tests = [self._t_fnlock, self._t_touchpad, self._t_mode, self._t_fanboost, self._t_pl1, self._t_ctgp,
                  self._t_charge, self._t_table]
         try:
             for i, t in enumerate(tests):
-                self._progress(65 + i * 30 // len(tests), t.__name__[3:])
+                self._progress(65 + i * 25 // len(tests), t.__name__[3:])
                 try:
                     it = t(orig)
                 except Exception as e:  # noqa: BLE001
@@ -325,22 +405,27 @@ class SelfCheck:
                 if it["status"] in ("warn", "fail"):
                     unk.append(f"{it['name']}: {it['detail']}")
         finally:
-            for a, v in orig.items():
-                try:
-                    self.wr(a, v)
-                except Exception as e:  # noqa: BLE001
-                    log.error("restore 0x%03X: %s", a, e)
+            self._progress(92, "restore")
+            bad = write_back(svc.ec, regs)
             try:
                 os.remove(store.path(SNAPSHOT))
             except OSError:
                 pass
-            self._progress(97, "restore")
+            res = {**info, "restored": len(regs) - len(bad), "mismatches": bad}
+            r["backup"] = res
+            add(_item("restore", "write", "EC values restored", "ok" if not bad else "warn",
+                      f"{len(regs) - len(bad)} of {len(regs)} registers read back equal"
+                      + (": " + "; ".join(bad[:6]) if bad else "")))
+            if bad:
+                unk.append("after the restore some registers differ (the EC may change them itself): " + "; ".join(bad[:6]))
+            self._progress(97, "profile")
             if svc.fan_control:
                 try:
                     svc.power.tables.invalidate()
                     svc.power.set_user_profile(svc.power.option["OperatingMode"])
                 except Exception as e:  # noqa: BLE001
                     log.error("re-apply after the self-check: %s", e)
+            svc.emit("selfcheck_restore", res)
         add(_item("lightbar", "write", "Light bar trigger", "skip", "needs your eyes — not checked automatically"))
         if svc.ec_info.get("active") == "wmi":
             add(_item("pwup", "write", "Liquid-cooling power level (PWUP)", "fail", "not reachable through WMI (OEM driver only)"))

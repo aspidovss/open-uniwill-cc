@@ -26,7 +26,8 @@ Overview
   lang en|ru  /  debug on|off  /  version  /  update [check|install]  /  restart
   ec [use auto|oem|wmi] [--accept-risks]   EC Manager (Windows): OEM driver / WMI (beta); same as `driver`
   ec unlock [MIN] | lock         administrator unlock of the EC Manager settings (run as administrator / sudo)
-  ec install-driver              install the OEM driver from %ProgramData%/UWCC/driver (free build)
+  ec fetch-driver | check-driver | install-driver [--accept-risks]   OEM driver for the free build
+  driver-verify DIR              check an OEM driver package (no service needed)
   ec config export|import FILE|reset  /  ec test  /  ec monitor oem|wmi|all on|off
   ec platform [export FILE|import FILE|reset|apply-draft]  /  ec selfcheck [1|2] [--export FILE]
   lighting  /  nvram  /  ec read ADDR  /  resume
@@ -186,8 +187,13 @@ HELP = {
         "uwccctl driver unlock [MIN]              open the EC Manager settings for the window (default 10 min);\n"
         "                                         needs administrator rights (Windows) / sudo (Linux)\n"
         "uwccctl driver lock\n"
-        "uwccctl driver install-driver            install the OEM driver from C:\\ProgramData\\UWCC\\driver\n"
-        "                                         (UWACPIDriver.inf/.sys/.cat; administrator); free build: put it there\n"
+        "uwccctl driver fetch-driver              copy the OEM driver from the Windows driver store into\n"
+        "                                         C:\\ProgramData\\UWCC\\driver (administrator)\n"
+        "uwccctl driver check-driver              check that package: files, INF (ACPI\\INOU0000), signature, SHA-256\n"
+        "uwccctl driver install-driver [--accept-risks]   check and install it (administrator); --accept-risks:\n"
+        "                                         install although the check warns (unknown version / signature)\n"
+        "uwccctl driver-verify DIR [--json]       the same check of any folder, without the service\n"
+        "                                         (exit 0 ok, 10 warning, 11 failed, 12 unusable)\n"
         "uwccctl driver monitor oem|wmi|all on|off   monitoring through this EC path (off: temperatures only,\n"
         "                                         every 20 s; all off: nothing — the liquid cooler uses a preset)\n"
         "uwccctl driver platform                  platform profile of this laptop\n"
@@ -1084,6 +1090,10 @@ def main(a):
         return cmd_restart()
     if cmd == "ec-direct":
         return cmd_ec_direct(rest)
+    if cmd == "driver-verify":                  # check an OEM driver package without the service (installers)
+        _pkg()
+        from uwccd.drivercheck import main as verify_main
+        sys.exit(verify_main(rest))
     if cmd == "release":
         return cmd_release()
     if cmd in ("status", "lc", "lang"):
@@ -1205,9 +1215,27 @@ def cmd_driver(a):
         return out(r, f"EC Manager unlocked for {(r['remaining'] + 59) // 60} min")
     if op == "lock":
         return out(call("admin/lock", {}), "EC Manager locked")
-    if op == "install-driver":
-        r = call("ec-access/install-driver", {}, timeout=180)
-        return out(r, lambda d: [f"OEM driver installed from {d.get('dir')}" + (" (reboot required)" if d.get("reboot") else "")]
+    if op in ("check-driver", "fetch-driver", "install-driver"):
+        def check_lines(c):
+            if not c:
+                return ["no driver package"]
+            return [f"[{x['status'].upper():4}] {x['id']}: {x['detail']}" for x in c.get("checks", [])] + \
+                [f"result: {c.get('level')}"]
+        if op == "fetch-driver":
+            r = call("ec-access/fetch-driver", {}, timeout=120)
+            out(r, lambda d: [f"copied {', '.join(d['files'])}", f"  from {d['from']}", f"  to   {d['to']}"]
+                + check_lines((d.get("package") or {}).get("check")))
+            return
+        if op == "check-driver":
+            pkg = call("ec-access").get("driver_package")
+            return out(pkg or {}, lambda d: ([f"package: {d['dir']}"] if d else []) + check_lines((d or {}).get("check")))
+        r = call("ec-access/install-driver", {"accept_risks": "--accept-risks" in a}, timeout=180)
+        if r.get("risk_required"):
+            out(r, lambda d: check_lines(d.get("check")) + ["", "Not installed: " + d.get("error", ""),
+                                                        "Add --accept-risks if you still want to use this driver."])
+            sys.exit(1)
+        return out(r, lambda d: check_lines(d.get("check")) +
+                   [f"OEM driver installed from {d.get('dir')}" + (" (reboot required)" if d.get("reboot") else "")]
                    + (["The service is restarting…"] if d.get("restarting") else []))
     if op == "monitor":
         if len(a) < 3 or a[1] not in ("oem", "wmi", "all"):

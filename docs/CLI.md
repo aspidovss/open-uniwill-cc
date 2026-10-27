@@ -166,5 +166,7 @@ App binding: `apps`, `apps add PROCESS MODE`, `apps remove PROCESS`, `apps enabl
 | `driver platform [export\|import FILE\|reset\|apply-draft]` | platform profile ([EC/Platforms.md](EC/Platforms.md)) |
 | `driver selfcheck [1\|2] [--export FILE]` | self-check: read only / with writes (administrator, AC power) |
 | `ec …` | same as `driver …` (EC Manager); `ec read ADDR` reads one register |
+| `ec fetch-driver` / `ec check-driver` / `ec install-driver [--accept-risks]` | OEM driver: copy from the Windows driver store, check, install ([EC/OEM-driver.md](EC/OEM-driver.md)) |
+| `driver-verify DIR [--json]` | check any driver package without the service (exit 0 / 10 / 11 / 12) |
 | `ec-direct read ADDR [N]` / `ec-direct dump BASE` | EC without the service (root) |
 | `release` | give fan control back to the EC (root, uninstall) |

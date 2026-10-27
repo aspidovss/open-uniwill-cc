@@ -32,6 +32,7 @@
       <a data-page="switches"><i class="ico ico-switch"></i><span data-i>Switches</span></a>
       <a data-page="auto"><i class="ico ico-auto"></i><span data-i>Automation</span></a>
       <a data-page="binding"><i class="ico ico-bind"></i><span data-i>App binding</span></a>
+      <a data-page="help"><i class="ico ico-help"></i><span data-i>Help</span></a>
     </nav>
     <div class="nav-foot">
       <div class="wmi-badge hidden" id="wmi-badge" role="button" title="EC Manager">WMI DRIVER ON</div>
@@ -185,6 +186,14 @@
           <div class="row"><button class="btn ghost" id="dm-restart" data-i>Restart the service</button><button class="btn" id="dm-test" data-i>Test the EC path</button></div></div>
         <p class="muted tiny" data-i>Reads the project ID and a few registers through the active path and measures the time of one access. Nothing is written.</p>
         <div id="dm-test-out" class="muted"></div>
+      </div>
+    </section>
+
+    <section class="page" id="page-help">
+      <header class="ph"><h1 data-i>Help</h1><p data-i>Documentation of the program, offline. The same pages are on GitHub.</p></header>
+      <div class="help-wrap">
+        <div class="help-toc card" id="help-toc"></div>
+        <article class="card md" id="help-body"></article>
       </div>
     </section>
 
@@ -487,11 +496,13 @@
 <div id="svc-down" class="svc-down hidden"></div>
 <div class="eula hidden" id="busy-overlay" role="alertdialog" aria-modal="true" aria-live="polite">
   <div class="eula-card narrow busy-card"><h2 id="busy-title"></h2><p class="muted" id="busy-sub"></p>
+    <p class="busy-backup hidden" id="busy-backup"></p>
     <div class="pbar" id="busy-bar"><div></div></div></div>
 </div>
 <div id="toast"></div>
 <div id="osd"></div>
 <script src="i18n.js"></script>
+<script src="md.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

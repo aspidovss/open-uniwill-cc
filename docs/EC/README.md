@@ -13,6 +13,7 @@ driver built into Windows, so the free Windows build needs no OEM or other third
 | [Registers.md](Registers.md) | EC register reference: addresses, bits, values read on the Tsunami, fan table, liquid cooler, firmware methods, examples |
 | [WMI-vs-Driver.md](WMI-vs-Driver.md) | EC access through the OEM driver vs Windows WMI: what works, speed, what is lost without the driver |
 | [WMI-config.md](WMI-config.md) | WMI path settings (`ec_wmi.json`): every key, functions, setting it up for another laptop |
+| [OEM-driver.md](OEM-driver.md) | getting the OEM driver (this laptop, the repository, by hand) and the check before it is installed |
 | [Platforms.md](Platforms.md) | platform profiles, the self-check, EC Manager, administrator rights, hard caps, monitoring switches |
 | `ec_tool.py` | test tool |
 | `ec_tool.json` | default settings of the tool |

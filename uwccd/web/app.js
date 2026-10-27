@@ -96,6 +96,7 @@ function setLang(l, save) {
   if (S) render();
   if (lastMonitor) onMonitor(lastMonitor);
   paintConn();
+  if (typeof helpCur !== "undefined" && helpCur && $("#page-help").classList.contains("active")) openHelp(helpCur.id);
 }
 $$("#lang-seg button").forEach(b => b.addEventListener("click", () => setLang(b.dataset.lang, true)));
 
@@ -1500,6 +1501,8 @@ function connect() {
     if (m.type === "monitor") return onMonitor(m.data);
     if (m.type === "busy") { renderBusy(m.data.ops || []); if (S) S.busy = m.data.ops || []; }
     if (m.type === "restarting") showRestart();
+    if (m.type === "selfcheck_backup") { scBackup = m.data; renderBusy((S && S.busy) || []); }
+    if (m.type === "selfcheck_restore") { scBackup = null; renderBusy((S && S.busy) || []); showRestoreResult(m.data); }
     if (m.type === "admin") { if (S && S.ec_access) S.ec_access.admin = m.data; renderAdmin(); if (m.data.declined) toast(t("Administrator rights were not granted"), true); }
     if (m.type === "mode" && m.data.osd) osd(m.data.mode === 3 ? `Custom · ${slotName(S?.profiles?.["Mode4_Profile" + ((m.data.slot || 0) + 1)], (m.data.slot || 0) + 1)}` : (MODES[m.data.mode]?.osd || ""));
     if (m.type === "overheat") toast(t("{0} at {1} °C for 30 seconds", m.data.sensor === "gpu" ? t("GPU") : t("CPU"), m.data.temp), true);
@@ -1798,6 +1801,19 @@ async function offerWmiIfNoDriver() {
 }
 
 // ---------------------------------------------------------------- long operations: "Applying…" (WMI path)
+var scBackup = null;                                     // backup of the EC values made by self-check stage 2
+function showRestoreResult(r) {
+  const bad = r.mismatches || [];
+  const box = h("div", { class: "eula", role: "dialog", "aria-modal": "true" },
+    h("div", { class: "eula-card narrow" },
+      h("h2", {}, bad.length ? t("EC values restored, with differences") : t("EC values restored")),
+      h("p", {}, t("{0} of {1} controller values read back equal after the test.", r.restored, r.count)),
+      bad.length ? h("ul", { class: "sc-unknown" }, ...bad.slice(0, 8).map(x => h("li", {}, x))) : null,
+      bad.length ? h("p", { class: "muted tiny" }, t("The controller may change some values itself (fans, mode bits). The current mode profile was applied again.")) : null,
+      h("p", { class: "muted tiny" }, t("Backup file: {0}", r.path)),
+      h("div", { class: "row end" }, h("button", { class: "btn", onclick: () => box.remove() }, "OK"))));
+  document.body.append(box);
+}
 let localBusy = null;
 async function withBusy(label, fn) {             // cover the window at once, before the service answers
   localBusy = { op: "apply", label, blocking: true, progress: null, local: true };
@@ -1817,6 +1833,10 @@ function renderBusy(ops) {
     $("#busy-title").textContent = what;
     $("#busy-sub").textContent = block.op === "selfcheck" ? t("The program reads the controller and, at stage 2, switches functions briefly and back. Do not close the lid.")
       : slow ? t("WMI path: every access to the controller takes about 0.15 s. Please wait.") : t("Please wait.");
+    const bk = $("#busy-backup");
+    bk.classList.toggle("hidden", !(block.op === "selfcheck" && scBackup));
+    if (block.op === "selfcheck" && scBackup) bk.replaceChildren(h("b", {}, "✓ " + t("EC backup saved")), " ",
+      t("{0} controller values were copied to {1} before the test writes; they are put back when the check ends.", scBackup.count, scBackup.path));
     const pb = $("#busy-bar");
     pb.classList.toggle("indet", block.progress == null);
     pb.firstElementChild.style.width = block.progress == null ? "" : block.progress + "%";
@@ -1909,21 +1929,44 @@ function renderAdmin() {
 }
 
 // ---------------------------------------------------------------- monitoring switches
+const MON_MODES = [["full", "Full monitoring"], ["off_oem", "Off with the OEM driver"], ["off_wmi", "Off with WMI"],
+  ["off_both", "Off with the OEM driver and WMI"], ["off_all", "All monitoring off"]];
+const MON_HINT = { full: "Sensors, fans and history are read all the time.",
+  off_oem: "Through the OEM driver only the temperatures for the liquid cooler and the alerts are read, every 20 s; no Monitor page and history.",
+  off_wmi: "Through WMI only the temperatures for the liquid cooler and the alerts are read, every 20 s — fewer slow accesses to the controller.",
+  off_both: "Through either path only the temperatures for the liquid cooler and the alerts are read, every 20 s.",
+  off_all: "Nothing is read: no Monitor page, history or overheat alerts; the liquid cooler in the automatic mode runs the fixed “Medium” preset." };
+const INTERVALS = [0, 1, 2, 3, 5, 10, 15, 30, 60];
+const HIST_SIZES = [256, 512, 1024, 2048, 5120, 10240, 51200];
+function fmtSize(b) { return b >= 1048576 ? `${(b / 1048576).toFixed(1)} ${t("MB")}` : `${Math.round(b / 1024)} ${t("KB")}`; }
 function renderMonitoring(a) {
-  const m = a.monitoring || {};
+  const m = a.monitoring || {}, hi = a.history || {};
   const box = $("#dm-monitor"); if (!box) return;
-  box.innerHTML = "";
-  const sw = (key, label, desc, checked) => {
-    const i = h("input", { type: "checkbox" }); i.checked = checked;
-    i.addEventListener("change", () => act(() => api("setting", { key, value: i.checked })));
-    return h("div", { class: "row between perf-row" }, h("div", {}, h("b", {}, label), h("p", { class: "muted tiny" }, desc)),
-      h("label", { class: "sw" }, i, h("span")));
-  };
-  box.append(
-    sw("monitor_off_oem", t("Monitoring off with the OEM driver"), t("No sensor polling through the OEM driver: the Monitor page and the history stop. Temperatures for the liquid cooler and the overheat alerts are still read every 20 s."), !!m.off_oem),
-    sw("monitor_off_wmi", t("Monitoring off with WMI"), t("The same for the WMI path — fewer slow accesses to the controller."), !!m.off_wmi),
-    sw("monitor_off_all", t("All monitoring off"), t("Nothing is read at all: no Monitor page, no history, no overheat alerts; the liquid cooler in the automatic mode runs the fixed “Medium” preset."), !!m.off_all),
-    h("p", { class: "muted tiny" }, t("Now: {0}", t({ full: "full monitoring", light: "temperatures only, every 20 s", off: "monitoring off" }[m.level] || m.level))));
+  if (box.contains(document.activeElement) && document.activeElement.tagName === "INPUT") return;   // typing a folder
+  const mode = m.off_all ? "off_all" : m.off_oem && m.off_wmi ? "off_both" : m.off_oem ? "off_oem" : m.off_wmi ? "off_wmi" : "full";
+  const sel = (opts, cur, on) => { const e = h("select", { onchange: () => on(e.value) }); for (const [v, l] of opts) { const o = h("option", { value: v }, l); if (String(v) === String(cur)) o.selected = true; e.append(o); } return e; };
+  const set = (key, value) => act(() => api("setting", { key, value }));
+  const item = (label, ctl, wide) => h("div", { class: "dm-item" + (wide ? " wide" : "") }, h("span", {}, label), ctl);
+  const dir = h("input", { type: "text", value: hi.dir || "", spellcheck: "false" });
+  box.replaceChildren(
+    h("div", { class: "dm-grid" },
+      item(t("Monitoring"), sel(MON_MODES.map(([v, l]) => [v, t(l)]), mode, v => set("monitoring", v))),
+      item(t("Sampling interval"), sel(INTERVALS.map(v => [v, v ? t("{0} s", v) : t("automatic ({0} s)", hi.interval_auto ?? 2)]),
+        hi.interval_setting || 0, v => set("monitor_interval", +v)))),
+    h("p", { class: "muted tiny" }, t(MON_HINT[mode])),
+    h("h4", {}, t("History")),
+    h("div", { class: "dm-grid" },
+      item(t("Size on disk"), h("span", {}, `${fmtSize(hi.size || 0)} · ${t("{0} min of 24 h", (hi.points || {}).day || 0)}`)),
+      item(t("Maximum size"), sel(HIST_SIZES.map(v => [v, fmtSize(v * 1024)]).concat(HIST_SIZES.includes(hi.max_kb) ? [] : [[hi.max_kb, fmtSize((hi.max_kb || 0) * 1024)]]),
+        hi.max_kb, v => set("history_max_kb", +v))),
+      item(t("Folder"), h("div", { class: "row" }, dir, h("button", { class: "btn ghost", onclick: () => act(async () => {
+        await adminApi("history/config", { dir: dir.value.trim() }); await refresh();
+      }, t("Saved")) }, t("Move"))), true)),
+    h("p", { class: "muted tiny" }, t("File: {0}. The oldest minutes are dropped when it grows beyond the maximum size. Moving the folder needs administrator rights.", hi.path || "")),
+    h("div", { class: "row" }, h("button", { class: "btn ghost", onclick: () => act(async () => {
+      if (!confirm(t("Delete the whole sensor history (1 hour and 24 hours)?"))) return;
+      await api("history/clear", {}); await refresh(); loadHistory && loadHistory(true);
+    }, t("Cleared")) }, t("Clear the history"))));
 }
 function renderMonOff(level) {
   level = level || (S && S.monitoring) || "full";
@@ -1978,7 +2021,7 @@ async function renderSelfcheck(a) {
   const sc = a.selfcheck || {};
   const last = sc.last;
   $("#dm-sc-state").textContent = sc.running ? t("Running stage {0}…", sc.running)
-    : last ? t("Last check: stage {0}, {1}", last.stage, new Date(last.time * 1000).toLocaleString()) : t("Not run yet.");
+    : last ? t("Last check: stage {0}, {1}", last.stage, new Date(last.time * 1000).toLocaleString(LANG === "ru" ? "ru-RU" : "en-GB")) : t("Not run yet.");
   const key = last ? last.time : null;
   if (!last || scLoaded === key || sc.running) { if (!last) $("#dm-sc-out").innerHTML = ""; $("#dm-sc-apply").disabled = !last; return; }
   scLoaded = key;
@@ -2005,7 +2048,7 @@ async function renderSelfcheck(a) {
   $("#dm-sc-apply").disabled = !r.draft;
 }
 async function runSelfcheck(stage) {
-  if (stage === 2 && !confirm(t("Stage 2 briefly switches functions of the controller and back (mode, Fan Boost, PL1, cTGP, charge limit, Fn Lock). The laptop must be on AC power. Continue?"))) return;
+  if (stage === 2 && !confirm(t("Stage 2 briefly switches functions of the controller and back (mode, Fan Boost, PL1, cTGP, charge limit, Fn Lock). First every value it writes is copied to a backup file; at the end they are restored and checked. The laptop must be on AC power. Continue?"))) return;
   await act(async () => {
     await (stage === 2 ? adminApi : api)("selfcheck", { stage });
     localBusy = { op: "selfcheck", label: "stage " + stage, blocking: true, progress: 0 };
@@ -2034,31 +2077,137 @@ $("#dm-sc-apply").addEventListener("click", () => act(async () => {
 }, t("Saved")));
 
 // ---------------------------------------------------------------- edition (free / non-free) and the OEM driver package
+const DRIVER_REPO = "https://github.com/aspidovss/open-uniwill-cc/tree/main/proprietary/driver";
+const CHK_MARK = { ok: "✓", warn: "!", fail: "✕", hard: "✕", skip: "–" };
 function renderEdition(a) {
   const box = $("#dm-edition"); if (!box) return;
-  const free = a.edition === "free", pkg = a.driver_package;
-  const need = a.active !== "oem";
-  box.classList.toggle("hidden", !free && !(pkg && need));
+  const free = a.edition === "free", pkg = a.driver_package, need = a.active !== "oem";
+  box.classList.toggle("hidden", !free && !(need && (pkg || a.driver_store)));
   if (box.classList.contains("hidden")) return;
   const kids = [];
   if (free) {
-    kids.push(h("h3", {}, t("Free build")),
+    kids.push(h("div", { class: "row between wrap" }, h("h3", {}, t("Free build")), helpLink("oem-driver")),
       h("p", {}, t("This build does not contain the original OEM driver and is distributed completely freely (open source, MIT licence). Without the driver the program works through the open WMI implementation (beta).")),
       h("p", {}, h("b", {}, t("Recommended:")), " ", t("put the OEM driver of the manufacturer's Control Center (UWACPIDriver.inf, UWACPIDriver.sys, UWACPIDriver.cat) into this folder and install it with the button below:")),
-      h("pre", { class: "code" }, a.driver_dir || "C:\\ProgramData\\UWCC\\driver"),
-      h("p", {}, h("a", { href: LANG === "ru" ? "https://github.com/aspidovss/open-uniwill-cc/blob/main/README.ru.md#где-взять-oem-драйвер"
-        : "https://github.com/aspidovss/open-uniwill-cc#where-to-get-the-oem-driver", target: "_blank", rel: "noopener" },
-        t("Where to get the OEM driver: this repository, your laptop's driver store, the manufacturer's installer"))),
-      h("p", { class: "muted tiny" }, t("By installing the OEM driver you confirm that you have the right to use this file (UWACPIDriver.sys, part of the laptop manufacturer's Control Center).")));
+      h("pre", { class: "code" }, a.driver_dir || "C:\\ProgramData\\UWCC\\driver"));
   } else {
-    kids.push(h("h3", {}, t("OEM driver package")));
+    kids.push(h("div", { class: "row between wrap" }, h("h3", {}, t("OEM driver package")), helpLink("oem-driver")));
   }
-  kids.push(h("p", {}, pkg ? t("Driver package found: {0}{1}", pkg.dir, pkg.sys ? "" : " — " + t("UWACPIDriver.sys is missing"))
-    : t("No driver package in {0} yet.", a.driver_dir || "")));
-  if (pkg && need) kids.push(h("div", { class: "row" }, h("button", { class: "btn", onclick: () => act(async () => {
-    if (!confirm(t("Install the OEM driver from {0}? The service restarts and uses it.", pkg.dir))) return;
-    const r = await adminApi("ec-access/install-driver", {});
-    if (r.restarting) showRestart(); else await refresh();
-  }, t("Installed")) }, t("Install the OEM driver"))));
+  // where to get it
+  kids.push(h("div", { class: "row wrap" },
+    a.driver_store ? h("button", { class: "btn" + (pkg ? " ghost" : ""), onclick: () => act(async () => {
+      const r = await adminApi("ec-access/fetch-driver", {}); toast(t("Copied: {0}", r.files.join(", "))); await refresh();
+    }, t("Copied")) }, t("Get the driver from this system")) : null,
+    h("a", { class: "btn ghost", href: DRIVER_REPO, target: "_blank", rel: "noopener" }, t("Driver in the repository")),
+    h("button", { class: "btn ghost", onclick: () => openHelp("oem-driver") }, t("How to get the driver"))));
+  if (!a.driver_store && !pkg) kids.push(h("p", { class: "muted tiny" }, t("The driver is not in the Windows driver store of this laptop (the manufacturer's Control Center was never installed) — take it from the repository or from the manufacturer's installer.")));
+  // the package and its check
+  if (!pkg) kids.push(h("p", {}, t("No driver package in {0} yet.", a.driver_dir || "")));
+  else {
+    const c = pkg.check || {};
+    kids.push(h("p", {}, t("Driver package: {0}", pkg.dir)));
+    if (c.checks) kids.push(h("div", { class: "sc-list" }, ...c.checks.map(x => h("div", { class: "sc-row " + (x.status === "hard" ? "fail" : x.status) },
+      h("span", { class: "sc-mark" }, CHK_MARK[x.status] || "?"), h("span", { class: "sc-name" }, t({ files: "Files", inf: "INF", signature: "Signature", hash: "Known version" }[x.id] || x.id)),
+      h("span", { class: "sc-detail muted" }, x.detail)))));
+    const lvl = c.level;
+    if (lvl === "hard") kids.push(h("p", { class: "red-warn" }, t("This package cannot be used: files are missing or it is a driver for another device.")));
+    if (need && lvl !== "hard") {
+      const risky = lvl === "warn" || lvl === "fail";
+      const chk = h("input", { type: "checkbox", id: "drv-risk" });
+      const btn = h("button", { class: "btn", disabled: risky ? true : null, onclick: () => act(async () => {
+        if (!confirm(t("Install the OEM driver from {0}? The service restarts and uses it.", pkg.dir))) return;
+        const r = await adminApi("ec-access/install-driver", { accept_risks: risky && chk.checked });
+        if (r.risk_required) { toast(t("The driver check found problems — confirm that you understand the risk"), true); return; }
+        if (r.restarting) showRestart(); else await refresh();
+      }, t("Installed")) }, t("Install the OEM driver"));
+      chk.addEventListener("change", () => { btn.disabled = !chk.checked; });
+      if (risky) kids.push(h("p", { class: "warn-text" }, lvl === "warn" ? t("This driver version is not in the list of known versions (the signature is valid).")
+        : t("The signature of the driver is not valid or could not be checked.")),
+        h("label", { class: "eula-check" }, chk, h("span", {}, t("I still want to use this driver and understand the risk"))));
+      kids.push(h("div", { class: "row" }, btn));
+    }
+  }
+  kids.push(h("p", { class: "muted tiny" }, t("By installing the OEM driver you confirm that you have the right to use this file (UWACPIDriver.sys, part of the laptop manufacturer's Control Center).")));
   box.replaceChildren(...kids);
 }
+
+// ---------------------------------------------------------------- built-in help (docs/*.md served under /help/)
+const REPO_BLOB = "https://github.com/aspidovss/open-uniwill-cc/blob/main/";
+const HELP_PAGES = [
+  { group: "EC access" },
+  { id: "ec-manager", name: "EC Manager, platform profiles, self-check", en: "EC/Platforms.md", ru: "EC/Platforms.ru.md" },
+  { id: "oem-driver", name: "Getting the OEM driver", en: "EC/OEM-driver.md", ru: "EC/OEM-driver.ru.md" },
+  { id: "wmi-vs-driver", name: "OEM driver vs WMI", en: "EC/WMI-vs-Driver.md", ru: "EC/WMI-vs-Driver.ru.md" },
+  { id: "wmi-config", name: "WMI settings (ec_wmi.json)", en: "EC/WMI-config.md", ru: "EC/WMI-config.ru.md" },
+  { id: "registers", name: "EC registers", en: "EC/Registers.md", ru: "EC/Registers.ru.md" },
+  { id: "ec-tool", name: "EC test tool (ec_tool.py)", en: "EC/README.md", ru: "EC/README.ru.md" },
+  { group: "Program" },
+  { id: "features", name: "Features and how they work", en: "FEATURES.md", ru: "FEATURES.md" },
+  { id: "cli", name: "Command line (uwccctl)", en: "CLI.md", ru: "CLI.ru.md" },
+];
+var helpCur = null;                     // var: setLang() may run before this line
+function helpFile(p) { return p[LANG === "ru" ? "ru" : "en"] || p.en; }
+function renderHelpToc() {
+  const toc = $("#help-toc"); if (!toc) return;
+  toc.replaceChildren(...HELP_PAGES.map(p => p.group ? h("small", {}, t(p.group))
+    : h("a", { class: helpCur && helpCur.id === p.id ? "on" : "", onclick: () => openHelp(p.id) }, t(p.name))));
+}
+function resolveDoc(base, href) {                       // "EC/Platforms.md" + "../CLI.md#x" -> "CLI.md#x"
+  const [path, hash] = href.split("#");
+  const parts = base.split("/").slice(0, -1);
+  for (const seg of path.split("/")) { if (seg === "..") parts.pop(); else if (seg && seg !== ".") parts.push(seg); }
+  return { path: parts.join("/"), hash: hash || "" };
+}
+async function openHelp(id, anchor) {
+  const p = HELP_PAGES.find(x => x.id === id) || { id, file: id };
+  const file = p.file || helpFile(p);
+  helpCur = { ...p, file };
+  $(`#nav a[data-page="help"]`)?.click();
+  renderHelpToc();
+  const body = $("#help-body");
+  body.textContent = t("Loading…");
+  try {
+    const r = await fetch("help/" + file, { cache: "no-cache" });
+    if (!r.ok) throw new Error(r.status === 404 ? t("this page is not part of this installation") : r.statusText);
+    body.innerHTML = MD.render(await r.text());
+  } catch (e) {
+    body.replaceChildren(h("p", {}, t("The page could not be opened: {0}", e.message)),
+      h("p", {}, h("a", { href: REPO_BLOB + "docs/" + file, target: "_blank", rel: "noopener" }, t("Open it on GitHub"))));
+    return;
+  }
+  body.querySelectorAll("a[data-md-link]").forEach(a => {
+    const href = a.getAttribute("href");
+    if (/^https?:/i.test(href)) { a.target = "_blank"; a.rel = "noopener"; return; }
+    if (href.startsWith("#")) { a.addEventListener("click", e => { e.preventDefault(); body.querySelector(CSS.escape ? "#" + CSS.escape(decodeURIComponent(href.slice(1))) : href)?.scrollIntoView({ behavior: "smooth" }); }); return; }
+    const { path, hash } = resolveDoc(file, href);
+    if (path.endsWith(".md") && !path.startsWith("..")) {
+      const known = HELP_PAGES.find(x => x.en === path || x.ru === path);
+      a.href = "#";
+      a.addEventListener("click", e => { e.preventDefault(); known ? openHelp(known.id, hash) : openHelp(path, hash); });
+    } else {                                              // source files, images, folders: GitHub
+      a.href = REPO_BLOB + ("docs/" + path).replace(/^docs\/\.\.\//, "");
+      a.target = "_blank"; a.rel = "noopener";
+    }
+  });
+  const target = anchor ? body.querySelector("#" + CSS.escape(anchor)) : null;
+  if (target) target.scrollIntoView({ block: "start" });
+  else { const m = body.closest("main"); if (m) m.scrollTop = 0; window.scrollTo(0, 0); }
+}
+function helpLink(id, anchor) {                       // anchor: "x" or {en: "x", ru: "y"}
+  return h("button", { class: "help-q", title: t("Help"), "aria-label": t("Help"),
+    onclick: e => { e.stopPropagation(); openHelp(id, anchor && typeof anchor === "object" ? anchor[LANG === "ru" ? "ru" : "en"] : anchor); } }, "?");
+}
+$(`#nav a[data-page="help"]`)?.addEventListener("click", () => { if (!helpCur) openHelp("ec-manager"); else renderHelpToc(); });
+(function addHelpLinks() {                               // "?" next to the titles of the EC Manager cards
+  const pairs = [["#dm-platform h3", "ec-manager", { en: "platform-profile", ru: "профиль-платформы" }],
+    ["#dm-selfcheck h3", "ec-manager", { en: "self-check", ru: "самопроверка" }],
+    ["#dm-wmi h3", "wmi-config"]];
+  const firstCard = $$("#page-driver .card h3").find(x => (x.dataset.en || x.textContent) === "EC access path");
+  const mon = $$("#page-driver .card h3").find(x => (x.dataset.en || x.textContent) === "Monitoring");
+  const els = pairs.map(([sel, id, a]) => [$(sel), id, a]).concat([[firstCard, "wmi-vs-driver"], [mon, "ec-manager", { en: "monitoring", ru: "мониторинг" }]]);
+  for (const [el, id, a] of els) {
+    if (!el || el.parentElement.classList.contains("h-help")) continue;
+    const wrap = h("span", { class: "h-help" });
+    el.before(wrap); wrap.append(el, helpLink(id, a));
+  }
+})();

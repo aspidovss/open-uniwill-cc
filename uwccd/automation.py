@@ -13,6 +13,7 @@ import csv
 import io
 import json
 import logging
+import os
 import shutil
 import subprocess
 import sys
@@ -30,6 +31,7 @@ DAY_STEP = 60        # s, one averaged point per minute
 DAY_LEN = 1440       # 24 h
 DAY_SAVE = 600       # s between writes of the 24 h history to disk
 LAST_KEYS = ("pl1", "pl2", "pl4", "gpl")      # limits: the last value of the minute, not an average
+DEFAULT_MAX_KB = 2048  # size limit of the 24 h history file (EC Manager → Monitoring)
 RANGES = {60: "fine", 300: "fine", 900: "fine", 3600: "history", 86400: "day"}
 
 DEFAULTS = {
@@ -99,7 +101,7 @@ class Sampler(threading.Thread):
 
     def run(self):
         self._wake = getattr(self, "_wake", None) or threading.Event()
-        wait = self.interval
+        wait = self.current_interval()
         while not self.stop.is_set():
             self._wake.wait(wait)
             self._wake.clear()
@@ -118,7 +120,7 @@ class Sampler(threading.Thread):
                     else:
                         self._sample()
                 m = self.latest
-                wait = self.LIGHT_S if lvl == "light" else self.interval
+                wait = self.LIGHT_S if lvl == "light" else self.current_interval()
                 if lvl == "full" and self.recording():
                     self._record(m)
                 self._overheat(m)
@@ -149,22 +151,102 @@ class Sampler(threading.Thread):
         t0 = time.time() - seconds
         return [p for p in list(buf) if p["t"] >= t0]
 
-    def _day_path(self):
+    def history_dir(self):
+        """Folder of the 24 h history (EC Manager → Monitoring; changing it needs administrator rights)."""
         from . import store
-        return store.path("history-24h.json")
+        d = self.svc.settings_store.get("history_dir")
+        return d if d and os.path.isabs(d) else store.DATA_DIR
+
+    def _day_path(self):
+        return os.path.join(self.history_dir(), "history-24h.json")
+
+    def max_bytes(self):
+        kb = self.svc.settings_store.get("history_max_kb")
+        return int(kb if kb is not None else DEFAULT_MAX_KB) * 1024
+
+    def current_interval(self):
+        """Seconds between two samples: the setting monitor_interval, or automatic (2 s, WMI path 5 s)."""
+        v = self.svc.settings_store.get("monitor_interval") or 0
+        try:
+            v = float(v)
+        except (TypeError, ValueError):
+            v = 0
+        return v if 1 <= v <= 60 else self.interval
+
+    def clear(self):
+        """Forget the whole history (memory and file)."""
+        with self.lock:
+            self.fine.clear()
+            self.history.clear()
+            self.day.clear()
+            self._minute = []
+        try:
+            os.remove(self._day_path())
+        except OSError:
+            pass
+        log.info("history cleared")
+
+    def info(self):
+        p = self._day_path()
+        try:
+            size = os.path.getsize(p)
+        except OSError:
+            size = 0
+        return {"path": p, "dir": self.history_dir(), "size": size, "points": {"fine": len(self.fine),
+                "hour": len(self.history), "day": len(self.day)}, "max_kb": self.max_bytes() // 1024,
+                "interval": self.current_interval(), "interval_setting": self.svc.settings_store.get("monitor_interval") or 0,
+                "interval_auto": self.interval, "recording": self.recording()}
+
+    def move_to(self, d):
+        """Store the 24 h history in another folder (the file moves there)."""
+        from . import store
+        d = os.path.normpath(d) if d else store.DATA_DIR
+        if not os.path.isabs(d):
+            raise ValueError("an absolute folder is required")
+        os.makedirs(d, exist_ok=True)
+        old = self._day_path()
+        self.svc.settings_store.set("history_dir", None if d == os.path.normpath(store.DATA_DIR) else d)
+        new = self._day_path()
+        if old != new:
+            self.save_day()
+            try:
+                os.remove(old)
+            except OSError:
+                pass
+        log.warning("history folder: %s", d)
+        return self.info()
 
     def _load_day(self):
         from . import store
-        data = store.load_json(self._day_path(), [])
+        try:
+            data = store.load_json(self._day_path(), [])
+        except Exception:  # noqa: BLE001  (settings store not ready in odd test set-ups)
+            data = []
         t0 = time.time() - DAY_LEN * DAY_STEP
         if isinstance(data, list):
             self.day.extend(p for p in data if isinstance(p, dict) and isinstance(p.get("t"), (int, float)) and p["t"] >= t0)
 
     def save_day(self):
-        from . import store
+        """Write the 24 h history compactly; the oldest minutes go first when it is larger than the size limit."""
         self._last_save = time.time()
+        pts = list(self.day)
+        limit = self.max_bytes()
+        data = json.dumps(pts, separators=(",", ":"))
+        if limit > 0 and len(data) > limit and pts:
+            per = len(data) / len(pts)
+            keep = max(0, int(limit / per) - 1)
+            pts = pts[-keep:] if keep else []
+            with self.lock:
+                while len(self.day) > len(pts):
+                    self.day.popleft()
+            data = json.dumps(pts, separators=(",", ":"))
+        p = self._day_path()
         try:
-            store.save_json(self._day_path(), list(self.day))
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            tmp = p + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                f.write(data)
+            os.replace(tmp, p)
         except OSError as e:
             log.warning("cannot save the 24 h history: %s", e)
 

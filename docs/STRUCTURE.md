@@ -76,6 +76,7 @@ EC protocol: [PROTOCOL.md](PROTOCOL.md).
 |---|---|
 | `ec.py` | EC backends: kernel module, `acpi_call`, simulation (`--mock`), no-access stub, read cache for slow paths |
 | `ecaccess.py` | Windows EC path choice (OEM driver / WMI beta), the WMI warning, `ec_wmi.json` |
+| `drivercheck.py` | check of an OEM driver package before it is installed; copy from the Windows driver store |
 | `admin.py` | administrator key and the 10-minute unlock of the EC Manager settings |
 | `busy.py` | long operations the window waits for ("Applying…", fan curve in the background) |
 | `platformdb.py` | platform profiles (`platforms/*.json`), hard caps, validation |
