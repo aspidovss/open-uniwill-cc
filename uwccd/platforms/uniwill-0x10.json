@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "id": "uniwill-0x10",
+  "name": "MAIBENBEN Tsunami X629 / Mechrevo Questyle 16 Super / XMG NEO 16 (E23)",
+  "vendor": "Uniwill",
+  "status": "verified",
+  "match": {"project": ["0x10"]},
+  "tested": {"ec": ["1.13"], "bios": ["N.1.23A14"], "date": "2026-10", "by": "aspidovss"},
+  "access": {
+    "oem": {"driver": "UWACPIDriver", "device": "\\\\.\\ACPIDriver", "smrw": true, "pwup": true},
+    "wmi": {"namespace": "root\\WMI", "class": "AcpiTest_MULong", "method": "GetSetULong", "instance": "1_1",
+            "encoding": {"read_flag_bit": 40, "value_shift": 16, "read_mask": 255},
+            "firmware": ["WMBC", "OEMG", "RKBC", "WKBC"], "smrw": false, "pwup": false}
+  },
+  "wmi": {
+    "poll": {"cache_ms": 4000, "monitor_s": 5, "status_s": 15},
+    "always_write": ["0x767", "0xF5D-0xF5F", "0x7C7"],
+    "no_cache": ["0xF5D-0xF5F"],
+    "features": {"modes": "on", "fan_boost": "on", "power_limits": "on", "gpu_power": "on", "super_performance": "on",
+                 "fan_tables": "slow", "fan_monitor": "slow", "battery": "on", "switches": "on", "lightbar_ec": "on",
+                 "lc_ec": "on", "power_boost_lc": "off"}
+  },
+  "limits": {"PL1": 160, "PL2": 160, "PL4": 250, "TccOffset": 5, "ConfigurableTGP": 0, "DynamicBoost": 25,
+             "TargetTemperature": 87, "DefaultTGP": 150, "DynamicBoostCpuTdp": 0},
+  "notes": {
+    "en": ["Graphics power: Office and Gaming 150 W, Turbo 175 W (Dynamic Boost written as cTGP by the firmware's own Turbo). With the WMI path the extra graphics power is reached only in the stock Turbo mode; Dynamic Boost of the Custom mode adds power only when the processor leaves room.",
+           "PWUP (liquid-cooling power level) and SMRW (limit table) need the OEM driver."],
+    "ru": ["Мощность видеокарты: Офис и Игровой 150 W, Турбо 175 W (прошивка в родном Турбо записывает Dynamic Boost как cTGP). Через WMI повышенная мощность видеокарты доступна только в родном режиме Турбо; Dynamic Boost в режиме «Свой» добавляет мощность, только если у процессора есть запас.",
+           "PWUP (уровень мощности с СЖО) и SMRW (таблица пределов) работают только с OEM-драйвером."]
+  }
+}

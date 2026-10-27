@@ -58,8 +58,14 @@ Requirements: Windows 10/11 x64, Python 3.9–3.14 **64-bit** from python.org; o
 ```powershell
 .\build.cmd                     # = powershell -ExecutionPolicy Bypass -File .\build_windows.ps1
 .\build.cmd -Clean -NoInstaller
-.\build.cmd -Public             # without proprietary/ (OEM driver, fan tables)
+.\build.cmd -Edition free       # only the free build (= -Public): no OEM driver, no factory fan tables
+.\build.cmd -Edition full       # only the non-free build
 ```
+
+By default both editions are built: non-free `ControlCenter\` → `-setup.exe` / `-portable.zip`, free
+`ControlCenter-free\` → `-free-setup.exe` / `-free-portable.zip` (the build stops if a `UWACPIDriver*` file is left in
+it). `EDITION` next to the exe files (`full` / `free`) is shown in the version (`1.6.1 · free · …`) and picks the
+matching installer for updates.
 
 The script creates `.venv-win`, installs `windows\requirements.txt`, runs PyInstaller (`windows\uwcc.spec`) and
 Inno Setup. Result in `dist\`: the `ControlCenter\` folder (`uwccd.exe`, `ControlCenter.exe`, `uwccctl.exe`),
@@ -184,8 +190,14 @@ git archive --format=tar.gz --prefix=open-uniwill-cc-1.4.0/ -o open-uniwill-cc-l
 ```powershell
 .\build.cmd                     # = powershell -ExecutionPolicy Bypass -File .\build_windows.ps1
 .\build.cmd -Clean -NoInstaller
-.\build.cmd -Public             # без proprietary/ (драйвер, таблицы вентиляторов)
+.\build.cmd -Edition free       # только свободная сборка (= -Public): без OEM-драйвера и заводских таблиц
+.\build.cmd -Edition full       # только non-free
 ```
+
+По умолчанию собираются обе версии: non-free `ControlCenter\` → `-setup.exe` / `-portable.zip`, свободная
+`ControlCenter-free\` → `-free-setup.exe` / `-free-portable.zip` (сборка останавливается, если в ней остался файл
+`UWACPIDriver*`). Файл `EDITION` рядом с exe (`full` / `free`) показывается в версии (`1.6.1 · free · …`) и выбирает
+нужный установщик при обновлении.
 
 Скрипт создаёт `.venv-win`, ставит `windows\requirements.txt`, запускает PyInstaller (`windows\uwcc.spec`) и Inno Setup.
 Результат в `dist\`: папка `ControlCenter\` (`uwccd.exe`, `ControlCenter.exe`, `uwccctl.exe`),
@@ -253,7 +265,8 @@ sudo uwccctl ec-direct dump 0x700     256 байт EC без службы (Linux
 The update check reads `https://api.github.com/repos/aspidovss/open-uniwill-cc/releases/latest` and compares its tag
 (`v1.4.0`) with the running version. For *Download and install* on Windows the release must have these assets:
 
-- `open-uniwill-cc-windows-<ver>-setup.exe` — the installer (any name ending in `-setup.exe`);
+- `open-uniwill-cc-windows-<ver>-setup.exe` — the non-free installer and `open-uniwill-cc-windows-<ver>-free-setup.exe` —
+  the free one (each build updates to its own edition);
 - `SHA256SUMS.txt` — `<sha256>  <file name>` per line; the download is refused when the installer is missing from it
   or its hash differs;
 - `open-uniwill-cc-linux-<ver>.tar.gz` — shown as the Linux download.

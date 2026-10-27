@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "id": "generic-uniwill",
+  "name": "Unknown Uniwill / Tongfang laptop",
+  "vendor": "Uniwill",
+  "status": "unknown",
+  "match": {"fallback": true},
+  "access": {
+    "oem": {"driver": "UWACPIDriver", "device": "\\\\.\\ACPIDriver", "smrw": true, "pwup": true},
+    "wmi": {"namespace": "root\\WMI", "class": "AcpiTest_MULong", "method": "GetSetULong", "instance": "1_1",
+            "encoding": {"read_flag_bit": 40, "value_shift": 16, "read_mask": 255},
+            "firmware": ["WMBC", "OEMG", "RKBC", "WKBC"], "smrw": false, "pwup": false}
+  },
+  "wmi": {
+    "poll": {"cache_ms": 4000, "monitor_s": 5, "status_s": 15},
+    "always_write": ["0x767", "0xF5D-0xF5F", "0x7C7"],
+    "no_cache": ["0xF5D-0xF5F"],
+    "features": {"modes": "off", "fan_boost": "off", "power_limits": "off", "gpu_power": "off", "super_performance": "off",
+                 "fan_tables": "off", "fan_monitor": "slow", "battery": "off", "switches": "off", "lightbar_ec": "off",
+                 "lc_ec": "off", "power_boost_lc": "off"}
+  },
+  "limits": null,
+  "notes": {
+    "en": ["Not tested. With the WMI path every function stays off until the self-check (EC Manager) confirms it and its result is applied as this laptop's platform profile."],
+    "ru": ["Не проверено. Через WMI все функции выключены, пока самопроверка (EC Manager) не подтвердит их и её результат не будет применён как профиль платформы этого ноутбука."]
+  }
+}

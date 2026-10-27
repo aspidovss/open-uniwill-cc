@@ -67,13 +67,21 @@ if ((Resolve-Path $Src).Path.TrimEnd('\') -ne $InstallDir.TrimEnd('\')) {
     Copy-Item -Recurse -Force "$Src\*" $InstallDir
 }
 
-# --- ACPI driver
+# --- ACPI driver (the free edition has none: the user may put it into C:\ProgramData\UWCC\driver)
+$userDrv = Join-Path $env:ProgramData "UWCC\driver"
+if (-not (Test-Path $userDrv)) { New-Item -ItemType Directory -Force $userDrv | Out-Null }
+if ((Test-Path "$Src\OEM-DRIVER-README.txt") -and -not (Test-Path "$userDrv\README.txt")) {
+    Copy-Item -Force "$Src\OEM-DRIVER-README.txt" "$userDrv\README.txt"
+}
+$inf = @("$InstallDir\driver\UWACPIDriver.inf", "$userDrv\UWACPIDriver.inf") | Where-Object { Test-Path $_ } | Select-Object -First 1
 if (Get-Service UWACPIDriver -ErrorAction SilentlyContinue) {
     Say "ACPI driver already installed"
-} elseif (Test-Path "$InstallDir\driver\UWACPIDriver.inf") {
-    Say "Installing the ACPI driver (ACPI\INOU0000)"
-    & pnputil.exe /add-driver "$InstallDir\driver\UWACPIDriver.inf" /install
+} elseif ($inf) {
+    Say "Installing the ACPI driver (ACPI\INOU0000) from $(Split-Path $inf)"
+    & pnputil.exe /add-driver $inf /install
     if ($LASTEXITCODE -and $LASTEXITCODE -ne 3010) { Warn "pnputil exit code $LASTEXITCODE" }
+} elseif ((Test-Path "$Src\EDITION") -and ((Get-Content "$Src\EDITION") -eq "free")) {
+    Warn "Free build: no OEM driver inside. Recommended: put UWACPIDriver.inf/.sys/.cat into $userDrv and install it in EC Manager (the program uses WMI until then)"
 } else {
     Warn "UWACPIDriver is not installed and driver\ is missing - install the original Control Center driver first"
 }

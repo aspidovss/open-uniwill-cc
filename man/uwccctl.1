@@ -1,4 +1,4 @@
-.TH UWCCCTL 1 "October 2026" "open-uniwill-cc 1.5.5" "User Commands"
+.TH UWCCCTL 1 "October 2026" "open-uniwill-cc 1.6.1" "User Commands"
 .SH NAME
 uwccctl \- command line control for open-uniwill-cc (Uniwill laptops)
 .SH SYNOPSIS
@@ -358,6 +358,40 @@ Read an EC register (hex) through the service.
 .TP
 .B nvram
 UniWillVariable fields.
+.TP
+.BR "driver " [ use " " auto | oem | wmi " [" \-\-accept\-risks ]]
+Windows: how the service reaches the EC.
+.B auto
+\(em the OEM driver UWACPIDriver, WMI only when it is missing and the warning was accepted (default);
+.B oem
+\(em the OEM driver only;
+.B wmi
+\(em the Windows built\-in WMI only: open implementation, not recommended, beta (no liquid\-cooling power boost,
+approximate limits, about 125 ms per EC access; tested only on MAIBENBEN Tsunami X629 / Mechrevo Questyle 16 Super /
+XMG NEO 16 (E23)).
+.TP
+.BR "driver config export" | import " \fIFILE\fR" | reset ", " "driver test"
+WMI settings
+.IR ec_wmi.json ,
+quick test of the active path. See docs/EC/WMI\-config.md.
+Changing the path, the WMI settings and the platform profile needs administrator rights.
+.B uwccctl ec
+is the same command (EC Manager).
+.TP
+.BR "driver unlock " [\fIMIN\fR] " | " lock
+Open the EC Manager settings for the window for MIN minutes (default 10). Needs administrator rights (Windows) or
+root (sudo): the command reads the administrator key of the service.
+.TP
+.BR "driver monitor " oem | wmi | all " " on | off
+Monitoring through this EC path. Off for a path: temperatures only, every 20 s (liquid cooler, overheat alerts);
+all off: nothing is read, the liquid cooler in the automatic mode runs the Medium preset.
+.TP
+.BR "driver platform " [ export | import " \fIFILE\fR | " reset | apply\-draft ]
+Platform profile of this laptop: which functions work through WMI, limits, tested versions. See docs/EC/Platforms.md.
+.TP
+.BR "driver selfcheck " [ 1 | 2 "] [\-\-export \fIFILE\fR]"
+Self\-check: 1 reads only; 2 also switches functions briefly and back with read\-back (administrator, AC power).
+Prints what works and what is not clear; \-\-export writes the result and a draft platform profile for GitHub.
 .TP
 \fBec\-direct read\fR \fIADDR\fR [\fIN\fR] | \fBec\-direct dump\fR \fIBASE\fR
 Read the EC without the service (root).

@@ -28,7 +28,7 @@ import pystray
 from PIL import Image, ImageDraw
 
 from .. import agentcore, updates
-from . import winapi
+from . import winapi, winplat
 from .winplat import data_root
 
 PORT = int(os.environ.get("UWCC_PORT", "47321"))
@@ -284,13 +284,7 @@ class Tray:
         st = self.service_state()
         return self.T({"stopped": "svc_stopped", "starting": "svc_starting", "missing": "svc_missing"}.get(st, "offline"))
 
-    RESTART_PS = (
-        "$n='uwccd'; $s=Get-Service $n -ErrorAction SilentlyContinue; if (-not $s) { exit 2 }; "
-        "if ($s.Status -ne 'Stopped') { & sc.exe stop $n | Out-Null; "
-        "for ($i=0; $i -lt 15 -and (Get-Service $n).Status -ne 'Stopped'; $i++) { Start-Sleep 1 }; "
-        "if ((Get-Service $n).Status -ne 'Stopped') { $p = ((& sc.exe queryex $n | Select-String 'PID') -split ':')[-1].Trim(); "
-        "if ($p -and $p -ne '0') { Stop-Process -Id ([int]$p) -Force }; Start-Sleep 2 } }; "
-        "Start-Service $n")
+    RESTART_PS = winplat.RESTART_PS
 
     def restart_service(self, *_):
         """Restart uwccd with administrator rights (UAC prompt): stop, kill if it hangs, start; then wait for it."""
@@ -313,6 +307,23 @@ class Tray:
                     continue
             self.icon.notify(self.T("svc_restart_fail_body"), self.T("svc_restart_fail"))
         threading.Thread(target=run, daemon=True).start()
+
+    def admin_unlock(self):
+        """EC Manager asked for administrator rights: uwccctl ec unlock with a UAC prompt (SYSTEM-only key)."""
+        if getattr(self, "_unlocking", False):
+            return
+        self._unlocking = True
+        try:
+            exe = os.path.join(os.path.dirname(sys.executable), "uwccctl.exe")
+            if not os.path.exists(exe):
+                self.icon.notify(exe, self.T("admin_fail"))
+                return
+            rc = ctypes.windll.shell32.ShellExecuteW(None, "runas", exe, "ec unlock", None, 0)
+            if rc <= 32:                 # 5: the UAC prompt was declined
+                self._try(lambda: self.api.call("admin/declined", {}, timeout=5))
+                self.icon.notify(" ", self.T("admin_declined"))
+        finally:
+            self._unlocking = False
 
     def check_updates(self, *_):
         def run():
@@ -389,6 +400,8 @@ class Tray:
                                                else f'explorer "{self.downloads_dir()}"'))
         if t == "update_install":
             threading.Thread(target=self.install_update, args=(ev.get("data") or {},), daemon=True).start()
+        if t == "admin_request":
+            threading.Thread(target=self.admin_unlock, daemon=True).start()
         osd = bool((self.state or {}).get("settings", {}).get("osd", True))
         for title, body, _critical in agentcore.describe(ev, osd, self.lang):
             if title:

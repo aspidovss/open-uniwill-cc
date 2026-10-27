@@ -24,6 +24,11 @@ Overview
   export fans|all FILE  /  import FILE [fans,profiles,settings] [--force]
   report [FILE] [--private serial,uuid,mac,names,apps] [--sections ...] [--full]
   lang en|ru  /  debug on|off  /  version  /  update [check|install]  /  restart
+  ec [use auto|oem|wmi] [--accept-risks]   EC Manager (Windows): OEM driver / WMI (beta); same as `driver`
+  ec unlock [MIN] | lock         administrator unlock of the EC Manager settings (run as administrator / sudo)
+  ec install-driver              install the OEM driver from %ProgramData%/UWCC/driver (free build)
+  ec config export|import FILE|reset  /  ec test  /  ec monitor oem|wmi|all on|off
+  ec platform [export FILE|import FILE|reset|apply-draft]  /  ec selfcheck [1|2] [--export FILE]
   lighting  /  nvram  /  ec read ADDR  /  resume
   ec-direct read ADDR [N] | dump BASE    (root, without the service)
   release                        give fan control back to the EC (root, used by uninstall)
@@ -45,6 +50,7 @@ IS_WIN = sys.platform == "win32"
 TOKEN_FILE = os.environ.get("UWCC_TOKEN_FILE") or (
     os.path.join(os.environ.get("ProgramData", r"C:\ProgramData"), "UWCC", "run", "token") if IS_WIN
     else "/run/uwcc/token")
+ADMIN_FILE = os.environ.get("UWCC_ADMIN_FILE") or os.path.join(os.path.dirname(TOKEN_FILE), "admin-token")
 MODES = {"office": 0, "gaming": 1, "turbo": 2, "custom": 3}
 MODE_BY_ID = {v: k for k, v in MODES.items()}
 MODE_PREFIX = {"gaming": 1, "office": 2, "turbo": 3, "custom": 4}       # Mode<N>_Profile<k>
@@ -164,6 +170,33 @@ HELP = {
         "uwccctl apps remove PROCESS\n"
         "uwccctl apps enable|disable PROCESS"),
     "restore": "uwccctl restore --yes\n  Factory profiles and fan tables of every mode.",
+    "driver": (
+        "uwccctl driver                           EC access path, OEM driver, WMI features (Windows)\n"
+        "uwccctl driver use auto|oem|wmi [--accept-risks]\n"
+        "      auto  OEM driver UWACPIDriver; WMI only when the driver is missing (default)\n"
+        "      oem   OEM driver only\n"
+        "      wmi   Windows built-in WMI only: open implementation, NOT recommended, beta.\n"
+        "            No liquid-cooling power boost (PWUP), approximate limits (no SMRW), ~125 ms per EC access.\n"
+        "            Tested only on MAIBENBEN Tsunami X629 / Mechrevo Questyle 16 Super / XMG NEO 16 (E23).\n"
+        "            --accept-risks accepts the warning (otherwise accept it in the window)\n"
+        "uwccctl driver config export FILE        WMI settings (ec_wmi.json)\n"
+        "uwccctl driver config import FILE\n"
+        "uwccctl driver config reset\n"
+        "uwccctl driver test                      read a few registers through the active path, time per read\n"
+        "uwccctl driver unlock [MIN]              open the EC Manager settings for the window (default 10 min);\n"
+        "                                         needs administrator rights (Windows) / sudo (Linux)\n"
+        "uwccctl driver lock\n"
+        "uwccctl driver install-driver            install the OEM driver from C:\\ProgramData\\UWCC\\driver\n"
+        "                                         (UWACPIDriver.inf/.sys/.cat; administrator); free build: put it there\n"
+        "uwccctl driver monitor oem|wmi|all on|off   monitoring through this EC path (off: temperatures only,\n"
+        "                                         every 20 s; all off: nothing — the liquid cooler uses a preset)\n"
+        "uwccctl driver platform                  platform profile of this laptop\n"
+        "uwccctl driver platform export FILE | import FILE | reset | apply-draft\n"
+        "uwccctl driver selfcheck [1|2] [--export FILE]\n"
+        "      1  read only;  2  also writes with read-back and restore (administrator, on AC power)\n"
+        "  `uwccctl ec ...` is the same command (EC Manager). Changing the path, the WMI settings and the\n"
+        "  platform profile needs administrator rights.\n"
+        "  Docs: https://github.com/aspidovss/open-uniwill-cc/tree/main/docs/EC"),
     "lc": (
         "uwccctl lc [status]                      state of the liquid cooler\n"
         "uwccctl lc scan                          find coolers nearby\n"
@@ -210,6 +243,10 @@ def fail(msg, code=1):
     sys.exit(code)
 
 
+HELP["ec"] = ("uwccctl ec read ADDR                      one EC register through the service (hex)\n"
+              + HELP["driver"].replace("uwccctl driver", "uwccctl ec    "))
+
+
 def usage(topic):
     fail(HELP.get(topic, __doc__), 2)
 
@@ -241,6 +278,23 @@ def tok():
         fail(T("not_running_win" if IS_WIN else "not_running"), 3)
 
 
+def admin_tok():
+    """The administrator key (readable only by administrators / root): sent along when available."""
+    try:
+        with open(ADMIN_FILE) as f:
+            return f.read().strip()
+    except OSError:
+        return None
+
+
+def _headers(extra=None):
+    h = {"X-UWCC-Token": tok(), **(extra or {})}
+    a = admin_tok()
+    if a:
+        h["X-UWCC-Admin"] = a
+    return h
+
+
 def _open(req, timeout):
     try:
         return urllib.request.urlopen(req, timeout=timeout)
@@ -255,14 +309,14 @@ def _open(req, timeout):
 
 
 def call_raw(path, timeout=30):
-    req = urllib.request.Request(f"http://127.0.0.1:{PORT}/api/{path}", headers={"X-UWCC-Token": tok()})
+    req = urllib.request.Request(f"http://127.0.0.1:{PORT}/api/{path}", headers=_headers())
     return _open(req, timeout).read()
 
 
 def call(path, body=None, method=None, timeout=30):
     req = urllib.request.Request(f"http://127.0.0.1:{PORT}/api/{path}", method=method or ("POST" if body is not None else "GET"),
                                  data=json.dumps(body).encode() if body is not None else None,
-                                 headers={"X-UWCC-Token": tok(), "Content-Type": "application/json"})
+                                 headers=_headers({"Content-Type": "application/json"}))
     return json.load(_open(req, timeout))
 
 
@@ -1065,6 +1119,7 @@ def main(a):
         "nvram": lambda: out(call("nvram")),
         "resume": lambda: (call("resume", {}), out({"ok": True}, "ok")),
         "ec": lambda: cmd_ec(rest),
+        "driver": lambda: cmd_driver(rest),
     }
     if cmd not in simple:
         usage(None)
@@ -1098,8 +1153,132 @@ def cmd_lang(a):
     out({"lang": LANG}, T("lang_set"))
 
 
+def driver_text(d):
+    names = {"oem": "OEM driver (UWACPIDriver)", "wmi": "WMI (beta)", "none": "none", "native": "kernel module / acpi_call"}
+    lines = [f"EC path      : {names.get(d.get('active'), d.get('active'))}  (setting: {d.get('setting')})"]
+    if d.get("edition") in ("free", "full"):
+        lines.append("Build        : " + ("free — no OEM driver inside, distributed freely" if d["edition"] == "free"
+                                         else "non-free — OEM driver UWACPIDriver included"))
+    pkg = d.get("driver_package")
+    lines.append(f"Driver files : {pkg['dir'] if pkg else 'none'}  (place for the OEM driver: {d.get('driver_dir')})")
+    if d.get("reason"):
+        lines.append(f"Reason       : {d['reason']}")
+    if d.get("oem_present") is not None:
+        drv = d.get("driver") or {}
+        lines.append(f"OEM driver   : {'present' if d['oem_present'] else 'NOT found'}"
+                     + (f", version {drv.get('version')}" if drv.get("version") else ""))
+    lines.append(f"WMI warning  : {'accepted' if d.get('consent') else 'not accepted'}")
+    if d.get("active") == "wmi":
+        lines.append("Features     : " + ", ".join(f"{k}={v}" for k, v in d.get("features", {}).items()))
+        st = d.get("stats") or {}
+        if st:
+            lines.append(f"EC accesses  : {st.get('reads')} reads ({st.get('cached')} cached), "
+                         f"{st.get('writes')} writes ({st.get('skipped')} skipped)")
+    plat = d.get("platform") or {}
+    if plat:
+        lines.append(f"Platform     : {plat.get('name')} — {plat.get('status')} ({plat.get('source')})")
+    m = d.get("monitoring") or {}
+    if m:
+        lines.append(f"Monitoring   : {m.get('level')}")
+    adm = d.get("admin") or {}
+    lines.append("Settings     : " + (f"unlocked ({adm.get('remaining', 0) // 60} min left)" if adm.get("unlocked")
+                                     else "locked (uwccctl ec unlock as administrator)"))
+    lines.append(f"Docs         : {d.get('docs')}")
+    return lines
+
+
+def cmd_driver(a):
+    op = a[0] if a else "status"
+    if op == "status":
+        return out(call("ec-access"), driver_text)
+    if op == "use" and a[1:]:
+        body = {"backend": a[1]}
+        if "--accept-risks" in a:
+            body["consent"] = call("ec-access")["consent_version"]
+        r = call("ec-access", body)
+        return out(r, lambda d: driver_text(d) + (["The service is restarting…"] if d.get("restarting") else []))
+    if op == "unlock":
+        if not admin_tok():
+            fail("Administrator rights needed: run as administrator (Windows) or with sudo (Linux).", 3)
+        mins = int(a[1]) if a[1:] and a[1].isdigit() else 10
+        r = call("admin/unlock", {"seconds": mins * 60})
+        return out(r, f"EC Manager unlocked for {(r['remaining'] + 59) // 60} min")
+    if op == "lock":
+        return out(call("admin/lock", {}), "EC Manager locked")
+    if op == "install-driver":
+        r = call("ec-access/install-driver", {}, timeout=180)
+        return out(r, lambda d: [f"OEM driver installed from {d.get('dir')}" + (" (reboot required)" if d.get("reboot") else "")]
+                   + (["The service is restarting…"] if d.get("restarting") else []))
+    if op == "monitor":
+        if len(a) < 3 or a[1] not in ("oem", "wmi", "all"):
+            usage("driver")
+        call("setting", {"key": f"monitor_off_{a[1]}", "value": not onoff(a[2], "driver")})
+        m = call("ec-access")["monitoring"]
+        return out(m, f"monitoring: {m['level']} (off for OEM: {m['off_oem']}, WMI: {m['off_wmi']}, all: {m['off_all']})")
+    if op == "platform":
+        sub = a[1] if a[1:] else "show"
+        if sub == "show":
+            return out(call("platform"), lambda d: [
+                f"Profile : {d['name']} ({d['id']})", f"Status  : {d['status']}, {d['source']}"
+                + (" (replaces the built-in one)" if d.get("modified") else ""),
+                f"Project : {d.get('project')}"] + [f"Note    : {n}" for n in ((d.get('notes') or {}).get(LANG) or (d.get('notes') or {}).get('en') or [])])
+        if sub == "export" and a[2:]:
+            with open(a[2], "w", encoding="utf-8") as f:
+                json.dump(call("platform")["profile"], f, indent=2, ensure_ascii=False)
+            return out({"file": os.path.abspath(a[2])}, a[2])
+        if sub == "import" and a[2:]:
+            with open(a[2], encoding="utf-8-sig") as f:
+                prof = json.load(f)
+            return out(call("platform/import", {"profile": prof}), lambda d: f"profile {d['id']} saved ({d['status']})"
+                       + ("; restart the service to apply" if d.get("restart_needed") else ""))
+        if sub in ("reset", "apply-draft"):
+            return out(call("platform/" + sub, {}), lambda d: f"profile: {d['id']} ({d['status']}, {d['source']})"
+                       + ("; restart the service to apply" if d.get("restart_needed") else ""))
+        usage("driver")
+    if op == "selfcheck":
+        stage = 2 if "2" in a[1:] else 1
+        call("selfcheck", {"stage": stage})
+        while True:
+            time.sleep(1)
+            r = call("selfcheck")
+            if not r.get("running"):
+                break
+        res = r.get("result") or {}
+        if "--export" in a:
+            i = a.index("--export")
+            if a[i + 1:]:
+                with open(a[i + 1], "w", encoding="utf-8") as f:
+                    json.dump(call("selfcheck/export"), f, indent=2, ensure_ascii=False)
+        mark = {"ok": "OK  ", "warn": "WARN", "fail": "FAIL", "skip": "skip", "unknown": "?   "}
+        return out(res, lambda d: [f"[{mark.get(i['status'], i['status'])}] {i['name']}: {i['detail']}" for i in d.get("items", [])]
+                   + (["", "Not clear:"] + [f"  - {u}" for u in d.get("unknowns", [])] if d.get("unknowns") else [])
+                   + (["", "Error: " + d["error"]] if d.get("error") else []))
+    if op == "test":
+        return out(call("ec-access/test", {}), lambda d: [
+            f"path {d['path']}, project {d['project']} ({'tested platform' if d['tested_platform'] else 'NOT a tested platform'}), "
+            f"{d['ms_per_read']} ms per read"] + [f"  {r['addr']} = 0x{r['value']:02X}" for r in d["reads"]])
+    if op == "config" and a[1:]:
+        sub = a[1]
+        if sub == "export" and a[2:]:
+            cfg = call("ec-access/config")["effective"]
+            with open(a[2], "w", encoding="utf-8") as f:
+                json.dump(cfg, f, indent=2, ensure_ascii=False)
+            return out({"file": os.path.abspath(a[2])}, a[2])
+        if sub == "import" and a[2:]:
+            with open(a[2], encoding="utf-8-sig") as f:
+                cfg = json.load(f)
+            return out(call("ec-access/config", {"config": cfg}), lambda d: "imported" +
+                       ("; restart the service to apply poll / limits changes" if d.get("restart_needed") else ""))
+        if sub == "reset":
+            call("ec-access/config", {"reset": True})
+            return out({"ok": True}, "factory WMI settings restored")
+    usage("driver")
+
+
 def cmd_ec(a):
-    if a[:1] != ["read"] or not a[1:]:
+    if a[:1] != ["read"]:                       # `uwccctl ec ...` = EC Manager (`uwccctl driver ...`)
+        return cmd_driver(a)
+    if not a[1:]:
         usage("ec")
     r = call(f"ec/{int(a[1], 16):x}")
     out(r, f"0x{r['addr']:04X} = 0x{r['value']:02X} ({r['value']})")

@@ -66,7 +66,7 @@ class Updater(threading.Thread):
             res.update(latest=tag.lstrip("v"), url=rel.get("html_url") or f"{REPO_URL}/releases",
                        notes=(rel.get("body") or "")[:4000], published=rel.get("published_at"),
                        newer=vtuple(tag) > vtuple(__version__), error=None,
-                       setup=next((u for n, u in assets.items() if n.endswith("-setup.exe")), None),
+                       setup=_setup_asset(assets),
                        linux=next((u for n, u in assets.items() if n.endswith(".tar.gz") and "linux" in n), None),
                        sums=assets.get("SHA256SUMS.txt"))
         except Exception as e:  # noqa: BLE001
@@ -157,3 +157,13 @@ def download_verified(setup_url, sums_url, folder, progress=None):
         os.remove(path)
     os.replace(part, path)
     return path
+
+
+def _setup_asset(assets):
+    """setup.exe of the same edition: "-free-setup.exe" for the free build, "-setup.exe" (non-free) otherwise."""
+    from . import edition
+    free = edition() == "free"
+    for n, u in assets.items():
+        if n.endswith("-setup.exe") and n.endswith("-free-setup.exe") == free:
+            return u
+    return None

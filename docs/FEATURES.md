@@ -121,6 +121,8 @@ to the hardware differs (see the last section).
 | Liquid cooler firmware update (DFU) | ❌ | ❌ | not done on purpose: a failed update can leave the cooler unusable |
 | Updates of this program | ✅ check | ✅ download + install | GitHub releases, checked against `SHA256SUMS.txt` |
 | Diagnostic report for new laptops / bug reports | ✅ | ✅ | `uwccctl report`, *Information → Diagnostic report* |
+| Platform profiles, EC self-check, administrator unlock of EC settings | ✅ `uwccctl ec` | ✅ EC Manager | [EC/Platforms.md](EC/Platforms.md) |
+| EC access without the OEM driver: Windows WMI (open, beta) | ➖ | ✅ beta | `root\WMI AcpiTest_MULong`; no `PWUP` / `SMRW`, ~125 ms per access — see [EC/WMI-vs-Driver.md](EC/WMI-vs-Driver.md) |
 | Full control from the command line (`uwccctl`, JSON output) | ✅ `man uwccctl`, bash completion | ✅ `uwccctl help` | everything the window changes; see [CLI.md](CLI.md) |
 | Restart of a hung service | ✅ | ✅ | Linux: agent notice + polkit; Windows: tray with UAC |
 | Keyboard power-on (welcome) effect | ❌ | ❌ | stored in a UEFI variable whose layout is not verified yet |

@@ -59,25 +59,67 @@ class Sampler(threading.Thread):
         self.hot = {"cpu": {"since": None, "notified": 0.0, "boosted": False},
                     "gpu": {"since": None, "notified": 0.0, "boosted": False}}
         self.lock = threading.Lock()
+        self._wake = threading.Event()
 
     def snapshot(self):
         with self.lock:
-            if self.latest is None:
+            lvl = self.level()
+            if lvl != "full":
+                return self.latest if (self.latest or {}).get("monitoring") == lvl else {"t": time.time(), "monitoring": lvl}
+            if self.latest is None or self.latest.get("monitoring") != "full":
                 self._sample()
             return self.latest
+
+    def level(self):
+        try:
+            return self.svc.monitor_level()
+        except Exception:  # noqa: BLE001
+            return "full"
 
     def _sample(self):
         m = self.svc.monitor.snapshot()
         m["cpu"]["power_w"] = self.svc.monitor.rapl.watts()
+        m["monitoring"] = "full"
         self.latest = m
 
+    def _sample_light(self):
+        """Monitoring off for this EC path: only the temperatures (no EC access) for the cooler and the alerts."""
+        mon = self.svc.monitor
+        gpu = None
+        if self.svc.pf.nv_gpu:
+            nv = mon.nvidia() or {}
+            gpu = {"temp": nv.get("temp")} if nv else None
+        self.latest = {"t": time.time(), "monitoring": "light", "cpu": {"temp": mon.cpu_temp()}, "gpu": gpu}
+
+    interval = 2.0                           # WMI EC path: slower (ec_wmi.json poll.monitor_s)
+    LIGHT_S = 20.0                           # monitoring off for the EC path: temperatures only, this often
+
+    def wake(self):
+        self._wake.set()
+
     def run(self):
-        while not self.stop.wait(2):
+        self._wake = getattr(self, "_wake", None) or threading.Event()
+        wait = self.interval
+        while not self.stop.is_set():
+            self._wake.wait(wait)
+            self._wake.clear()
+            if self.stop.is_set():
+                break
             try:
+                lvl = self.level()
+                if lvl == "off":
+                    with self.lock:
+                        self.latest = {"t": time.time(), "monitoring": "off"}
+                    wait = 5.0
+                    continue
                 with self.lock:
-                    self._sample()
+                    if lvl == "light":
+                        self._sample_light()
+                    else:
+                        self._sample()
                 m = self.latest
-                if self.recording():
+                wait = self.LIGHT_S if lvl == "light" else self.interval
+                if lvl == "full" and self.recording():
                     self._record(m)
                 self._overheat(m)
             except Exception:  # noqa: BLE001

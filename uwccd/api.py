@@ -19,6 +19,13 @@ from urllib.parse import parse_qs, urlparse
 
 log = logging.getLogger("uwccd.api")
 
+# changes that need administrator rights (admin.py): how the EC is reached, its settings, platform profiles
+ADMIN_PATHS = ("/api/ec-access", "/api/ec-access/config", "/api/ec-access/install-driver", "/api/platform/import",
+               "/api/platform/apply-draft", "/api/platform/reset")
+# refused while a mode / profile is being applied (the window shows "Applying…")
+BUSY_PATHS = ("/api/mode", "/api/profile", "/api/fanboost", "/api/restore")
+BUSY_SETTINGS = ("super_performance", "tcc_extended")
+
 for _ext, _type in ((".js", "text/javascript"), (".css", "text/css"), (".svg", "image/svg+xml"), (".html", "text/html")):
     mimetypes.add_type(_type, _ext)      # the Windows registry may map .js to text/plain
 
@@ -232,6 +239,25 @@ class Handler(BaseHTTPRequestHandler):
             if u.path.startswith("/api/table/"):
                 name = u.path.rsplit("/", 1)[1]
                 return self._json(200, s.power.tables.tables.get(name))
+            if u.path == "/api/ec-access":
+                return self._json(200, s.ec_access())
+            if u.path == "/api/ec-access/config":
+                from . import ecaccess
+                pid = s.pf.project_raw
+                return self._json(200, {"effective": ecaccess.config(pid), "user": ecaccess.user_config(),
+                                        "defaults": ecaccess.factory(pid)})
+            if u.path == "/api/platform":
+                from . import platformdb
+                return self._json(200, {**platformdb.summary(s.pf.project_raw),
+                                        "profile": platformdb.export(s.pf.project_raw)})
+            if u.path == "/api/selfcheck":
+                return self._json(200, {**s.selfcheck.summary(), "result": s.selfcheck.last})
+            if u.path == "/api/selfcheck/export":
+                return self._json(200, s.selfcheck.export())
+            if u.path == "/api/admin":
+                return self._json(200, s.admin.status())
+            if u.path == "/api/busy":
+                return self._json(200, {"ops": s.busy.state()})
             if u.path == "/api/nvram":
                 return self._json(200, s.nvram.fields())
             if u.path.startswith("/api/ec/"):
@@ -258,6 +284,13 @@ class Handler(BaseHTTPRequestHandler):
         path = u.path
         try:
             b = self._body()
+            if path in ADMIN_PATHS or (path == "/api/selfcheck" and int(b.get("stage", 1)) >= 2):
+                if not s.admin.allowed(self.headers.get("X-UWCC-Admin")):
+                    return self._json(403, {"error": "administrator rights required", "admin_required": True})
+            busy = s.busy.blocking()
+            if busy and (path in BUSY_PATHS or path.startswith(("/api/profiles/", "/api/profile-reset/", "/api/selfcheck"))
+                         or (path == "/api/setting" and b.get("key") in BUSY_SETTINGS)):
+                return self._json(409, {"error": "busy", "busy": busy})
             if (path in ("/api/mode", "/api/profile", "/api/fanboost", "/api/restore")
                     or path.startswith(("/api/profiles/", "/api/table/", "/api/profile-reset/"))) and not s.fan_control:
                 return self._json(409, {"error": "fan control disabled on this EC (no RamFan 1.5)"})
@@ -319,10 +352,26 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/api/update/download":
                 return self._json(200, s.updater.request_install())
             elif path == "/api/service/restart":
-                log.info("restart requested from the window")
-                if not s.mock:
-                    threading.Timer(0.8, lambda: os._exit(3)).start()   # Restart=on-failure / SCM failure actions
-                return self._json(200, {"restarting": not s.mock})
+                return self._json(200, {"restarting": s.restart_service("restart button")})
+            elif path == "/api/admin/unlock":
+                if not s.admin.valid(self.headers.get("X-UWCC-Admin")):
+                    return self._json(403, {"error": "administrator key required", "admin_required": True})
+                return self._json(200, s.admin.unlock(int(b.get("seconds", 600))))
+            elif path == "/api/admin/lock":
+                return self._json(200, s.admin.lock_now())
+            elif path == "/api/admin/request":
+                s.emit("admin_request", {})
+                return self._json(200, {"tray": s.tray_clients > 0, **s.admin.status()})
+            elif path == "/api/admin/declined":
+                s.emit("admin", {**s.admin.status(), "declined": True})
+            elif path == "/api/selfcheck":
+                stage = int(b.get("stage", 1))
+                if stage not in (1, 2):
+                    raise ValueError("stage: 1 | 2")
+                s.selfcheck.start(stage)
+                return self._json(200, {"started": stage})
+            elif path.startswith("/api/platform/"):
+                return self._json(200, self._platform(path[14:], b))
             elif path == "/api/report/start":
                 from . import report
                 secs = [x for x in (b.get("sections") or list(report.DEFAULT_SECTIONS)) if x in report.SECTIONS]
@@ -360,6 +409,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(200, {"ok": True, "timeout": kb_timeout})
             elif path == "/api/resume":
                 s.on_poll_change("resume", None)
+            elif path.startswith("/api/ec-access"):
+                return self._json(200, self._ec_access(path, b))
             elif path.startswith("/api/lc/"):
                 r = self._liquid(path[8:], b)
                 if r is not None:
@@ -395,6 +446,85 @@ class Handler(BaseHTTPRequestHandler):
         else:
             raise KeyError(op)
         return None
+
+    def _platform(self, op, b):
+        """Platform profile of this laptop (administrator): import a file, apply the self-check draft, reset."""
+        from . import platformdb
+        s = self.svc
+        pid = s.pf.project_raw
+        if op == "import":
+            p = platformdb.save_user(b.get("profile") or {})
+        elif op == "apply-draft":
+            d = (s.selfcheck.last or {}).get("draft")
+            if not d:
+                raise LookupError("run the self-check first")
+            p = platformdb.save_user(d)
+        elif op == "reset":
+            platformdb.reset_user(pid)
+            p = None
+        else:
+            raise KeyError(op)
+        if p is not None and pid is not None and pid not in [int(x, 16) for x in p["match"]["project"]]:
+            log.warning("platform profile %s is for %s, this laptop is 0x%02X", p["id"], p["match"]["project"], pid)
+        s.emit("status", {})
+        return {**platformdb.summary(pid), "restart_needed": s.ec_info.get("active") == "wmi"}
+
+    def _ec_access(self, path, b):
+        """EC Manager: EC path (OEM driver / WMI beta), the WMI warning, ec_wmi.json, a quick test."""
+        from . import ecaccess
+        s = self.svc
+        st = s.settings_store
+        if path == "/api/ec-access":
+            restart = False
+            if "consent" in b:
+                if int(b["consent"]) != ecaccess.WMI_CONSENT_VERSION:
+                    raise ValueError(f"warning edition is {ecaccess.WMI_CONSENT_VERSION}")
+                if st.get("wmi_consent") != ecaccess.WMI_CONSENT_VERSION:
+                    st.set("wmi_consent", ecaccess.WMI_CONSENT_VERSION)
+                    log.warning("WMI EC path: the user accepted the warning (edition %d)", ecaccess.WMI_CONSENT_VERSION)
+                    restart = s.ec_info.get("active") == "none"
+            if "backend" in b:
+                v = str(b["backend"])
+                if v not in ecaccess.BACKENDS:
+                    raise ValueError("backend: auto | oem | wmi")
+                if v != st.get("ec_backend", "auto"):
+                    st.set("ec_backend", v)
+                    log.info("EC path setting: %s", v)
+                    restart = True
+            restarting = s.restart_service("EC path changed") if restart else False
+            return {**s.ec_access(), "restarting": bool(restarting), "restart_needed": restart}
+        if path == "/api/ec-access/config":
+            if b.get("reset"):
+                ecaccess.reset_user_config()
+            else:
+                ecaccess.save_user_config(b.get("config") or {})
+            s.emit("status", {})
+            return {"effective": ecaccess.config(), "user": ecaccess.user_config(),
+                    "restart_needed": s.ec_info.get("active") == "wmi"}
+        if path == "/api/ec-access/install-driver":
+            r = ecaccess.install_oem_driver(mock=s.mock)
+            restart = s.ec_info.get("active") != "oem"
+            if restart and st.get("ec_backend", "auto") == "wmi":
+                st.set("ec_backend", "auto")                  # the OEM driver is there now: the recommended path
+            r["restarting"] = s.restart_service("OEM driver installed") if restart else False
+            return {**r, "restart_needed": restart}
+        if path == "/api/ec-access/test":
+            import time as _t
+            ec = s.ec
+            raw = getattr(ec, "_read", ec.read)
+            res = {"path": s.ec_info.get("active"), "reads": []}
+            if res["path"] == "none":
+                raise LookupError("no EC access")
+            t0 = _t.perf_counter()
+            pid = raw(0x740) & 0xFF
+            res["project"] = f"0x{pid:02X}"
+            from . import platformdb
+            res["tested_platform"] = platformdb.summary(pid)["status"] == "verified"
+            for a in (0x751, 0x783, 0x784, 0x785, 0x7B9, 0x74E):
+                res["reads"].append({"addr": f"0x{a:03X}", "value": raw(a) & 0xFF})
+            res["ms_per_read"] = round((_t.perf_counter() - t0) / 7 * 1000, 1)
+            return res
+        raise KeyError(path)
 
     def _setting(self, key, value):
         s = self.svc
@@ -475,8 +605,11 @@ class Handler(BaseHTTPRequestHandler):
                 return
             s.settings_store.set("fan_manager", value)
             log.info("fan manager set to %s — restarting the service", value)
-            if not s.mock:
-                threading.Timer(1.0, lambda: os._exit(3)).start()   # the manager is chosen at start-up
+            s.restart_service("fan manager changed")          # the manager is chosen at start-up
+        elif key in ("monitor_off_oem", "monitor_off_wmi", "monitor_off_all"):
+            s.settings_store.set(key, bool(value))
+            log.info("monitoring setting %s = %s -> %s", key, bool(value), s.monitor_level())
+            s.sampler.wake()
         elif key == "lang":
             if value not in ("en", "ru"):
                 raise ValueError("lang: en | ru")

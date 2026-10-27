@@ -45,6 +45,7 @@ EC protocol: [PROTOCOL.md](PROTOCOL.md).
 | `uwccd/web/` | the interface: `index.html`, `app.js`, `app.css`, `i18n.js` (Russian strings), icons |
 | `bin/` | `uwcc` (window), `uwcc-agent` (Linux session agent), `uwccctl` (command line) |
 | `docs/CLI.md` | command line reference (`docs/CLI.ru.md` in Russian) |
+| `docs/EC/` | EC registers, OEM driver vs WMI, WMI settings, `ec_tool.py` |
 | `man/` | `uwccctl.1` man page (English; `man/ru/` Russian), installed by `install.sh` |
 | `kernel/` | Linux kernel module `uwcc` — EC access and hot keys (GPL-2.0, DKMS) |
 | `packaging/` | Linux: systemd unit, sleep hook, desktop files, polkit rule |
@@ -73,7 +74,13 @@ EC protocol: [PROTOCOL.md](PROTOCOL.md).
 
 | File | What |
 |---|---|
-| `ec.py` | EC backends: kernel module, `acpi_call`, simulation (`--mock`) |
+| `ec.py` | EC backends: kernel module, `acpi_call`, simulation (`--mock`), no-access stub, read cache for slow paths |
+| `ecaccess.py` | Windows EC path choice (OEM driver / WMI beta), the WMI warning, `ec_wmi.json` |
+| `admin.py` | administrator key and the 10-minute unlock of the EC Manager settings |
+| `busy.py` | long operations the window waits for ("Applying…", fan curve in the background) |
+| `platformdb.py` | platform profiles (`platforms/*.json`), hard caps, validation |
+| `selfcheck.py` | EC self-check: stage 1 read only, stage 2 writes with read-back and restore, draft profile |
+| `platforms/` | built-in platform profiles (`uniwill-0x10.json`, `generic-uniwill.json`) |
 | `regs.py` | map of EC registers used by the original service |
 | `hw.py` | platform identification: project id, capabilities, model names, support level |
 | `nvram.py` | UEFI variable `UniWillVariable` (settings the firmware keeps) |
@@ -110,6 +117,7 @@ EC protocol: [PROTOCOL.md](PROTOCOL.md).
 |---|---|
 | `winservice.py` | the Windows service host (the installer sets restart on failure) |
 | `acpidrv.py` | EC access through the OEM driver `UWACPIDriver.sys` |
+| `wmiec.py` | EC access through the Windows built-in WMI (`AcpiTest_MULong`), open implementation, beta |
 | `wmievents.py` | hot keys from WMI `AcpiTest_EventULong` |
 | `hid.py` | HID access for the keyboard (SetupAPI + hid.dll) |
 | `sysinfo.py`, `pdhpower.py` | monitor data on Windows, CPU power from the Energy Meter counters |

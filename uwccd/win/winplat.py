@@ -134,5 +134,26 @@ def acl_users_read(path):
                    capture_output=True, creationflags=CREATE_NO_WINDOW, check=False)
 
 
+# stop the service (kill it if it hangs), start it again — used by the tray (UAC) and by the service itself (SYSTEM)
+RESTART_PS = (
+    "$n='uwccd'; $s=Get-Service $n -ErrorAction SilentlyContinue; if (-not $s) { exit 2 }; "
+    "if ($s.Status -ne 'Stopped') { & sc.exe stop $n | Out-Null; "
+    "for ($i=0; $i -lt 15 -and (Get-Service $n).Status -ne 'Stopped'; $i++) { Start-Sleep 1 }; "
+    "if ((Get-Service $n).Status -ne 'Stopped') { $p = ((& sc.exe queryex $n | Select-String 'PID') -split ':')[-1].Trim(); "
+    "if ($p -and $p -ne '0') { Stop-Process -Id ([int]$p) -Force }; Start-Sleep 2 } }; "
+    "Start-Service $n")
+
+
+def restart_self():
+    """The service restarts itself cleanly: a detached PowerShell (SYSTEM) stops and starts it through the SCM.
+    Unlike exiting with an error this does not run into the growing delays of the SCM failure actions."""
+    flags = 0x00000008 | 0x00000200 | 0x01000000 | CREATE_NO_WINDOW   # DETACHED, NEW_GROUP, BREAKAWAY_FROM_JOB
+    cmd = ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-Command", RESTART_PS]
+    try:
+        subprocess.Popen(cmd, creationflags=flags, close_fds=True)
+    except OSError:
+        subprocess.Popen(cmd, creationflags=flags & ~0x01000000, close_fds=True)
+
+
 def data_root():
     return os.path.join(os.environ.get("ProgramData", r"C:\ProgramData"), "UWCC")

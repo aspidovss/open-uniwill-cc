@@ -1,5 +1,70 @@
 # Changelog
 
+## 1.6.1
+
+- **Mode switches on the WMI path no longer look frozen.** The window covers itself with *Applying…* until the
+  mode is set; the mode, power limits and Fan Boost are written first (about 1–2 s), the fan curve follows in the
+  background (*Fan curve: writing N %* in the side bar; the mode cards and the fan page wait for it). A curve that is
+  already in the EC is not written again (also at start-up). A second click while a mode is applied is refused
+  (`409 busy`) instead of queueing.
+- **Driver Manager is now EC Manager** (`uwccctl ec …`, `uwccctl driver …` still works). The OEM driver path is marked
+  as the recommended one.
+- **Administrator rights for EC settings.** Changing the EC access path, accepting the WMI warning, `ec_wmi.json`,
+  platform profiles and the self-check with writes need administrator rights: the window asks for them through the
+  tray (UAC prompt, then 10 minutes unlocked); `uwccctl ec unlock` as administrator / `sudo`. Before, every local user
+  could change them.
+- **Hard caps**: no profile or `ec_wmi.json` can set PL1 > 200, PL2 > 250, PL4 > 300 W, base TGP > 200, cTGP or Dynamic
+  Boost > 50 W; on a verified platform the limits cannot exceed the factory values.
+- **Platform profiles** (`uwccd/platforms/*.json`): identity, tested versions, the WMI call layout, which functions work
+  through WMI, limits and notes as data. Built in: MAIBENBEN Tsunami X629 / Mechrevo Questyle 16 Super / XMG NEO 16
+  (E23) — verified — and a generic profile in which every function stays off on the WMI path for unknown laptops.
+  Export / import / back to the built-in profile in EC Manager.
+- **Self-check** in EC Manager / `uwccctl ec selfcheck`: stage 1 reads only (identity, both access paths compared byte
+  by byte, plausibility of known registers, time per access, firmware methods); stage 2 (administrator, AC power)
+  switches each function a little and back with read-back — Fn Lock, touchpad flag, mode byte, Fan Boost (do the fans
+  react?), PL1, cTGP, charge limit, fan-table handshake — and restores the registers, also after a crash. Result: what
+  works, what is not clear, a draft platform profile; *Export for GitHub* and *Apply as platform profile*.
+- **Monitoring switches** in EC Manager: off for the OEM driver, off for WMI (temperatures for the liquid cooler and
+  alerts only, every 20 s) or all off (nothing is read; the liquid cooler in the automatic mode runs the Medium preset).
+- **Restart of the service** (EC path changed, *Restart the service*): the window shows *The service is restarting*
+  and reloads by itself when it is back. The service restarts itself cleanly through the service manager instead of
+  exiting with an error, so repeated restarts no longer wait for the growing recovery delays.
+- WMI notes: the extra graphics power is reached only in the stock Turbo mode (150 W Office / Gaming, 175 W Turbo on the
+  Tsunami); Dynamic Boost in the Custom mode adds power only while the processor leaves room.
+- Fixed: on the WMI path every liquid-cooler event `0xC2` logged *PWUP is not available through WMI*.
+- **Two Windows builds**: non-free `open-uniwill-cc-windows-<ver>-setup.exe` (OEM driver + WMI) and **free**
+  `open-uniwill-cc-windows-<ver>-free-setup.exe` (WMI only). The free build does not contain the original OEM driver or
+  any other proprietary file and is distributed completely freely; the installer, EC Manager and `install.ps1` say so
+  and recommend putting the OEM driver (`UWACPIDriver.inf`, `.sys`, `.cat`) into `C:\ProgramData\UWCC\driver` — it is
+  installed from there by the installer or *EC Manager → Install the OEM driver* (`uwccctl ec install-driver`). Each
+  build updates itself to its own edition. `build_windows.ps1 -Edition both|full|free`.
+- Documentation: `docs/EC/Platforms.md` (English / Russian).
+
+## 1.6.0
+
+- **Open EC access through WMI (Windows, beta).** Besides the manufacturer's driver `UWACPIDriver.sys` the service can
+  reach the embedded controller through the WMI interface built into Windows (`root\WMI AcpiTest_MULong`), without
+  proprietary files. Three choices — in the installer, in the window and with `uwccctl driver use`:
+  - **OEM driver + WMI** (default, recommended): the OEM driver; WMI only when the driver is missing and the warning was
+    accepted;
+  - **OEM driver only**;
+  - **WMI only** — open implementation, not recommended, beta; the installer then does not copy the OEM driver.
+- On the WMI path every EC access takes ~125 ms (wait loops in the firmware), so reads are cached, unchanged writes are
+  skipped and sensors are sampled every 5 s. Not reachable through WMI: the liquid-cooling power level `PWUP` (the
+  *Power boost with liquid cooling* option is greyed out; tests: ~13–15 % lower GPU clock under load without it) and the
+  Smart APC limit table `SMRW` (limits come from the WMI settings; values for project 0x10 are built in).
+- When the OEM driver is missing the service starts without EC access and the window recommends the OEM driver or
+  offers WMI after a warning: why some functions need the driver, what the open implementation is, the risks, a link
+  to the documentation and, in red, that it is not recommended on platforms other than MAIBENBEN Tsunami X629 /
+  Mechrevo Questyle 16 Super / XMG NEO 16 (E23).
+- New **Driver Manager** page: the active path and the OEM driver version, the three choices, the WMI settings
+  (`ec_wmi.json`: which functions stay available or are marked slow, polling, timeout, limits, registers) with import,
+  export and factory reset, and a test of the EC path. Functions that do not work on the WMI path are greyed out.
+  **WMI DRIVER ON** in the side bar while the WMI path is active; an *EC access* block on the Information page.
+- `uwccctl driver [use auto|oem|wmi] [--accept-risks]`, `uwccctl driver config export|import|reset`, `uwccctl driver test`.
+- Documentation: `docs/EC` — EC registers of the Tsunami X629, OEM driver vs WMI, the WMI settings, `ec_tool.py`
+  (English and Russian).
+
 ## 1.5.5
 
 - *Fan settings*: the profile tabs fit in one line — the mode name once, then its slots as numbers (the full

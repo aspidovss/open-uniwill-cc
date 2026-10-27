@@ -109,8 +109,10 @@ From [Releases](https://github.com/aspidovss/open-uniwill-cc/releases):
 
 | File | For |
 |---|---|
-| `open-uniwill-cc-windows-<ver>-setup.exe` | Windows 10/11 x64 — installer |
+| `open-uniwill-cc-windows-<ver>-setup.exe` | Windows 10/11 x64 — installer, **non-free**: OEM driver + WMI |
 | `open-uniwill-cc-windows-<ver>-portable.zip` | Windows — the same, installed with `install.ps1` |
+| `open-uniwill-cc-windows-<ver>-free-setup.exe` | Windows — **free** build: WMI only, no OEM driver and no other proprietary files, distributed completely freely |
+| `open-uniwill-cc-windows-<ver>-free-portable.zip` | Windows — the free build, installed with `install.ps1` |
 | `open-uniwill-cc-linux-<ver>.tar.gz` | Ubuntu / Debian-based Linux (installer uses apt; developed on Ubuntu 24.04) |
 | `SHA256SUMS.txt` | checksums |
 
@@ -120,13 +122,24 @@ From [Releases](https://github.com/aspidovss/open-uniwill-cc/releases):
 
 1. Run `open-uniwill-cc-windows-<ver>-setup.exe` and keep **"Disable the original Control Center service"** ticked
    (two programs must not drive the same EC).
-2. The icon appears in the notification area. The program **starts with Windows hidden in the tray**;
+2. Choose how the program reaches the embedded controller:
+   **OEM driver + WMI** (default, recommended), **OEM driver only**, or **WMI only** — an open implementation without
+   proprietary files (not recommended, beta: slower, no liquid-cooling power boost; tested only on MAIBENBEN Tsunami X629 /
+   Mechrevo Questyle 16 Super / XMG NEO 16 (E23)). It can be changed later in **EC Manager**.
+   See [docs/EC](docs/EC/README.md).
+3. The icon appears in the notification area. The program **starts with Windows hidden in the tray**;
    click the icon (or *Start → UWCC Control Center*) to open the window.
+
+**Free build** (`-free-setup.exe`): it does not contain the original OEM driver and is distributed completely freely.
+Without the driver it works through WMI (beta). Recommended: put the OEM driver of the manufacturer's Control Center
+(`UWACPIDriver.inf`, `.sys`, `.cat`) into `C:\ProgramData\UWCC\driver` — the installer installs it from there, or later
+*EC Manager → Install the OEM driver* (`uwccctl ec install-driver`). By installing it you confirm that you have the
+right to use the file.
 
 Portable zip: unpack, then in PowerShell `powershell -ExecutionPolicy Bypass -File .\install.ps1` (asks for admin rights).
 
 What gets installed: the `uwccd` service (LocalSystem), `ControlCenter.exe` (tray / window),
-`uwccctl.exe` (console), and the OEM ACPI driver `UWACPIDriver` if it is not installed yet.
+`uwccctl.exe` (console), and the OEM ACPI driver `UWACPIDriver` if it is not installed yet (not with *WMI only*).
 Details: [README.windows.md](README.windows.md).
 
 ### Linux

@@ -159,5 +159,13 @@ uwccctl kb effect single --color 00A0FF --light 2
 | `version` / `update [check\|install]` | версия / новый выпуск (установка: Windows) |
 | `restart` / `resume` | перезапуск службы / применить настройки заново |
 | `lighting` / `nvram` / `ec read АДРЕС` | диагностика |
+| `driver` | способ доступа к EC, OEM-драйвер, функции WMI (Windows) |
+| `driver use auto\|oem\|wmi [--accept-risks]` | OEM-драйвер + WMI (по умолчанию) / только OEM / только WMI (открытая, не рекомендуется, бета) |
+| `driver config export\|import ФАЙЛ` / `driver config reset` / `driver test` | настройки WMI `ec_wmi.json` ([EC/WMI-config.ru.md](EC/WMI-config.ru.md)), быстрая проверка |
+| `driver unlock [МИН]` / `driver lock` | открыть настройки менеджера EC для окна (администратор / sudo) |
+| `driver monitor oem\|wmi\|all on\|off` | мониторинг через способ доступа / весь мониторинг |
+| `driver platform [export\|import ФАЙЛ\|reset\|apply-draft]` | профиль платформы ([EC/Platforms.ru.md](EC/Platforms.ru.md)) |
+| `driver selfcheck [1\|2] [--export ФАЙЛ]` | самопроверка: только чтение / с записью (администратор, от сети) |
+| `ec …` | то же, что `driver …` (менеджер EC); `ec read АДРЕС` читает один регистр |
 | `ec-direct read АДРЕС [N]` / `ec-direct dump БАЗА` | EC без службы (root) |
 | `release` | вернуть управление вентиляторами EC (root, удаление) |

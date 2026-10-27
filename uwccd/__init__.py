@@ -5,8 +5,9 @@ EC RAM is accessed through the firmware ACPI methods ECRR(addr) / ECRW(addr, dat
 of the ACPI device INOU0000, exactly like the Windows UWACPIDriver.sys does.
 """
 import os
+import sys
 
-__version__ = "1.5.5"
+__version__ = "1.6.1"
 CONTACT = "OUCC@aspidov.ru"
 # Edition of the user agreement (uwccd/web/eula.*.txt); a higher number asks for acceptance again.
 EULA_VERSION = 1
@@ -48,10 +49,32 @@ def build_info():
     return info
 
 
+# Windows builds: "full" — with the OEM driver UWACPIDriver (non-free files), "free" — WMI only, no proprietary files;
+# build_windows.ps1 writes the word to EDITION next to the executables. Sources / Linux: "source".
+
+
+def edition():
+    env = os.environ.get("UWCC_EDITION")
+    if env in ("free", "full"):
+        return env
+    if getattr(sys, "frozen", False):
+        try:
+            with open(os.path.join(os.path.dirname(sys.executable), "EDITION"), encoding="ascii") as f:
+                v = f.read().strip().lower()
+            if v in ("free", "full"):
+                return v
+        except OSError:
+            pass
+        return "full"
+    return "source"
+
+
 def version_string(word="build"):
-    """1.4.2 · build 2026-10-23 · a1b2c3d"""
+    """1.4.2 · build 2026-10-23 · a1b2c3d   (free Windows build: 1.6.1 · free · build …)"""
     b = build_info()
     parts = [__version__]
+    if edition() == "free":
+        parts.append("free")
     if b.get("date"):
         parts.append(f"{word} {b['date']}")
     if b.get("commit"):

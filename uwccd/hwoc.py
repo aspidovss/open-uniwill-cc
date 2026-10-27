@@ -48,6 +48,8 @@ class LiquidHWOC(threading.Thread):
     # -- conditions --------------------------------------------------------------------------------
     def supported(self):
         lc = self.svc.liquid
+        if (getattr(self.svc, "ec_info", None) or {}).get("active") == "wmi":
+            return False                  # PWUP needs the OEM driver (docs/EC/WMI-vs-Driver.md)
         return bool(getattr(self.svc, "fan_control", False) and getattr(self.svc.power, "manager", "") == "std"
                     and lc.available and lc.ec_table)
 
@@ -56,6 +58,8 @@ class LiquidHWOC(threading.Thread):
 
     def _want(self):
         if not self.supported():
+            if (getattr(self.svc, "ec_info", None) or {}).get("active") == "wmi":
+                return False, "not available with the WMI path (needs the OEM driver)"
             return False, "not supported on this laptop"
         if not self.enabled():
             return False, "off"
@@ -134,7 +138,7 @@ class LiquidHWOC(threading.Thread):
                 self.mode = mode
 
     def on_wmi(self, code):
-        if code == EV_HWOC:
+        if code == EV_HWOC and self.supported():      # WMI path: PWUP is not reachable — nothing to pass on
             self.sync_level()
 
     def run(self):

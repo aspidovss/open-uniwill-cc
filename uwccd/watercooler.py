@@ -36,6 +36,7 @@ MK2_ONLY = ("spiral", "rotating_rainbow", "color_wave")
 MODELS = {"LCT21001": "Mk1", "LCT22002": "Mk2"}
 FW_RE = re.compile(r"(?:CoolingSystem FW V|MCU F/W Version: )(\d+(?:\.\d+)+)")
 
+NO_TEMPS_PRESET = "medium"          # "auto" while the monitoring is off (EC Manager)
 MODES = ("auto", "laptop", "ec", "low", "medium", "high", "manual", "off")
 PRESETS = {"low": (25, 7), "medium": (50, 8), "high": (90, 11)}
 # 7 V is the quietest but on some units the flow does not hold and the cooler switches itself off;
@@ -185,6 +186,7 @@ class LiquidCooler:
     def __init__(self, ec, temp_fn, emit, mock=False, mode_fn=None):
         self.ec = ec
         self.temp_fn = temp_fn
+        self.no_temps = lambda: False      # monitoring switched off completely (EC Manager): no temperatures
         self.mode_fn = mode_fn or (lambda: None)
         self.guard = False
         self._guard_mode = None
@@ -623,6 +625,8 @@ class LiquidCooler:
             fan, pump = PRESETS[m]
         elif m == "manual":
             fan, pump = int(c["fan"]), int(c["pump"])
+        elif m == "auto" and self.no_temps():          # no temperatures: a fixed preset instead of the tiers
+            fan, pump = PRESETS[NO_TEMPS_PRESET]
         else:
             fan = pump = None
             calm = True
@@ -909,6 +913,7 @@ class LiquidCooler:
                          "left": max(0, round(int(c.get("delay_up" if self._pending[0] == "up" else "delay_down", 0))
                                               - (self._now() - self._pending[1])))} if self._pending else None),
             "ec_support": self.ec_support, "ec_table": self.ec_table, "suspended": self.suspended,
+            "no_temps": bool(self.cfg.get("mode") == "auto" and self.no_temps()), "no_temps_preset": NO_TEMPS_PRESET,
             "config": copy.deepcopy(c), "scan": self.scan_result,
             "presets": {k: {"fan": v[0], "pump": v[1]} for k, v in PRESETS.items()},
             "rgb_modes": list(RGB_MODES), "mk2_only": list(MK2_ONLY), "voltages": list(VOLTAGES),

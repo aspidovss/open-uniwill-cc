@@ -9,7 +9,7 @@ import time
 
 from . import regs as R
 from . import store
-from .ec import open_ec
+from .busy import Busy
 from .automation import DEFAULTS as AUTO_DEFAULTS, PowerSourceRules, Sampler, setting as auto_setting
 from .events import AppBinding, ECPoller, HotkeyEvents, IdleTimer
 from .fan import PowerManager
@@ -43,21 +43,32 @@ def apply_debug(on):
 class Service:
     def __init__(self, backend=None, mock=False):
         self.mock = mock
-        self.ec = open_ec("mock" if mock else backend)
+        self.settings_store = store.Settings()
+        self.listeners = []
+        self.llock = threading.Lock()
+        self.busy = Busy(self.emit)              # long operations the window waits for (WMI: mode switches)
+        from .ecaccess import open_backend
+        self.ec, self.ec_info = open_backend(self.settings_store, mock=mock, prefer=None if mock else backend)
+        self.oem_driver = None
         self.pf = Platform(self.ec)
+        if self.ec_info.get("active") not in ("none", None):
+            self.settings_store.set("ec_project", self.pf.project_raw)       # WMI layout of the next start
+        from .admin import Admin
+        from .api import RUN_DIR
+        self.admin = Admin(RUN_DIR, self.emit)
         log.info("project %s (raw 0x%X), ramfan1.5=%s turbo=%s nv=%s amd=%s", self.pf.project_name,
                  self.pf.project_raw, self.pf.ramfan15, self.pf.turbo_support, self.pf.nv_gpu, self.pf.amd)
         self.nvram = MockNvram() if mock else Nvram()
         self.nvram.verify(self.pf.project_raw)
-        self.settings_store = store.Settings()
         apply_debug(self.settings_store.get("debug", False) or os.environ.get("UWCC_DEBUG") == "1")
-        self.listeners = []
-        self.llock = threading.Lock()
         # MyFanCtrl: commercial projects -> _CML manager, all others -> RamFan1p5 manager (with Custom mode)
         choice = self.settings_store.get("fan_manager", "auto")
         std = (choice == "std") or (choice != "cml" and not self.pf.commercial)
         self.power = (PowerManagerStd if std else PowerManager)(self.ec, self.pf, self.nvram, self.emit)
         log.info("fan manager: %s (%s)", self.power.manager, "forced" if choice in ("std", "cml") else "by project")
+        self.power.busy = self.busy
+        self.power.tables.busy = self.busy
+        self.power.tables.deferred = self.ec_info.get("active") == "wmi"     # fan curve after the mode, in background
         if std:
             self.power.tcc_extended = bool(self.settings_store.get("tcc_extended", False))
             if self.pf.nv_gpu:
@@ -73,7 +84,10 @@ class Service:
             self.monitor = Monitor(self.ec, self.pf)
         self.liquid = LiquidCooler(self.ec, self.hottest_temp, self.emit, mock=mock,
                                    mode_fn=lambda: self.power.option.get("OperatingMode") if self.fan_control else None)
+        self.liquid.no_temps = lambda: self.monitor_level() == "off"
         self.sampler = Sampler(self)
+        from .selfcheck import SelfCheck
+        self.selfcheck = SelfCheck(self)
         self.tray_clients = 0          # Windows tray apps connected to /api/events (they install updates)
         from .updates import Updater
         self.updater = Updater(self)
@@ -81,11 +95,39 @@ class Service:
         self.threads = []
         self.fan_control = False
 
+    def monitor_level(self):
+        """EC Manager monitoring switches: "full" | "light" (temperatures only, every LIGHT_S) | "off"."""
+        from .ecaccess import monitoring
+        return monitoring(self.settings_store, self.ec_info.get("active"))
+
+    def restart_service(self, reason=""):
+        """Restart the service (EC path changed, restart button). The window shows a wait dialog meanwhile."""
+        log.info("restarting the service%s", f" ({reason})" if reason else "")
+        self.emit("restarting", {"reason": reason})
+        if self.mock:
+            return False
+        if IS_WIN:
+            from .win.winplat import restart_self
+            threading.Timer(0.8, restart_self).start()
+            threading.Timer(40.0, lambda: os._exit(3)).start()     # the clean restart did not happen: SCM recovery
+        else:
+            threading.Timer(0.8, lambda: os._exit(3)).start()      # systemd Restart=on-failure
+        return True
+
     def hottest_temp(self, source="max"):
         """Temperature driving the cooler: the hotter of CPU and NVIDIA GPU, or one of them.
-        "gpu" falls back to the CPU while the GPU sleeps / is not there (otherwise the cooler would stay put)."""
-        cpu = self.monitor.cpu_temp()
-        gpu = (self.monitor.nvidia() or {}).get("temp") if self.pf.nv_gpu and source != "cpu" else None
+        "gpu" falls back to the CPU while the GPU sleeps / is not there (otherwise the cooler would stay put).
+        Monitoring "light": the temperatures the sampler reads every LIGHT_S; "off": none (the cooler uses a preset)."""
+        lvl = self.monitor_level()
+        if lvl == "off":
+            return None
+        if lvl == "light":
+            m = self.sampler.latest or {}
+            cpu = (m.get("cpu") or {}).get("temp")
+            gpu = (m.get("gpu") or {}).get("temp") if source != "cpu" else None
+        else:
+            cpu = self.monitor.cpu_temp()
+            gpu = (self.monitor.nvidia() or {}).get("temp") if self.pf.nv_gpu and source != "cpu" else None
         ok = lambda v: isinstance(v, (int, float))          # noqa: E731
         if source == "cpu":
             return cpu if ok(cpu) else None
@@ -133,6 +175,9 @@ class Service:
     def start(self):
         self.power.ac_online = self.monitor.ac_online()
         self.fan_control = self.pf.ramfan15 or bool(self.settings_store.get("force_fan_control"))
+        if self.ec_info.get("active") != "none":
+            from .selfcheck import restore_snapshot
+            restore_snapshot(self.ec)              # a self-check with writes was interrupted
         if self.fan_control:
             self.power.start()
         else:
@@ -155,6 +200,14 @@ class Service:
             self.threads.append(IdleTimer(lambda: int(self.settings_store.get("kb_timeout", 0) or 0), self.keyboard.idle))
         self.threads.append(AppBinding(lambda: self.settings_store.get("app_binding", []),
                                        self.power.user_set_mode, lambda: self.power.option["OperatingMode"]))
+        if self.ec_info.get("active") == "wmi":
+            from .ecaccess import config as wmi_config
+            self.sampler.interval = float(wmi_config(self.pf.project_raw)["poll"].get("monitor_s", 5))
+        if IS_WIN and not self.mock:
+            def driver_info():
+                from .ecaccess import oem_driver_info
+                self.oem_driver = oem_driver_info()
+            threading.Thread(target=driver_info, daemon=True, name="oem-driver-info").start()
         self.threads.append(self.sampler)
         from .hwoc import LiquidHWOC
         self.hwoc = LiquidHWOC(self)
@@ -169,6 +222,9 @@ class Service:
                  "kernel module" if hk.available else "polling")
 
     def stop(self):
+        t = self.power.tables
+        t._pending = None
+        t.wait_idle(20)                    # a fan curve still being written in the background
         self.liquid.stop()
         self.sampler.save_day()
         for t in self.threads:
@@ -185,6 +241,8 @@ class Service:
             self.emit("wmi", {"code": code})
         elif code == R.EV_MODE_SWITCH:
             self.power.mode_switch_key()
+        elif code == R.EV_FAN_BOOST and getattr(self, "selfcheck", None) and self.selfcheck.running == 2:
+            pass                                      # the self-check switches Fan Boost itself
         elif code == R.EV_FAN_BOOST:
             self.power.fan_boost_from_ec()
         elif code == R.EV_FAN_BOOST_OFF:
@@ -229,6 +287,10 @@ class Service:
             self.emit("ac", {"online": value})
         elif key == "resume":
             log.info("resume detected — re-applying settings")
+            self.power.tables.invalidate()
+            inv = getattr(self.ec, "invalidate", None)
+            if inv:
+                inv()
             if self.fan_control:
                 self.power.start()
             self.settings.start()
@@ -241,6 +303,8 @@ class Service:
                     pass
             self.emit("status", {})
         elif key == "boost":
+            if self.selfcheck.running == 2:          # the self-check switches Fan Boost itself
+                return
             self.power.fan_boost_from_ec()
         elif key == "winkey":
             self.settings_store.set("winkey_lock", value)
@@ -269,4 +333,11 @@ class Service:
             "hwoc": self.hwoc.status() if getattr(self, "hwoc", None) else None,
             "automation": {k: auto_setting(self.settings_store, k) for k in AUTO_DEFAULTS},
             "info": self.monitor.info(),
+            "ec_access": self.ec_access(),
+            "busy": self.busy.state(),
+            "monitoring": self.monitor_level(),
         }
+
+    def ec_access(self):
+        from .ecaccess import status
+        return status(self)

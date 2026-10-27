@@ -11,6 +11,8 @@ import urllib.error
 import urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if sys.platform == "win32":     # the simulated service needs Linux paths (/run, /proc, /sys); run the tests in WSL or Linux
+    raise unittest.SkipTest("tests/test_mock.py runs on Linux only")
 TOKEN = "t-" + os.urandom(6).hex()
 
 
@@ -307,6 +309,176 @@ class CliService(MockService):
 
 for _n in [n for n in dir(MockService) if n.startswith("test_")]:
     setattr(CliService, _n, None)
+
+
+class EcAccessService(MockService):
+    """Windows EC path (simulated): OEM driver missing -> no EC access -> WMI after the warning; installer choice."""
+
+    @classmethod
+    def setUpClass(cls):
+        os.environ["UWCC_MOCK_PROJECT"] = "0x10"
+        os.environ["UWCC_MOCK_OEM"] = "0"
+        super().setUpClass()
+
+    @classmethod
+    def tearDownClass(cls):
+        super().tearDownClass()
+        os.environ.pop("UWCC_MOCK_PROJECT", None)
+        os.environ.pop("UWCC_MOCK_OEM", None)
+
+    @classmethod
+    def restart(cls):
+        cls.proc.terminate()
+        cls.proc.wait(5)
+        env = dict(os.environ, UWCC_DATA=os.path.join(cls.tmp, "data"), UWCC_RUN=os.path.join(cls.tmp, "run"),
+                   PYTHONPATH=ROOT)
+        code = ("import uwccd.ec as e; e.MockEC.__init__.__defaults__ = (%r,); "
+                "import runpy; runpy.run_module('uwccd', run_name='__main__')" % cls.ecfile)
+        cls.proc = subprocess.Popen([sys.executable, "-c", code, "--mock", "--port", str(cls.port), "--token", TOKEN],
+                                    env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        for _ in range(100):
+            try:
+                cls.get("state")
+                return
+            except Exception:  # noqa: BLE001
+                time.sleep(0.1)
+
+    def admin_key(self):
+        with open(os.path.join(self.tmp, "run", "admin-token")) as f:
+            return f.read().strip()
+
+    def apost(self, path, body):
+        """POST with the administrator key (what `uwccctl` sends when run as administrator / root)."""
+        r = urllib.request.Request(f"http://127.0.0.1:{self.port}/api/{path}", data=json.dumps(body).encode(),
+                                   method="POST", headers={"X-UWCC-Token": TOKEN, "X-UWCC-Admin": self.admin_key()})
+        try:
+            return 200, json.load(urllib.request.urlopen(r, timeout=30))
+        except urllib.error.HTTPError as e:
+            return e.code, json.load(e)
+
+    def wait_selfcheck(self):
+        for _ in range(300):
+            r = self.get("selfcheck")
+            if not r["running"]:
+                return r
+            time.sleep(0.1)
+        self.fail("self-check did not finish")
+
+    def test_ec_paths(self):
+        a = self.get("ec-access")
+        self.assertEqual((a["active"], a["reason"], a["oem_present"]), ("none", "oem_missing", False))
+        self.assertEqual(set(a["features"].values()), {"off"})
+        self.assertFalse(a["admin"]["unlocked"])
+        # EC Manager changes need administrator rights
+        code, r = self.post("ec-access", {"consent": a["consent_version"]})
+        self.assertEqual((code, r.get("admin_required")), (403, True))
+        self.assertEqual(self.post("admin/unlock", {})[0], 403)                      # the ordinary key is not enough
+        self.assertEqual(self.apost("ec-access", {"backend": "bogus"})[0], 400)
+        self.assertEqual(self.apost("ec-access", {"consent": 99})[0], 400)
+        code, r = self.apost("ec-access", {"consent": a["consent_version"]})
+        self.assertEqual(code, 200)
+        self.assertTrue(r["consent"] and r["restart_needed"])
+        self.restart()
+        a = self.get("ec-access")
+        self.assertEqual((a["active"], a["setting"]), ("wmi", "auto"))
+        self.assertEqual(a["features"]["power_boost_lc"], "off")
+        self.assertEqual(a["features"]["fan_tables"], "slow")
+        self.assertTrue(a["tested"])
+        self.assertEqual((a["platform"]["id"], a["platform"]["status"], a["platform"]["source"]), ("uniwill-0x10", "verified", "builtin"))
+        st = self.get("state")
+        self.assertEqual(st["power"]["limits"]["source"], "config")
+        self.assertEqual((st["power"]["limits"]["pl1_max"], st["power"]["limits"]["db_max"]), (160, 25))
+        self.assertFalse(st["hwoc"]["supported"])
+        self.assertEqual(self.post("mode", {"mode": 2})[0], 200)                    # control works through WMI
+        self.assertEqual(self.ec(0x751) & 0x10, 0x10)
+        t = self.post("ec-access/test", {})[1]
+        self.assertEqual((t["path"], t["project"]), ("wmi", "0x10"))
+        # unlock for the window (what `uwccctl ec unlock` does), then plain requests pass
+        code, r = self.apost("admin/unlock", {"seconds": 120})
+        self.assertEqual((code, r["unlocked"]), (200, True))
+        self.assertTrue(self.get("ec-access")["admin"]["unlocked"])
+        # ec_wmi.json: validation, locked feature, hard caps, factory limits of a verified platform, import / reset
+        self.assertEqual(self.post("ec-access/config", {"config": {"bogus": 1}})[0], 400)
+        self.assertEqual(self.post("ec-access/config", {"config": {"poll": {"cache_ms": -5}}})[0], 400)
+        self.assertEqual(self.post("ec-access/config", {"config": {"limits": {"0x10": {"PL4": 400}}}})[0], 400)   # cap 300
+        self.assertEqual(self.post("ec-access/config", {"config": {"limits": {"0x10": {"PL4": 260}}}})[0], 400)   # factory 250
+        self.assertEqual(self.post("ec-access/config", {"config": {"limits": {"0x10": {"PL1": 150, "PL4": 240}}}})[0], 200)
+        code, r = self.post("ec-access/config", {"config": {"features": {"battery": "off", "power_boost_lc": "on"}}})
+        self.assertEqual(code, 200)
+        self.assertEqual((r["effective"]["features"]["battery"], r["effective"]["features"]["power_boost_lc"]), ("off", "off"))
+        self.assertEqual(self.get("ec-access")["features"]["battery"], "off")
+        self.post("ec-access/config", {"reset": True})
+        self.assertEqual(self.get("ec-access")["features"]["battery"], "on")
+        self.post("admin/lock", {})
+        self.assertEqual(self.post("ec-access/config", {"reset": True})[0], 403)
+        # monitoring switches: WMI off -> temperatures only; all off -> nothing, the cooler would use a preset
+        self.post("setting", {"key": "monitor_off_wmi", "value": True})
+        self.assertEqual(self.get("ec-access")["monitoring"]["level"], "light")
+        self.assertIn(self.get("monitor").get("monitoring"), ("light",))
+        self.post("setting", {"key": "monitor_off_all", "value": True})
+        self.assertEqual(self.get("state")["monitoring"], "off")
+        self.post("setting", {"key": "monitor_off_all", "value": False})
+        self.post("setting", {"key": "monitor_off_wmi", "value": False})
+        self.assertEqual(self.get("state")["monitoring"], "full")
+        # self-check: stage 1 reads; stage 2 needs the administrator key, writes and restores
+        code, _ = self.post("selfcheck", {"stage": 1})
+        self.assertEqual(code, 200)
+        r = self.wait_selfcheck()["result"]
+        ids = {i["id"]: i["status"] for i in r["items"]}
+        self.assertEqual((ids["project"], ids["oem_path"]), ("ok", "skip"))      # OEM driver missing in this test
+        self.assertEqual(r["draft"]["match"]["project"], ["0x10"])
+        fn_before, pl1_before = self.ec(0x74E), self.ec(0x783)
+        self.assertEqual(self.post("selfcheck", {"stage": 2})[0], 403)
+        self.assertEqual(self.apost("selfcheck", {"stage": 2})[0], 200)
+        r = self.wait_selfcheck()["result"]
+        ids = {i["id"]: i["status"] for i in r["items"]}
+        for k in ("fn_lock", "touchpad", "modes", "power_limits", "gpu_power", "battery", "fan_tables"):
+            self.assertEqual(ids[k], "ok", k)
+        self.assertEqual(ids["pwup"], "fail")
+        self.assertEqual((self.ec(0x74E), self.ec(0x783)), (fn_before, pl1_before))   # restored
+        self.assertFalse(os.path.exists(os.path.join(self.tmp, "data", "selfcheck-snapshot.json")))
+        self.assertEqual(r["features"]["fan_tables"], "slow")
+        exp = self.get("selfcheck/export")
+        self.assertEqual(exp["draft_profile"]["status"], "draft")
+        # the draft becomes this laptop's platform profile (administrator), then back to the built-in one
+        self.assertEqual(self.post("platform/apply-draft", {})[0], 403)
+        code, p = self.apost("platform/apply-draft", {})
+        self.assertEqual((code, p["source"], p["status"], p["modified"]), (200, "user", "draft", True))
+        bad = dict(exp["draft_profile"], limits={"PL1": 160, "PL2": 160, "PL4": 999})
+        self.assertEqual(self.apost("platform/import", {"profile": bad})[0], 400)
+        self.assertEqual(self.apost("platform/reset", {})[1]["source"], "builtin")
+        # interrupted stage 2: the snapshot is restored on the next start
+        with open(os.path.join(self.tmp, "data", "selfcheck-snapshot.json"), "w") as f:
+            json.dump({"regs": {"0x74E": 0x10}}, f)
+        self.restart()
+        self.assertFalse(os.path.exists(os.path.join(self.tmp, "data", "selfcheck-snapshot.json")))
+        # installer choice: OEM only -> no EC access again (driver missing), the file is consumed
+        with open(os.path.join(self.tmp, "data", "ec_backend.install"), "w") as f:
+            f.write("oem")
+        self.restart()
+        a = self.get("ec-access")
+        self.assertEqual((a["setting"], a["active"], a["reason"]), ("oem", "none", "oem_missing"))
+        self.assertFalse(os.path.exists(os.path.join(self.tmp, "data", "ec_backend.install")))
+        self.apost("ec-access", {"backend": "wmi"})
+        self.restart()
+        self.assertEqual(self.get("ec-access")["active"], "wmi")
+        # free build: the OEM driver package is looked for in <ProgramData>/UWCC/driver and installed from EC Manager
+        a = self.get("ec-access")
+        self.assertIsNone(a["driver_package"])
+        self.assertEqual(self.apost("ec-access/install-driver", {})[0], 409)
+        drv = os.path.join(self.tmp, "UWCC", "driver")
+        os.makedirs(drv, exist_ok=True)
+        for f in ("UWACPIDriver.inf", "UWACPIDriver.sys", "uwacpidriver.cat"):
+            open(os.path.join(drv, f), "w").close()
+        self.assertEqual(self.get("ec-access")["driver_package"]["dir"], drv)
+        self.assertEqual(self.post("ec-access/install-driver", {})[0], 403)
+        code, r = self.apost("ec-access/install-driver", {})
+        self.assertEqual((code, r["installed"], r["restart_needed"]), (200, True, True))
+        self.assertEqual(self.get("ec-access")["setting"], "auto")
+
+
+for _n in [n for n in dir(MockService) if n.startswith("test_")]:
+    setattr(EcAccessService, _n, None)
 
 
 class LiquidCoolerUnit(unittest.TestCase):
@@ -779,6 +951,103 @@ class FanTableUnit(unittest.TestCase):
         t["GPU"][2]["UpT"] = 50
         with self.assertRaises(ValueError):
             ft.update("M2T1", {"GPU": t["GPU"]})
+
+
+class FanTableBackgroundUnit(unittest.TestCase):
+    """WMI path: the fan curve is written in the background with progress; an identical curve is not written again."""
+
+    def test_deferred_progress_and_skip(self):
+        from uwccd.busy import Busy
+        from uwccd.ec import MockEC
+        from uwccd.fan import FanTables, empty_table
+
+        class Pf:
+            nv_gpu, project_name = True, "test"
+
+        class CountEC(MockEC):
+            writes = 0
+
+            def _write(self, a, v):
+                CountEC.writes += 1
+                time.sleep(0.002)
+                super()._write(a, v)
+
+        events = []
+        busy = Busy(lambda kind, data: events.append((kind, [dict(o) for o in data["ops"]])))
+        ec = CountEC(os.path.join(tempfile.mkdtemp(), "ec.json"))
+        ft = FanTables(ec, Pf())
+        ft.busy, ft.deferred = busy, True
+        t = empty_table("M1T1")
+        for i, (u, d, du) in enumerate([(0, 48, 20), (55, 50, 40), (70, 65, 70), (85, 80, 100)]):
+            for k in ("CPU", "GPU"):
+                t[k][i].update(UpT=u, DownT=d, Duty=du)
+        t0 = time.monotonic()
+        ft.apply_table(t)
+        self.assertLess(time.monotonic() - t0, 0.05)              # returns at once
+        self.assertTrue(ft.wait_idle(10))
+        first = CountEC.writes
+        self.assertGreater(first, 90)
+        ops = [o for kind, lst in events for o in lst if o["op"] == "fan_table"]
+        self.assertTrue(ops and not ops[0]["blocking"])
+        self.assertEqual(max(o["progress"] or 0 for o in ops), 100)
+        self.assertEqual(events[-1][1], [])                         # finished
+        ft.apply_table(t)                                           # same curve, still active -> skipped
+        ft.wait_idle(10)
+        self.assertLess(CountEC.writes - first, 3)
+        ft.invalidate()                                             # e.g. after resume -> written again
+        ft.apply_table(t)
+        ft.wait_idle(10)
+        self.assertGreater(CountEC.writes - first, 90)
+
+
+class EditionUnit(unittest.TestCase):
+    def test_update_asset_matches_edition(self):
+        from uwccd import updates
+        assets = {"open-uniwill-cc-windows-1.6.1-setup.exe": "full", "open-uniwill-cc-windows-1.6.1-free-setup.exe": "free"}
+        for ed in ("full", "free"):
+            os.environ["UWCC_EDITION"] = ed
+            try:
+                self.assertEqual(updates._setup_asset(assets), ed)
+            finally:
+                os.environ.pop("UWCC_EDITION", None)
+        from uwccd import edition
+        self.assertEqual(edition(), "source")
+
+
+class SnapshotUnit(unittest.TestCase):
+    def test_restore_snapshot(self):
+        from uwccd import selfcheck, store
+        from uwccd.ec import MockEC
+        d = tempfile.mkdtemp()
+        old = store.DATA_DIR
+        store.DATA_DIR = d
+        try:
+            ec = MockEC(os.path.join(d, "ec.json"))
+            ec.write(0x783, 99)
+            store.save_json(store.path(selfcheck.SNAPSHOT), {"regs": {"0x783": 40, "0x74E": 0x10}})
+            self.assertTrue(selfcheck.restore_snapshot(ec))
+            self.assertEqual((ec.read(0x783), ec.read(0x74E)), (40, 0x10))
+            self.assertFalse(os.path.exists(store.path(selfcheck.SNAPSHOT)))
+            self.assertFalse(selfcheck.restore_snapshot(ec))
+        finally:
+            store.DATA_DIR = old
+
+
+class PlatformDbUnit(unittest.TestCase):
+    def test_profiles_and_caps(self):
+        from uwccd import platformdb
+        p = platformdb.match(0x10)
+        self.assertEqual((p["profile"]["id"], p["source"]), ("uniwill-0x10", "builtin"))
+        self.assertTrue(platformdb.match(0x77).get("fallback"))
+        with self.assertRaises(ValueError):
+            platformdb.check_limits({"PL4": 301})
+        with self.assertRaises(ValueError):
+            platformdb.check_limits({"PL1": 170, "PL4": 250}, 0x10)          # above the factory 160
+        self.assertEqual(platformdb.check_limits({"PL1": 120, "PL4": 250}, 0x10)["PL1"], 120)
+        v = platformdb.validate({"id": "x-1", "status": "verified", "match": {"project": ["0x22"]}, "limits": {"PL4": 200}})
+        self.assertEqual(v["status"], "community")                             # only built-in profiles are verified
+        with self.assertRaises(ValueError):
+            platformdb.validate({"id": "Bad Id", "match": {"project": ["0x22"]}})
 
 
 class PlatformSupportUnit(unittest.TestCase):

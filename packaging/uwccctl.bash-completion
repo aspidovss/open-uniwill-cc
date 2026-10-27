@@ -11,7 +11,7 @@ _uwccctl() {
     for ((i = 1; i < cword; i++)); do [[ ${words[i]} == --json ]] || w+=("${words[i]}"); done
     local cmd=${w[0]} sub=${w[1]} n=${#w[@]}
     local commands="status monitor mode profile boost super ramoc fan battery kb lb get set apps restore lc
-        history export import report lang debug version update restart resume lighting nvram ec ec-direct release help"
+        history export import report lang debug version update restart resume lighting nvram ec ec-direct release help driver"
     local onoff="on off"
     local modes="office gaming turbo custom"
     local keys="winkey_lock fn_lock usb_charger touchpad_toggle touchpad_enabled ac_recovery dgpu_direct
@@ -130,7 +130,16 @@ _uwccctl() {
                 --sections) ;;
                 *) COMPREPLY=($(compgen -W "--private --sections --full" -- "$cur") $(compgen -f -- "$cur")) ;;
             esac ;;
-        ec) ((n == 1)) && COMPREPLY=($(compgen -W "read" -- "$cur")) ;;
+        ec|driver)
+            if ((n == 1)); then COMPREPLY=($(compgen -W "use config test unlock lock install-driver monitor platform selfcheck$([[ $cmd == ec ]] && echo ' read')" -- "$cur"))
+            elif ((n == 2)) && [[ $sub == use ]]; then COMPREPLY=($(compgen -W "auto oem wmi" -- "$cur"))
+            elif ((n == 2)) && [[ $sub == config ]]; then COMPREPLY=($(compgen -W "export import reset" -- "$cur"))
+            elif ((n == 2)) && [[ $sub == monitor ]]; then COMPREPLY=($(compgen -W "oem wmi all" -- "$cur"))
+            elif ((n == 3)) && [[ $sub == monitor ]]; then COMPREPLY=($(compgen -W "on off" -- "$cur"))
+            elif ((n == 2)) && [[ $sub == platform ]]; then COMPREPLY=($(compgen -W "export import reset apply-draft" -- "$cur"))
+            elif ((n == 2)) && [[ $sub == selfcheck ]]; then COMPREPLY=($(compgen -W "1 2 --export" -- "$cur"))
+            elif ((n == 3)) && [[ $sub == use ]]; then COMPREPLY=($(compgen -W "--accept-risks" -- "$cur"))
+            else COMPREPLY=($(compgen -f -- "$cur")); fi ;;
         ec-direct) ((n == 1)) && COMPREPLY=($(compgen -W "read dump" -- "$cur")) ;;
     esac
 }

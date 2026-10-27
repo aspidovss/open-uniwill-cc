@@ -112,8 +112,10 @@ MAC-адресов и имён пользователей (их можно от�
 
 | Файл | Для чего |
 |---|---|
-| `open-uniwill-cc-windows-<ver>-setup.exe` | Windows 10/11 x64 — установщик |
+| `open-uniwill-cc-windows-<ver>-setup.exe` | Windows 10/11 x64 — установщик, **non-free**: OEM-драйвер + WMI |
 | `open-uniwill-cc-windows-<ver>-portable.zip` | Windows — то же самое, установка через `install.ps1` |
+| `open-uniwill-cc-windows-<ver>-free-setup.exe` | Windows — **свободная** сборка: только WMI, без OEM-драйвера и других проприетарных файлов, распространяется полностью свободно |
+| `open-uniwill-cc-windows-<ver>-free-portable.zip` | Windows — свободная сборка, установка через `install.ps1` |
 | `open-uniwill-cc-linux-<ver>.tar.gz` | Linux на базе Ubuntu / Debian (установщик использует apt; разрабатывалось на Ubuntu 24.04) |
 | `SHA256SUMS.txt` | контрольные суммы |
 
@@ -123,13 +125,24 @@ MAC-адресов и имён пользователей (их можно от�
 
 1. Запустите `open-uniwill-cc-windows-<ver>-setup.exe`, оставьте галочку **«Отключить службу оригинального
    Control Center»** (две программы не должны управлять одним EC).
-2. В области уведомлений появится значок. Программа **запускается вместе с Windows и скрыта в трее**;
+2. Выберите, как программа обращается к встроенному контроллеру:
+   **OEM-драйвер + WMI** (по умолчанию, рекомендуется), **только OEM-драйвер** или **только WMI** — открытая реализация
+   без проприетарных файлов (не рекомендуется, бета: медленнее, без повышенной мощности с СЖО; проверена только на
+   MAIBENBEN Tsunami X629 / Mechrevo Questyle 16 Super / XMG NEO 16 (E23)). Позже это меняется в **менеджере EC**.
+   Подробнее: [docs/EC](docs/EC/README.ru.md).
+
+**Свободная сборка** (`-free-setup.exe`) не содержит оригинального OEM-драйвера и распространяется полностью свободно.
+Без драйвера она работает через WMI (бета). Рекомендуем положить OEM-драйвер из Control Center производителя
+(`UWACPIDriver.inf`, `.sys`, `.cat`) в `C:\ProgramData\UWCC\driver` — установщик установит его оттуда, или позже
+*Менеджер EC → Установить OEM-драйвер* (`uwccctl ec install-driver`). Устанавливая драйвер, вы подтверждаете, что у вас
+есть право использовать этот файл.
+3. В области уведомлений появится значок. Программа **запускается вместе с Windows и скрыта в трее**;
    окно открывается щелчком по значку или через *Пуск → UWCC Control Center*.
 
 Portable zip: распакуйте и выполните в PowerShell `powershell -ExecutionPolicy Bypass -File .\install.ps1` (попросит права администратора).
 
 Что ставится: служба `uwccd` (LocalSystem), `ControlCenter.exe` (трей / окно), `uwccctl.exe` (консоль) и ACPI-драйвер
-производителя `UWACPIDriver`, если его ещё нет. Подробнее: [README.windows.md](README.windows.md).
+производителя `UWACPIDriver`, если его ещё нет (кроме варианта «только WMI»). Подробнее: [README.windows.md](README.windows.md).
 
 ### Linux
 

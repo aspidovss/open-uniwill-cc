@@ -35,15 +35,20 @@ The OEM driver and the factory fan tables are taken from `proprietary\` of the r
 powershell -ExecutionPolicy Bypass -File .\build_windows.ps1
 ```
 
-Optional switches (type them without brackets): `-NoInstaller`, `-Clean`, `-Public` (no OEM driver and fan tables in the
-package), `-CC "D:\ControlCenter_5.52.49.6_MBB"`, `-Driver "D:\folder\with\UWACPIDriver.inf"`,
+Two editions are built by default: **non-free** (OEM driver + WMI) and **free** (WMI only, no OEM driver and no factory
+fan tables; distributed freely). `-Edition full` or `-Edition free` builds only one (`-Public` = `-Edition free`).
+Other optional switches (type them without brackets): `-NoInstaller`, `-Clean`, `-CC "D:\ControlCenter_5.52.49.6_MBB"`, `-Driver "D:\folder\with\UWACPIDriver.inf"`,
 e.g. `.\build.cmd -Clean -NoInstaller`. More, including debugging: [docs/BUILD.md](docs/BUILD.md).
 
 Result in `dist\`:
 
-* `ControlCenter\` — the program folder (three exe files, `driver\`, `install.ps1`, `uninstall.ps1`);
-* `open-uniwill-cc-windows-<ver>-portable.zip`;
-* `open-uniwill-cc-windows-<ver>-setup.exe` (if Inno Setup is installed).
+* `ControlCenter\` — the non-free program folder (three exe files, `driver\`, `install.ps1`, `uninstall.ps1`);
+* `ControlCenter-free\` — the free one (no `driver\`, `OEM-DRIVER-README.txt`);
+* `open-uniwill-cc-windows-<ver>-portable.zip` and `-free-portable.zip`;
+* `open-uniwill-cc-windows-<ver>-setup.exe` and `-free-setup.exe` (if Inno Setup is installed).
+
+The free build looks for the OEM driver in `C:\ProgramData\UWCC\driver` (`UWACPIDriver.inf`, `.sys`, `.cat`): the
+installer and *EC Manager → Install the OEM driver* install it from there.
 
 ## Installing
 
@@ -104,11 +109,15 @@ Windows-сборка open-uniwill-cc: тот же код службы, веб-и
 powershell -ExecutionPolicy Bypass -File .\build_windows.ps1
 ```
 
-Необязательные ключи (без квадратных скобок): `-NoInstaller`, `-Clean`, `-Public` (без драйвера и таблиц), `-CC "D:\папка CC"`, `-Driver "D:\папка с UWACPIDriver.inf"`,
+По умолчанию собираются две версии: **non-free** (OEM-драйвер + WMI) и **free** (только WMI, без OEM-драйвера и заводских
+таблиц вентиляторов; распространяется свободно). `-Edition full` или `-Edition free` — только одна (`-Public` = `-Edition free`).
+Другие необязательные ключи (без квадратных скобок): `-NoInstaller`, `-Clean`, `-CC "D:\папка CC"`, `-Driver "D:\папка с UWACPIDriver.inf"`,
 например `.\build.cmd -Clean -NoInstaller`. Подробнее, включая отладку: [docs/BUILD.md](docs/BUILD.md).
 
-В `dist\` появятся папка `ControlCenter\`, `open-uniwill-cc-windows-<ver>-portable.zip` и (если есть Inno Setup)
-`open-uniwill-cc-windows-<ver>-setup.exe`.
+В `dist\` появятся папки `ControlCenter\` (non-free) и `ControlCenter-free\`, `open-uniwill-cc-windows-<ver>-portable.zip`
+и `-free-portable.zip`, а если есть Inno Setup — `open-uniwill-cc-windows-<ver>-setup.exe` и `-free-setup.exe`.
+Свободная версия ищет OEM-драйвер в `C:\ProgramData\UWCC\driver` (`UWACPIDriver.inf`, `.sys`, `.cat`): установщик и
+*Менеджер EC → Установить OEM-драйвер* ставят его оттуда.
 
 **Установка:** `setup.exe` либо `install.ps1` из zip (сам запросит права администратора). Установщик останавливает и
 отключает GCUService, ставит драйвер UWACPIDriver (если его нет), регистрирует и запускает службу **uwccd**,

@@ -18,6 +18,7 @@
       <div class="nav-group" data-i>System</div>
       <a data-page="monitor" class="active"><i class="ico ico-monitor"></i><span data-i>Monitor</span></a>
       <a data-page="info"><i class="ico ico-info"></i><span data-i>Information</span></a>
+      <a data-page="driver" id="nav-driver" class="hidden"><i class="ico ico-chip"></i><span data-i>EC Manager</span></a>
       <div class="nav-group" data-i>Performance</div>
       <a data-page="modes"><i class="ico ico-mode"></i><span data-i>Mode selection</span></a>
       <a data-page="fans"><i class="ico ico-fan"></i><span data-i>Fan settings</span></a>
@@ -33,6 +34,8 @@
       <a data-page="binding"><i class="ico ico-bind"></i><span data-i>App binding</span></a>
     </nav>
     <div class="nav-foot">
+      <div class="wmi-badge hidden" id="wmi-badge" role="button" title="EC Manager">WMI DRIVER ON</div>
+      <div class="busy-chip hidden" id="busy-chip"></div>
       <div class="modepill" id="modepill">—</div>
       <div class="lc-pill hidden" id="lc-pill"></div>
       <div class="row between">
@@ -43,9 +46,11 @@
   </aside>
 
   <main id="main">
+    <div class="ec-banner hidden" id="ec-banner"></div>
     <!-- MONITOR -->
     <section class="page active" id="page-monitor">
       <header class="ph"><h1 data-i>System monitor</h1><p data-i>Temperatures, fans and load in real time</p></header>
+      <div class="ec-banner hidden" id="mon-off"></div>
       <div class="grid g4" id="gauges"></div>
       <div class="grid g2">
         <div class="card">
@@ -86,6 +91,11 @@
         <div class="card"><h3 data-i>Device</h3><dl class="kv" id="info-dev"></dl></div>
         <div class="card"><h3 data-i>Control Center service</h3><dl class="kv" id="info-svc"></dl></div>
       </div>
+      <div class="card hidden" id="info-ec">
+        <div class="row between wrap"><h3 data-i>EC access</h3><button class="btn ghost" id="info-ec-open" data-i>Open EC Manager</button></div>
+        <dl class="kv" id="info-ec-kv"></dl>
+        <p class="muted tiny" id="info-ec-note"></p>
+      </div>
       <div class="card"><h3 data-i>Drives</h3><div id="info-disks"></div></div>
       <div class="card hidden" id="gpu-card">
         <div class="row between"><h3 data-i>Discrete GPU</h3><button class="btn ghost" id="gpu-refresh" data-i>Refresh</button></div>
@@ -115,6 +125,69 @@
       </div>
     </section>
 
+    <!-- DRIVER MANAGER (Windows) -->
+    <section class="page" id="page-driver">
+      <header class="ph"><h1 data-i>EC Manager</h1><p data-i>How the program reaches the laptop's embedded controller (EC): fans, modes, power limits, battery and switches.</p></header>
+      <div class="admin-bar" id="dm-admin"></div>
+      <div class="card hidden" id="dm-edition"></div>
+      <div class="card">
+        <h3 data-i>EC access path</h3>
+        <dl class="kv" id="dm-kv"></dl>
+        <div class="choices" id="dm-choices" style="margin-top:12px"></div>
+        <p class="muted tiny" style="margin-top:10px" data-i>By choosing the OEM driver you confirm that you have the right to use this file (UWACPIDriver.sys, part of the laptop manufacturer's Control Center).</p>
+        <p class="muted tiny"><a id="dm-docs" target="_blank" rel="noopener" data-i>Documentation: EC registers, OEM driver vs WMI (GitHub)</a></p>
+      </div>
+      <div class="card" id="dm-platform">
+        <div class="row between wrap"><h3 data-i>Platform profile</h3>
+          <div class="row wrap">
+            <button class="btn ghost" id="dm-plat-import" data-i>Import</button><input type="file" id="dm-plat-file" accept=".json,application/json" class="hidden">
+            <button class="btn ghost" id="dm-plat-export" data-i>Export</button>
+            <button class="btn ghost hidden" id="dm-plat-reset" data-i>Use the built-in profile</button></div></div>
+        <p class="muted tiny" data-i>What the program knows about this laptop platform: which functions work through WMI, the power limits used instead of the firmware table, tested EC and BIOS versions. Built-in profiles are verified by the authors; your own one (imported or made by the self-check) replaces it.</p>
+        <dl class="kv" id="dm-platform-kv"></dl>
+        <ul class="muted tiny" id="dm-platform-notes"></ul>
+      </div>
+      <div class="card" id="dm-selfcheck">
+        <div class="row between wrap"><h3 data-i>Self-check</h3>
+          <div class="row wrap">
+            <button class="btn ghost" id="dm-sc-export" data-i>Export for GitHub</button>
+            <button class="btn ghost" id="dm-sc-apply" disabled data-i>Apply as platform profile</button>
+            <button class="btn ghost" id="dm-sc-2" data-i>Stage 2: with writes</button>
+            <button class="btn" id="dm-sc-1" data-i>Stage 1: read only</button></div></div>
+        <p class="muted tiny" data-i>Stage 1 only reads: identity, access paths (both compared byte by byte when the OEM driver and WMI are present), plausibility of known registers, time per access, firmware methods. Stage 2 (administrator, on AC power) switches every function a little and back with read-back: mode, Fan Boost, PL1, cTGP, charge limit, Fn Lock, the fan-table handshake; the registers are saved first and restored even after a crash. The result lists what works, what is not clear, and a draft platform profile.</p>
+        <p class="muted" id="dm-sc-state"></p>
+        <div id="dm-sc-out"></div>
+      </div>
+      <div class="card">
+        <h3 data-i>Monitoring</h3>
+        <div id="dm-monitor"></div>
+      </div>
+      <div class="card" id="dm-wmi">
+        <div class="row between wrap"><h3 data-i>WMI settings</h3>
+          <div class="row wrap">
+            <button class="btn ghost" id="dm-import" data-i>Import</button><input type="file" id="dm-file" accept=".json,application/json" class="hidden">
+            <button class="btn ghost" id="dm-export" data-i>Export</button>
+            <button class="btn ghost" id="dm-reset" data-i>Factory settings</button>
+            <button class="btn" id="dm-save" data-i>Save</button></div></div>
+        <p class="muted tiny" data-i>Used only on the WMI path. The open implementation reaches the EC through the WMI interface of the firmware (root\WMI AcpiTest_MULong): every access takes about 125 ms, the Smart APC limit table (SMRW) and the liquid-cooling power level (PWUP) are not reachable. Here you choose which functions stay available, how often the EC is read and the power limits used instead of SMRW. Poll, timeout and limit changes apply after the service restarts.</p>
+        <p class="muted tiny" data-i>Factory values come from the platform profile. Limits cannot exceed the hard caps of the program, and on a verified platform they cannot exceed the factory values.</p>
+        <h4 data-i>Functions</h4>
+        <div class="dm-grid" id="dm-features"></div>
+        <h4 data-i>Polling</h4>
+        <div class="dm-grid" id="dm-params"></div>
+        <h4 id="dm-limits-title"></h4>
+        <div class="dm-grid" id="dm-limits"></div>
+        <h4 data-i>Registers</h4>
+        <div class="dm-grid" id="dm-lists"></div>
+      </div>
+      <div class="card">
+        <div class="row between wrap"><h3 data-i>Check</h3>
+          <div class="row"><button class="btn ghost" id="dm-restart" data-i>Restart the service</button><button class="btn" id="dm-test" data-i>Test the EC path</button></div></div>
+        <p class="muted tiny" data-i>Reads the project ID and a few registers through the active path and measures the time of one access. Nothing is written.</p>
+        <div id="dm-test-out" class="muted"></div>
+      </div>
+    </section>
+
     <!-- MODES -->
     <section class="page" id="page-modes">
       <header class="ph"><h1 data-i>Mode selection</h1><p data-i>Power and fan operating mode. The Fn + mode key cycles through them.</p></header>
@@ -132,7 +205,7 @@
         <p class="muted tiny" id="pe-note"></p>
         <div id="pe-rows"></div>
       </div>
-      <div class="card row between">
+      <div class="card row between" id="fanboost-card">
         <div><h3 data-i>Fan Boost</h3><p class="muted" data-i>Fans run at maximum speed</p></div>
         <label class="sw"><input type="checkbox" id="fanboost"><span></span></label>
       </div>
@@ -412,6 +485,10 @@
   </main>
 </div>
 <div id="svc-down" class="svc-down hidden"></div>
+<div class="eula hidden" id="busy-overlay" role="alertdialog" aria-modal="true" aria-live="polite">
+  <div class="eula-card narrow busy-card"><h2 id="busy-title"></h2><p class="muted" id="busy-sub"></p>
+    <div class="pbar" id="busy-bar"><div></div></div></div>
+</div>
 <div id="toast"></div>
 <div id="osd"></div>
 <script src="i18n.js"></script>

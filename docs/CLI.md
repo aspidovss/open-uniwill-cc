@@ -158,5 +158,13 @@ App binding: `apps`, `apps add PROCESS MODE`, `apps remove PROCESS`, `apps enabl
 | `version` / `update [check\|install]` | version / new release (install: Windows) |
 | `restart` / `resume` | restart the service / re-apply settings |
 | `lighting` / `nvram` / `ec read ADDR` | diagnostics |
+| `driver` | EC access path, OEM driver, WMI functions (Windows) |
+| `driver use auto\|oem\|wmi [--accept-risks]` | OEM driver + WMI (default) / OEM only / WMI only (open, not recommended, beta) |
+| `driver config export\|import FILE` / `driver config reset` / `driver test` | WMI settings `ec_wmi.json` ([EC/WMI-config.md](EC/WMI-config.md)), quick test |
+| `driver unlock [MIN]` / `driver lock` | open the EC Manager settings for the window (administrator / sudo) |
+| `driver monitor oem\|wmi\|all on\|off` | monitoring through an EC path / all monitoring |
+| `driver platform [export\|import FILE\|reset\|apply-draft]` | platform profile ([EC/Platforms.md](EC/Platforms.md)) |
+| `driver selfcheck [1\|2] [--export FILE]` | self-check: read only / with writes (administrator, AC power) |
+| `ec …` | same as `driver …` (EC Manager); `ec read ADDR` reads one register |
 | `ec-direct read ADDR [N]` / `ec-direct dump BASE` | EC without the service (root) |
 | `release` | give fan control back to the EC (root, uninstall) |

@@ -13,9 +13,16 @@
   5. packs dist\open-uniwill-cc-windows-<ver>-portable.zip;
   6. compiles dist\open-uniwill-cc-windows-<ver>-setup.exe when Inno Setup 6 (ISCC.exe) is installed.
 
+  Two editions (-Edition both, the default):
+    non-free  open-uniwill-cc-windows-<ver>-setup.exe / -portable.zip            OEM driver + WMI
+    free      open-uniwill-cc-windows-<ver>-free-setup.exe / -free-portable.zip  WMI only: no OEM driver and no factory
+              fan tables (proprietary/), distributed completely freely; the user can put the OEM driver into
+              C:\ProgramData\UWCC\driver and install it from EC Manager.
+
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File build_windows.ps1
   powershell -ExecutionPolicy Bypass -File build_windows.ps1 -CC "D:\ControlCenter_5.52.49.6_MBB" -NoInstaller
+  powershell -ExecutionPolicy Bypass -File build_windows.ps1 -Edition free
 #>
 [CmdletBinding()]
 param(
@@ -23,7 +30,9 @@ param(
     [string]$CC = "",              # folder of the original Control Center package (UserFanTables, setup exe)
     [string]$Driver = "",          # folder with UWACPIDriver.inf/.sys/.cat
     [switch]$NoInstaller,          # skip Inno Setup even if it is installed
-    [switch]$Public,               # do not bundle the OEM driver and factory fan tables (proprietary/)
+    [ValidateSet("both", "full", "free")]
+    [string]$Edition = "both",     # full = OEM driver + WMI (non-free), free = WMI only (no proprietary files)
+    [switch]$Public,               # same as -Edition free
     [switch]$Clean                 # remove .venv-win, build and dist first
 )
 
@@ -35,8 +44,15 @@ function Say($m)  { Write-Host "==> $m" -ForegroundColor Cyan }
 function Warn($m) { Write-Host "!!  $m" -ForegroundColor Yellow }
 function Die($m)  { Write-Host "XX  $m" -ForegroundColor Red; exit 1 }
 
+if ($Public) { $Edition = "free" }
+$BuildFull = $Edition -ne "free"
+$BuildFree = $Edition -ne "full"
+
 $Version = (Select-String -Path "uwccd\__init__.py" -Pattern '__version__\s*=\s*"([^"]+)"').Matches[0].Groups[1].Value
-Say "UWCC Control Center $Version for Windows"
+$editions = @()
+if ($BuildFull) { $editions += "non-free" }
+if ($BuildFree) { $editions += "free" }
+Say "UWCC Control Center $Version for Windows ($($editions -join ' + '))"
 
 if ($Clean) {
     # programs started from dist\ (a test run of uwccd.exe / ControlCenter.exe, setup.exe) lock the folder
@@ -93,8 +109,8 @@ if ($ccDir) { Say "Original Control Center package: $ccDir" } else { Warn "Contr
 
 $dataDir = Join-Path $Root "uwccd\data"
 $createdData = $false
-if ($Public) {
-    Say "Public build: factory fan tables are not bundled (they are read from the EC)"
+if (-not $BuildFull) {
+    Say "Free build: factory fan tables are not bundled (they are read from the EC)"
 } elseif ($ccDir -and (Test-Path "$ccDir\UserFanTables")) {
     if (-not (Test-Path $dataDir)) { New-Item -ItemType Directory $dataDir | Out-Null; $createdData = $true }
     Say "Factory fan tables: $ccDir\UserFanTables"
@@ -152,9 +168,9 @@ function Find-Driver {
     }
     return $null
 }
-$drv = if ($Public) { $null } else { Find-Driver }
-if ($Public) {
-    Say "Public build: the OEM driver is not bundled (install.ps1 uses the driver of the original Control Center)"
+$drv = if ($BuildFull) { Find-Driver } else { $null }
+if (-not $BuildFull) {
+    Say "Free build: the OEM driver is not bundled (the user can put it into C:\ProgramData\UWCC\driver)"
 } elseif ($drv) {
     Say "ACPI driver: $drv"
     New-Item -ItemType Directory -Force "$out\driver" | Out-Null
@@ -171,11 +187,31 @@ Copy-Item -Force README.windows.md "$out\README.md"
 Copy-Item -Force windows\icon.ico $out
 foreach ($f in "LICENSE", "NOTICE.md", "THIRD_PARTY_LICENSES.txt") { if (Test-Path $f) { Copy-Item -Force $f $out } }
 Set-Content -Path "$out\VERSION" -Value $Version -Encoding ASCII
+Set-Content -Path "$out\EDITION" -Value "full" -Encoding ASCII
 
-$zipPath = Join-Path $Root "dist\open-uniwill-cc-windows-$Version-portable.zip"
-if (Test-Path $zipPath) { Remove-Item -Force $zipPath }
-Say "Packing $(Split-Path $zipPath -Leaf)"
-Compress-Archive -Path $out -DestinationPath $zipPath
+# ---------------------------------------------------------------- free edition: the same programs without proprietary files
+$freeOut = Join-Path $Root "dist\ControlCenter-free"
+if ($BuildFree) {
+    Say "Free edition: $freeOut"
+    if (Test-Path $freeOut) { Remove-Item -Recurse -Force $freeOut }
+    Copy-Item -Recurse $out $freeOut
+    foreach ($p in "driver", "_internal\uwccd\data", "uwccd\data") {
+        if (Test-Path "$freeOut\$p") { Remove-Item -Recurse -Force "$freeOut\$p" }
+    }
+    Set-Content -Path "$freeOut\EDITION" -Value "free" -Encoding ASCII
+    Copy-Item -Force windows\driver-folder-README.txt "$freeOut\OEM-DRIVER-README.txt"
+    $left = Get-ChildItem -Path $freeOut -Recurse -Include "UWACPIDriver*" -ErrorAction SilentlyContinue
+    if ($left) { Die "Free edition still contains proprietary files: $($left.FullName -join ', ')" }
+}
+
+function Pack($src, $name) {
+    $zip = Join-Path $Root "dist\$name"
+    if (Test-Path $zip) { Remove-Item -Force $zip }
+    Say "Packing $name"
+    Compress-Archive -Path $src -DestinationPath $zip
+}
+if ($BuildFull) { Pack $out "open-uniwill-cc-windows-$Version-portable.zip" }
+if ($BuildFree) { Pack $freeOut "open-uniwill-cc-windows-$Version-free-portable.zip" }
 
 if (-not $NoInstaller) {
     $iscc = Get-Command ISCC.exe -ErrorAction SilentlyContinue | ForEach-Object Source
@@ -185,8 +221,14 @@ if (-not $NoInstaller) {
     }
     if ($iscc) {
         Say "Inno Setup: $iscc"
-        & $iscc /Q "/DAppVersion=$Version" "/DSrcDir=$out" "/DOutDir=$Root\dist" windows\ControlCenter.iss
-        if ($LASTEXITCODE) { Die "ISCC failed" }
+        if ($BuildFull) {
+            & $iscc /Q "/DAppVersion=$Version" "/DSrcDir=$out" "/DOutDir=$Root\dist" windows\ControlCenter.iss
+            if ($LASTEXITCODE) { Die "ISCC failed (non-free)" }
+        }
+        if ($BuildFree) {
+            & $iscc /Q "/DAppVersion=$Version" "/DSrcDir=$freeOut" "/DOutDir=$Root\dist" "/DFree" windows\ControlCenter.iss
+            if ($LASTEXITCODE) { Die "ISCC failed (free)" }
+        }
     } else {
         Warn "Inno Setup 6 not found - setup.exe skipped (winget install JRSoftware.InnoSetup), the portable zip has install.ps1"
     }
@@ -194,4 +236,5 @@ if (-not $NoInstaller) {
 
 Say "Done:"
 Get-ChildItem "$Root\dist" -File | ForEach-Object { Write-Host ("    {0}  ({1:N1} MB)" -f $_.FullName, ($_.Length / 1MB)) }
-Write-Host "    $out\  (uwccd.exe, ControlCenter.exe, uwccctl.exe)"
+if ($BuildFull) { Write-Host "    $out\  (non-free: uwccd.exe, ControlCenter.exe, uwccctl.exe, OEM driver)" }
+if ($BuildFree) { Write-Host "    $freeOut\  (free: no OEM driver, no factory fan tables)" }

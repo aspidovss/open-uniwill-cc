@@ -25,7 +25,7 @@ async function api(path, body, method) {
   if (body) { opt.body = JSON.stringify(body); opt.headers["Content-Type"] = "application/json"; }
   const r = await fetch("/api/" + path, opt);
   const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(j.error || r.statusText);
+  if (!r.ok) { const e = new Error(j.error || r.statusText); e.status = r.status; e.data = j; throw e; }
   return j;
 }
 function toast(msg, err) {
@@ -76,6 +76,7 @@ async function act(fn, ok) {
   } catch (e) {
     restore();
     if (btn) { btn._label = null; btn.style.minWidth = ""; }
+    if (e.status === 409 && e.message === "busy") { toast(t("Please wait — the settings are still being applied")); return; }
     const msg = e.message.includes("software") ? t("This effect is not available for this keyboard") : t("Error: {0}", errText(e.message));
     if (btn && btn.isConnected) btn.after(h("span", { class: "btn-err", role: "alert" }, msg));
     else toast(msg, true);
@@ -153,6 +154,7 @@ function render() {
   $("#brand-sub").textContent = S.platform.display_name || S.platform.project_name;
   renderModes(); renderFanPage(); renderLiquid(); renderLight(); renderBattery(); renderSwitches(); renderBinding(); renderInfo(); renderAuto(); renderAbout(); renderReportCard();
   renderHistSeg(); drawHistory();
+  renderDriver(); renderEcBanner(); applyFeatures(); renderBusy(S.busy || []); renderMonOff();
 }
 
 // ---------------------------------------------------------------- monitor
@@ -166,6 +168,8 @@ function gauge(label, value, unit, max, sub, color) {
 }
 function svgEl(markup) { const d = document.createElement("div"); d.innerHTML = markup; return d.firstChild; }
 function onMonitor(m) {
+  if (m.monitoring && m.monitoring !== "full") { lastMonitor = null; renderMonOff(m.monitoring); return; }
+  renderMonOff("full");
   const g = $("#gauges"); g.innerHTML = "";
   g.append(gauge(t("CPU temperature"), m.cpu.temp, "°C", 100, m.cpu.mhz ? `${m.cpu.mhz} ${t("MHz")}` : ""));
   g.append(gauge(t("CPU load"), m.cpu.usage, "%", 100, m.cpu.power_w != null ? `${m.cpu.power_w} ${t("W")}` : ""));
@@ -245,7 +249,7 @@ function renderModes() {
   box.classList.toggle("four", modes.length === 4);
   for (const m of modes) {
     const dis = m.id === 2 && !S.power.turbo_support;
-    box.append(h("div", { class: `mode${S.power.mode === m.id ? " on" : ""}${dis ? " dis" : ""}`, onclick: () => act(() => api("mode", { mode: m.id }), t(m.name)) },
+    box.append(h("div", { class: `mode${S.power.mode === m.id ? " on" : ""}${dis ? " dis" : ""}`, onclick: () => act(() => withBusy(t(m.name), () => api("mode", { mode: m.id })), t(m.name)) },
       h("span", { class: "badge" }, t("Active")), h("div", { class: "glyph" }, m.glyph), h("h2", {}, t(m.name)), h("p", {}, dis ? t("Not supported by this laptop") : t(m.desc))));
   }
   const mode = S.power.mode;
@@ -260,7 +264,7 @@ function renderModes() {
     for (let i = 0; i < n; i++) {
       const pn = `Mode${{ 1: 1, 0: 2, 2: 3, 3: 4 }[mode]}_Profile${i + 1}`;
       const label = mode === 3 ? slotName(S.profiles[pn], i + 1) : t("Profile {0}", i + 1);
-      seg.append(h("button", { class: i === idx ? "on" : "", onclick: () => act(() => api("profile", { mode, index: i }), label) }, label));
+      seg.append(h("button", { class: i === idx ? "on" : "", onclick: () => act(() => withBusy(label, () => api("profile", { mode, index: i })), label) }, label));
     }
     $("#profile-info").innerHTML = "";
     renderProfileEditor();
@@ -300,10 +304,12 @@ function renderProfileEditor(force) {
   const custom = name.startsWith("Mode4");
   $("#pe-title").textContent = custom ? t("Custom slot: {0}", slotName(prof, +name.slice(-1))) : t("Profile settings: {0}", tableLabel(prof.FAN.TableName));
   $("#pe-note").textContent = t("The values are applied on AC power; on battery the controller's own limits are used.") +
-    (L.source === "ec-defaults" ? " " + t("The firmware limit table could not be read, limits are taken from the controller defaults.") : "");
+    (L.source === "ec-defaults" ? " " + t("The firmware limit table could not be read, limits are taken from the controller defaults.") : "") +
+    (L.source === "config" ? " " + t("WMI path: limits are approximate — taken from the platform profile and the WMI settings in EC Manager.") + " " +
+      t("Through WMI the extra graphics power is reached only in the stock Turbo mode; Dynamic Boost here adds power only while the processor leaves room.") : "");
   $("#pe-reset").textContent = custom ? t("Reset slot to factory") : t("Reset profile to factory");
   const rows = $("#pe-rows"); rows.innerHTML = "";
-  const row = (title, sub, ctrl, out) => rows.append(h("div", { class: "pe-row" }, h("div", { class: "lbl" }, h("b", {}, title), h("small", {}, sub)), h("div", { class: "val" }, ctrl), out || h("span")));
+  const row = (title, sub, ctrl, out) => { const el = h("div", { class: "pe-row" }, h("div", { class: "lbl" }, h("b", {}, title), h("small", {}, sub)), h("div", { class: "val" }, ctrl), out || h("span")); rows.append(el); return el; };
   const slider = (sect, key, min, max, unit) => {
     if (max > min) pe[sect][key] = Math.min(Math.max(pe[sect][key], min), max);
     const o = h("output", {}, `${pe[sect][key]} ${unit}`);
@@ -365,11 +371,11 @@ function renderProfileEditor(force) {
   if (S.platform.nv_gpu && (L.ctgp_support || L.db_support)) {
     if (L.ctgp_support) {
       [r, o] = slider("GPU", "ConfigurableTGPTarget", L.tgp_default, L.tgp_max + (pe.GPU.DynamicBoostSwitch ? 0 : L.db_max), W);
-      row(t("Graphics power target (cTGP)"), t("The total power the graphics card may use"), h("div", { class: "row", style: "flex:1" }, toggle("GPU", "ConfigurableTGPSwitch"), r), o);
+      row(t("Graphics power target (cTGP)"), t("The total power the graphics card may use"), h("div", { class: "row", style: "flex:1" }, toggle("GPU", "ConfigurableTGPSwitch"), r), o).dataset.feature = "gpu_power";
     }
     if (L.db_support) {
       [r, o] = slider("GPU", "DynamicBoost", 0, L.db_max, W);
-      row(t("Dynamic Boost"), t("Lets the graphics card take power from the processor"), h("div", { class: "row", style: "flex:1" }, toggle("GPU", "DynamicBoostSwitch", () => renderProfileEditor(true)), r), o);
+      row(t("Dynamic Boost"), t("Lets the graphics card take power from the processor"), h("div", { class: "row", style: "flex:1" }, toggle("GPU", "DynamicBoostSwitch", () => renderProfileEditor(true)), r), o).dataset.feature = "gpu_power";
       if (dbStatus && dbStatus.service && !dbStatus.active) {
         const msg = dbStatus.present ? t("{0} is not running — Dynamic Boost has no effect until it is started.", dbStatus.service)
           : t("{0} is not installed — Dynamic Boost has no effect. Install it with the NVIDIA driver.", dbStatus.service);
@@ -378,6 +384,7 @@ function renderProfileEditor(force) {
       }
     }
   }
+  if (typeof applyFeatures === "function" && S) applyFeatures();
 }
 $("#pe-apply").addEventListener("click", () => {
   if (!pe) return;
@@ -821,6 +828,10 @@ function renderLiquid() {
   $("#lc-na").classList.toggle("hidden", L.available);
   $("#lc-ui").classList.toggle("hidden", !L.available);
   if (!L.available) return;
+  let nt = $("#lc-notemps");
+  if (!nt) { nt = h("div", { class: "ec-banner", id: "lc-notemps" }); $("#lc-ui").prepend(nt); }
+  nt.classList.toggle("hidden", !L.no_temps);
+  if (L.no_temps) nt.textContent = t("All monitoring is off (EC Manager): no temperatures are read, so the automatic mode runs the fixed “{0}” preset.", t({ low: "Low", medium: "Medium", high: "High" }[L.no_temps_preset] || L.no_temps_preset));
   const c = L.config, busy = ["scanning", "connecting"].includes(L.status) || lcScanning;
   $("#lc-state").className = "lc-state" + (L.connected ? " on" : busy ? " busy" : "");
   $("#lc-title").textContent = L.connected ? L.name : L.status === "connecting" ? t("Connecting to {0}…", c.name || c.address) : busy ? t("Searching…") : t("Not connected");
@@ -1487,6 +1498,9 @@ function connect() {
   es.onmessage = ev => {
     const m = JSON.parse(ev.data);
     if (m.type === "monitor") return onMonitor(m.data);
+    if (m.type === "busy") { renderBusy(m.data.ops || []); if (S) S.busy = m.data.ops || []; }
+    if (m.type === "restarting") showRestart();
+    if (m.type === "admin") { if (S && S.ec_access) S.ec_access.admin = m.data; renderAdmin(); if (m.data.declined) toast(t("Administrator rights were not granted"), true); }
     if (m.type === "mode" && m.data.osd) osd(m.data.mode === 3 ? `Custom · ${slotName(S?.profiles?.["Mode4_Profile" + ((m.data.slot || 0) + 1)], (m.data.slot || 0) + 1)}` : (MODES[m.data.mode]?.osd || ""));
     if (m.type === "overheat") toast(t("{0} at {1} °C for 30 seconds", m.data.sensor === "gpu" ? t("GPU") : t("CPU"), m.data.temp), true);
     if (m.type === "overheat_boost") toast(t("Fan Boost turned on because of overheating"), true);
@@ -1504,6 +1518,7 @@ function connect() {
   }
   try { await refresh(); } catch (e) { toast(t("Service unavailable: {0}", e.message), true); }
   if (S && S.settings && (S.settings.eula_accepted || 0) < (S.settings.eula_version || 1)) await showAgreement();
+  await offerWmiIfNoDriver();
   connect();
 })();
 
@@ -1542,4 +1557,505 @@ function showAgreement() {
     });
     document.body.append(box); load();
   });
+}
+
+// ---------------------------------------------------------------- EC Manager: OEM driver / WMI (Windows)
+const EC_FEATURES = {
+  modes: { name: "Modes and profiles", sel: ["#mode-cards", "#profile-seg", "#btn-restore"] },
+  fan_boost: { name: "Fan Boost", sel: ["#fanboost-card"] },
+  power_limits: { name: "CPU power limits and TCC", sel: ["#profile-editor"] },
+  gpu_power: { name: "Graphics power (cTGP, Dynamic Boost)", sel: [] },
+  super_performance: { name: "Super performance", sel: ["#sp-row"] },
+  fan_tables: { name: "Fan curves", sel: ["#page-fans .card"] },
+  fan_monitor: { name: "Fan speed readings", sel: [] },
+  battery: { name: "Battery protection and charge limits", sel: ["#page-battery .card"] },
+  switches: { name: "Switches (Fn Lock, Win key, USB, touchpad)", sel: ["#switch-list"] },
+  lightbar_ec: { name: "Light bar (EC trigger)", sel: [] },
+  lc_ec: { name: "Liquid cooler: EC targets and flag", sel: [] },
+  power_boost_lc: { name: "Power boost with liquid cooling", sel: ["#lc-hwoc-box"] },
+};
+const EC_PATHS = [
+  { id: "auto", name: "OEM driver + WMI", tag: "recommended", rec: true, desc: "The manufacturer's UWACPIDriver.sys — full functions and full speed. WMI is used only when the driver is missing and you agreed." },
+  { id: "oem", name: "OEM driver only", tag: "", desc: "Only UWACPIDriver.sys. Without it the program cannot reach the EC." },
+  { id: "wmi", name: "WMI only — open implementation", tag: "not recommended · beta", desc: "No proprietary files: the Windows built-in WMI driver. Slow, no liquid-cooling power boost, approximate limits." },
+];
+const ecA = () => (S && S.ec_access) || null;
+const ecWin = () => { const a = ecA(); return !!(a && a.windows); };
+
+function applyFeatures() {
+  const a = ecA();
+  const feats = (a && a.features) || {};
+  for (const [k, f] of Object.entries(EC_FEATURES)) {
+    const st = feats[k] || "on";
+    const els = [...f.sel.flatMap(s => $$(s)), ...$$(`[data-feature="${k}"]`)];
+    for (const el of els) {
+      el.classList.toggle("feat-off", st === "off");
+      el.classList.toggle("feat-slow", st === "slow");
+      el.dataset.featText = st === "off" ? (a && a.active === "none" ? t("no EC access") : t("not available with WMI")) : st === "slow" ? t("slow with WMI") : "";
+      el.inert = st === "off";
+    }
+  }
+}
+
+function renderEcBanner() {
+  const a = ecA(), b = $("#ec-banner"), badge = $("#wmi-badge");
+  $("#nav-driver").classList.toggle("hidden", !ecWin());
+  badge.classList.toggle("hidden", !(a && a.active === "wmi"));
+  const show = a && a.active === "none";
+  b.classList.toggle("hidden", !show);
+  if (!show) return;
+  const msg = { oem_missing: t("The OEM driver UWACPIDriver was not found — the program cannot reach the embedded controller (fans, modes, power limits, battery). Install the OEM driver (recommended) or switch to the open WMI implementation (beta)."),
+    wmi_consent: t("The WMI path is selected, but its warning has not been accepted yet."),
+    wmi_failed: t("The WMI path could not be opened: {0}", a.wmi_error || "") }[a.reason] || t("No access to the embedded controller.");
+  b.replaceChildren(h("div", {}, h("b", {}, t("No access to the embedded controller")), h("p", {}, msg)),
+    h("button", { class: "btn", onclick: () => $(`#nav a[data-page="driver"]`)?.click() }, t("Open EC Manager")));
+}
+$("#wmi-badge").addEventListener("click", () => $(`#nav a[data-page="driver"]`)?.click());
+$("#info-ec-open").addEventListener("click", () => $(`#nav a[data-page="driver"]`)?.click());
+
+const PATH_NAME = { oem: "OEM driver (UWACPIDriver)", wmi: "WMI (open implementation, beta)", none: "none", native: "kernel module / acpi_call", mock: "simulation" };
+function ecKv(a) {
+  const d = a.driver || {};
+  return [[t("Active path"), t(PATH_NAME[a.active] || a.active || "—")],
+    [t("Selected"), t((EC_PATHS.find(p => p.id === a.setting) || {}).name || a.setting)],
+    [t("OEM driver"), a.oem_present === null || a.oem_present === undefined ? "—" : a.oem_present
+      ? t("installed") + (d.version ? ` · ${d.version}${d.date ? " (" + d.date + ")" : ""}` : "") : t("not found")],
+    [t("WMI warning"), a.consent ? t("accepted") : t("not accepted")],
+    ...(a.active === "wmi" && a.stats ? [[t("EC accesses"), t("{0} reads ({1} from cache), {2} writes ({3} skipped)", a.stats.reads, a.stats.cached, a.stats.writes, a.stats.skipped)]] : [])];
+}
+
+function renderDriver() {
+  const a = ecA();
+  if (!a || !a.windows) return;
+  const dl = (el, rows) => { el.innerHTML = ""; for (const [k, v] of rows) el.append(h("dt", {}, k), h("dd", {}, v ?? "—")); };
+  dl($("#dm-kv"), ecKv(a));
+  $("#dm-docs").href = a.docs;
+  const box = $("#dm-choices"); box.innerHTML = "";
+  for (const p of EC_PATHS) box.append(h("div", { class: "choice" + (a.setting === p.id ? " on" : "") + (p.id === "wmi" ? " risky" : "") + (p.rec ? " rec" : ""),
+    onclick: () => chooseEcPath(p.id) },
+    h("h4", {}, t(p.name), p.tag ? h("span", { class: "tag" + (p.id === "wmi" ? " bad" : "") + (p.rec ? " good" : "") }, t(p.tag)) : null), h("p", {}, t(p.desc))));
+  renderAdmin(); renderEdition(a); renderPlatform(a); renderMonitoring(a); renderSelfcheck(a);
+  // info page block
+  $("#info-ec").classList.remove("hidden");
+  dl($("#info-ec-kv"), ecKv(a));
+  $("#info-ec-note").textContent = a.active === "wmi" ? t("WMI path: about 125 ms per EC access, no liquid-cooling power boost (PWUP), limits from the WMI settings instead of the firmware table (SMRW).") + " " +
+    t("The extra graphics power is reached only in the stock Turbo mode.") : "";
+  if (!dmDirty) renderWmiConfig(a);
+}
+
+let dmCfg = null, dmDirty = false;
+function renderWmiConfig(a) {
+  dmCfg = JSON.parse(JSON.stringify(a.config));
+  const f = $("#dm-features"); f.innerHTML = "";
+  for (const fl of a.feature_list) {
+    const k = fl.key, sel = h("select", { disabled: fl.locked ? true : null });
+    for (const v of ["on", "slow", "off"]) { const o = h("option", { value: v }, t({ on: "available", slow: "available, slow", off: "off" }[v])); if (dmCfg.features[k] === v) o.selected = true; sel.append(o); }
+    sel.addEventListener("change", () => { dmCfg.features[k] = sel.value; dmDirty = true; });
+    f.append(h("div", { class: "dm-item" }, h("span", {}, t((EC_FEATURES[k] || {}).name || k), fl.locked ? h("small", { class: "muted" }, " · " + t("needs the OEM driver")) : null), sel));
+  }
+  const num = (parent, label, obj, key, min, max, step) => {
+    const i = h("input", { type: "number", min, max, step: step || 1, value: obj[key] });
+    i.addEventListener("input", () => { obj[key] = +i.value; dmDirty = true; });
+    parent.append(h("div", { class: "dm-item" }, h("span", {}, label), i));
+  };
+  const p = $("#dm-params"); p.innerHTML = "";
+  num(p, t("Read cache, ms"), dmCfg.poll, "cache_ms", 0, 60000, 500);
+  num(p, t("Monitor interval, s"), dmCfg.poll, "monitor_s", 1, 60);
+  num(p, t("WMI call timeout, s"), dmCfg, "timeout_s", 1, 30);
+  const inst = h("input", { type: "text", value: dmCfg.instance, maxlength: 32 });
+  inst.addEventListener("input", () => { dmCfg.instance = inst.value; dmDirty = true; });
+  p.append(h("div", { class: "dm-item" }, h("span", {}, t("WMI instance (suffix)")), inst));
+  const pid = "0x" + (S.platform.project_id || 0).toString(16).toUpperCase().replace(/^0X/, "");
+  const key = Object.keys(dmCfg.limits || {}).find(k => parseInt(k, 16) === S.platform.project_id) || pid;
+  dmCfg.limits = dmCfg.limits || {};
+  const lim = dmCfg.limits[key] || (dmCfg.limits[key] = { PL1: 0, PL2: 0, PL4: 0, TccOffset: 15, ConfigurableTGP: 0, DynamicBoost: 0, TargetTemperature: 87, DefaultTGP: 0, DynamicBoostCpuTdp: 0 });
+  $("#dm-limits-title").textContent = t("Limits instead of SMRW (project {0})", key);
+  const l = $("#dm-limits"); l.innerHTML = "";
+  for (const [k2, lab] of [["PL1", "PL1 max, W"], ["PL2", "PL2 max, W"], ["PL4", "PL4 max, W"], ["TccOffset", "TCC offset max, °C"],
+    ["DefaultTGP", "GPU base TGP, W"], ["ConfigurableTGP", "cTGP above base, W"], ["DynamicBoost", "Dynamic Boost max, W"], ["TargetTemperature", "GPU temperature limit, °C"]])
+    num(l, t(lab), lim, k2, 0, 255);
+  const ls = $("#dm-lists"); ls.innerHTML = "";
+  for (const [k2, lab] of [["always_write", "Always write (triggers, handshakes)"], ["no_cache", "Never cache"]]) {
+    const i = h("input", { type: "text", value: (dmCfg[k2] || []).join(", ") });
+    i.addEventListener("input", () => { dmCfg[k2] = i.value.split(/[\s,]+/).filter(Boolean); dmDirty = true; });
+    ls.append(h("div", { class: "dm-item wide" }, h("span", {}, t(lab)), i));
+  }
+}
+function wmiUserConfig() {
+  const c = JSON.parse(JSON.stringify(dmCfg));
+  delete c.version;
+  return c;
+}
+$("#dm-save").addEventListener("click", () => act(async () => {
+  const r = await adminApi("ec-access/config", { config: wmiUserConfig() }); dmDirty = false;
+  await refresh();
+  if (r.restart_needed) toast(t("Saved. Restart the service to apply polling and limit changes."));
+}, t("Saved")));
+$("#dm-reset").addEventListener("click", () => act(async () => {
+  if (!confirm(t("Restore the factory WMI settings?"))) return;
+  await adminApi("ec-access/config", { reset: true }); dmDirty = false; await refresh();
+}, t("Factory settings restored")));
+$("#dm-export").addEventListener("click", () => {
+  const blob = new Blob([JSON.stringify(dmCfg || (ecA() || {}).config, null, 2)], { type: "application/json" });
+  const a = h("a", { href: URL.createObjectURL(blob), download: "ec_wmi.json" }); document.body.append(a); a.click(); a.remove();
+});
+$("#dm-import").addEventListener("click", () => $("#dm-file").click());
+$("#dm-file").addEventListener("change", async e => {
+  const f = e.target.files[0]; e.target.value = "";
+  if (!f) return;
+  try {
+    const cfg = JSON.parse(await f.text());
+    await adminApi("ec-access/config", { config: cfg }); dmDirty = false; await refresh();
+    toast(t("WMI settings imported"));
+  } catch (err) { toast(t("Import failed: {0}", err.message), true); }
+});
+$("#dm-test").addEventListener("click", () => act(async () => {
+  const r = await api("ec-access/test", {});
+  $("#dm-test-out").replaceChildren(
+    h("p", {}, t("Path: {0}. Project {1} — {2}. {3} ms per read.", t(PATH_NAME[r.path] || r.path), r.project,
+      r.tested_platform ? t("tested platform") : t("NOT a tested platform"), r.ms_per_read)),
+    h("p", { class: "tiny" }, r.reads.map(x => `${x.addr} = 0x${x.value.toString(16).toUpperCase().padStart(2, "0")}`).join("  ·  ")));
+}, t("Done")));
+$("#dm-restart").addEventListener("click", () => act(async () => {
+  if (!confirm(t("Restart the Control Center service? Fan control is handed to the laptop for a few seconds."))) return;
+  const r = await api("service/restart", {}); if (r.restarting) showRestart(); else toast(t("The service is restarting…"));
+}));
+
+async function chooseEcPath(id) {
+  const a = ecA();
+  if (!a || id === a.setting) return;
+  if (id === "wmi" && !a.consent && !(await showWmiWarning())) return;
+  if (id === "wmi" && !confirm(t("Use only the open WMI implementation? Not recommended: it is slow and some functions are unavailable."))) return;
+  await act(async () => {
+    const r = await adminApi("ec-access", { backend: id, ...(id === "wmi" ? { consent: a.consent_version } : {}) });
+    if (r.restarting) { showRestart(); return; }
+    await refresh();
+  });
+}
+
+// warning before the first use of the WMI path; resolves true when accepted
+function showWmiWarning() {
+  const a = ecA();
+  return new Promise(resolve => {
+    const chk = h("input", { type: "checkbox", id: "wmi-chk" });
+    const ok = h("button", { class: "btn", disabled: true }, t("Enable WMI"));
+    const cancel = h("button", { class: "btn ghost" }, t("Cancel"));
+    const other = a && a.tested === false;
+    const box = h("div", { class: "eula", role: "dialog", "aria-modal": "true" },
+      h("div", { class: "eula-card" },
+        h("h2", {}, t("Open WMI implementation (beta)")),
+        h("div", { class: "eula-text wmi-warn" },
+          h("p", {}, h("b", {}, t("Why some functions need the OEM driver"))),
+          h("p", {}, t("The laptop firmware gives the full set of functions only to the manufacturer's driver UWACPIDriver.sys. Through the WMI interface built into Windows it allows only reading and writing EC registers. Two firmware methods are not reachable there: PWUP — the extra graphics power with the liquid cooler (in tests about 13–15 % lower GPU clock without it) and SMRW — the table of power limits (limits are taken from the WMI settings instead).")),
+          h("p", {}, h("b", {}, t("What this implementation is"))),
+          h("p", {}, t("An open implementation without proprietary files: the service talks to the firmware through the standard Windows WMI driver. Every EC access takes about 125 ms instead of about 10 ms, so readings update less often and writing a fan curve takes about 15 seconds.")),
+          h("p", {}, t("The extra graphics power (175 W instead of 150 W on this platform) is reached only in the stock Turbo mode; in the Custom mode Dynamic Boost adds power only while the processor leaves room.")),
+          h("p", {}, t("Changing these settings needs administrator rights: Windows will ask for them (UAC).")),
+          h("p", {}, h("b", {}, t("Risks"))),
+          h("p", {}, t("This is a beta. On another laptop model the same WMI call may mean something else: a wrong write to the EC can disturb fans, charging or power until the laptop is fully powered off. Use it at your own risk; we recommend the OEM driver.")),
+          h("p", { class: "red-warn" }, t("WE DO NOT RECOMMEND using this function on platforms other than {0}.", a ? a.tested_names : "")),
+          other ? h("p", { class: "red-warn" }, t("This laptop reports a different platform!")) : null,
+          h("p", {}, h("a", { href: a ? a.docs : "#", target: "_blank", rel: "noopener" }, t("Documentation: EC registers, OEM driver vs WMI (GitHub)")))),
+        h("div", { class: "eula-foot" }, h("label", { class: "eula-check" }, chk, h("span", {}, t("I understand the risks"))), h("div", { class: "row" }, cancel, ok))));
+    chk.addEventListener("change", () => { ok.disabled = !chk.checked; });
+    cancel.addEventListener("click", () => { box.remove(); resolve(false); });
+    ok.addEventListener("click", async () => {
+      ok.disabled = true;
+      try {
+        box.remove();
+        const r = await adminApi("ec-access", { consent: a.consent_version });
+        if (r.restarting) showRestart();
+        resolve(true);
+      } catch (e) { toast(t("Error: {0}", e.message), true); resolve(false); }
+    });
+    document.body.append(box);
+  });
+}
+
+// OEM driver missing on start: recommend it, offer WMI after the warning (once per session)
+async function offerWmiIfNoDriver() {
+  const a = ecA();
+  if (a && a.active === "none" && a.reason === "wmi_consent") {          // WMI chosen (installer / CLI): warning first
+    await showWmiWarning();
+    return;
+  }
+  if (!a || a.active !== "none" || a.reason !== "oem_missing" || a.setting !== "auto") return;
+  try { if (sessionStorage.getItem("uwcc-oem-offer")) return; sessionStorage.setItem("uwcc-oem-offer", "1"); } catch (_) {}
+  await new Promise(resolve => {
+    const box = h("div", { class: "eula", role: "dialog", "aria-modal": "true" },
+      h("div", { class: "eula-card" },
+        h("h2", {}, t("OEM driver not found")),
+        h("p", {}, t("The manufacturer's driver UWACPIDriver was not found, so the program cannot control fans, modes, power limits and battery protection.")),
+        h("p", {}, h("b", {}, t("Recommended:")), " ", a.edition === "free"
+          ? t("put the OEM driver (UWACPIDriver.inf, .sys, .cat from the manufacturer's Control Center) into {0} and install it in EC Manager.", a.driver_dir || "")
+          : t("install the OEM driver — run the Control Center installer again and choose \"OEM driver + WMI\", or install the manufacturer's Control Center.")),
+        h("p", { class: "muted" }, t("Alternatively you can use the open WMI implementation (beta): slower and without some functions.")),
+        h("div", { class: "eula-foot" }, h("span"), h("div", { class: "row" },
+          h("button", { class: "btn ghost", onclick: () => { box.remove(); resolve(); } }, t("Later")),
+          h("button", { class: "btn ghost", onclick: async () => { box.remove(); await showWmiWarning(); resolve(); } }, t("Use WMI (beta)…"))))));
+    document.body.append(box);
+  });
+}
+
+// ---------------------------------------------------------------- long operations: "Applying…" (WMI path)
+let localBusy = null;
+async function withBusy(label, fn) {             // cover the window at once, before the service answers
+  localBusy = { op: "apply", label, blocking: true, progress: null, local: true };
+  renderBusy((S && S.busy) || []);
+  try { return await fn(); } finally { localBusy = null; renderBusy((S && S.busy) || []); }
+}
+const BUSY_LABEL = { office: "Office mode", gaming: "Gaming mode", turbo: "Turbo mode", custom: "Custom mode",
+  restore: "Factory settings", profile: "Profile", super_performance: "Super performance" };
+function renderBusy(ops) {
+  const slow = ecA() && ecA().active === "wmi";
+  const block = (ops || []).find(o => o.blocking) || (localBusy && slow ? localBusy : null);
+  const table = (ops || []).find(o => o.op === "fan_table");
+  const ov = $("#busy-overlay");
+  if (block) {
+    const what = block.op === "selfcheck" ? t("Self-check ({0})", t(block.label || ""))
+      : t("Applying: {0}", t(BUSY_LABEL[block.label] || block.label || ""));
+    $("#busy-title").textContent = what;
+    $("#busy-sub").textContent = block.op === "selfcheck" ? t("The program reads the controller and, at stage 2, switches functions briefly and back. Do not close the lid.")
+      : slow ? t("WMI path: every access to the controller takes about 0.15 s. Please wait.") : t("Please wait.");
+    const pb = $("#busy-bar");
+    pb.classList.toggle("indet", block.progress == null);
+    pb.firstElementChild.style.width = block.progress == null ? "" : block.progress + "%";
+    ov.classList.remove("hidden");
+  } else ov.classList.add("hidden");
+  const chip = $("#busy-chip");
+  chip.classList.toggle("hidden", !table);
+  if (table) chip.textContent = t("Fan curve: writing {0} %", table.progress ?? 0);
+  document.body.classList.toggle("table-busy", !!table);
+}
+
+// ---------------------------------------------------------------- service restart: wait and reload
+let restartShown = false;
+function showRestart() {
+  if (restartShown) return;
+  restartShown = true;
+  const t0 = Date.now();
+  const sub = h("p", { class: "muted" }), bar = h("div", { class: "pbar indet" }, h("div"));
+  const reload = h("button", { class: "btn hidden", onclick: () => location.reload() }, t("Reload the page"));
+  const box = h("div", { class: "eula", role: "dialog", "aria-modal": "true", id: "restart-box" },
+    h("div", { class: "eula-card narrow" }, h("h2", {}, t("The service is restarting")),
+      h("p", {}, t("Please wait about a minute — the window reloads by itself when the service is back.")), bar, sub,
+      h("div", { class: "row end" }, reload)));
+  document.body.append(box);
+  let downSeen = false;
+  const tick = async () => {
+    const sec = Math.round((Date.now() - t0) / 1000);
+    sub.textContent = t("{0} s", sec);
+    if (sec > 90) {
+      sub.textContent = t("The service has not come back yet. Reload the page (F5) or restart the service from the tray icon.");
+      reload.classList.remove("hidden");
+    }
+    try {
+      const r = await fetch("/api/state", { headers: { "X-UWCC-Token": TOKEN }, cache: "no-store" });
+      if (r.ok && (downSeen || sec > 20)) { location.reload(); return; }
+    } catch (_) { downSeen = true; }
+    setTimeout(tick, 2000);
+  };
+  setTimeout(tick, 3000);
+}
+
+// ---------------------------------------------------------------- administrator rights (UAC / sudo)
+async function adminApi(path, body) {
+  try { return await api(path, body); }
+  catch (e) {
+    if (e.status !== 403 || !(e.data && e.data.admin_required)) throw e;
+    if (!(await requestAdmin())) throw new Error(t("administrator rights were not granted"));
+    return await api(path, body);
+  }
+}
+function requestAdmin() {
+  return new Promise(async resolve => {
+    let done = false;
+    const finish = ok => { if (done) return; done = true; box.remove(); resolve(ok); };
+    const msg = h("p", {}), cmd = h("pre", { class: "code hidden" }, "sudo uwccctl ec unlock");
+    const box = h("div", { class: "eula", role: "dialog", "aria-modal": "true" },
+      h("div", { class: "eula-card narrow" }, h("h2", {}, t("Administrator rights needed")),
+        h("p", { class: "muted" }, t("Changing how the program reaches the controller, its WMI settings and platform profiles needs administrator rights. They are granted for 10 minutes.")),
+        msg, cmd, h("div", { class: "pbar indet" }, h("div")),
+        h("div", { class: "row end" }, h("button", { class: "btn ghost", onclick: () => finish(false) }, t("Cancel")))));
+    document.body.append(box);
+    try {
+      const r = await api("admin/request", {});
+      if (r.unlocked) return finish(true);
+      if (r.tray) msg.textContent = t("Confirm the Windows prompt (UAC) that has opened. If you do not see it, look at the taskbar.");
+      else { msg.textContent = t("Run this command in a terminal (or uwccctl ec unlock in an administrator console on Windows):"); cmd.classList.remove("hidden"); }
+    } catch (e) { msg.textContent = t("Error: {0}", e.message); }
+    for (let i = 0; i < 180 && !done; i++) {
+      await new Promise(r => setTimeout(r, 1000));
+      try { const st = await api("admin"); if (st.unlocked) { if (S && S.ec_access) S.ec_access.admin = st; renderAdmin(); return finish(true); } } catch (_) {}
+    }
+    finish(false);
+  });
+}
+let adminTimer = null;
+function renderAdmin() {
+  const a = ecA(), el = $("#dm-admin");
+  if (!el || !a) return;
+  const ad = a.admin || {};
+  const left = ad.unlocked ? Math.max(0, Math.round(((ad.until || 0) * 1000 - Date.now()) / 1000)) : 0;
+  el.className = "admin-bar" + (left > 0 ? " open" : "");
+  el.replaceChildren(
+    h("span", { class: "lock" }, left > 0 ? "🔓" : "🔒"),
+    h("span", {}, left > 0 ? t("Settings unlocked — {0} min {1} s left", Math.floor(left / 60), left % 60)
+      : t("Changes need administrator rights")),
+    left > 0 ? h("button", { class: "btn ghost", onclick: () => act(() => api("admin/lock", {})) }, t("Lock now"))
+      : h("button", { class: "btn ghost", onclick: () => requestAdmin().then(() => refresh().catch(() => {})) }, t("Unlock (administrator)")));
+  clearTimeout(adminTimer);
+  if (left > 0) adminTimer = setTimeout(() => { if (left <= 1 && a.admin) a.admin.unlocked = false; renderAdmin(); }, 1000);
+}
+
+// ---------------------------------------------------------------- monitoring switches
+function renderMonitoring(a) {
+  const m = a.monitoring || {};
+  const box = $("#dm-monitor"); if (!box) return;
+  box.innerHTML = "";
+  const sw = (key, label, desc, checked) => {
+    const i = h("input", { type: "checkbox" }); i.checked = checked;
+    i.addEventListener("change", () => act(() => api("setting", { key, value: i.checked })));
+    return h("div", { class: "row between perf-row" }, h("div", {}, h("b", {}, label), h("p", { class: "muted tiny" }, desc)),
+      h("label", { class: "sw" }, i, h("span")));
+  };
+  box.append(
+    sw("monitor_off_oem", t("Monitoring off with the OEM driver"), t("No sensor polling through the OEM driver: the Monitor page and the history stop. Temperatures for the liquid cooler and the overheat alerts are still read every 20 s."), !!m.off_oem),
+    sw("monitor_off_wmi", t("Monitoring off with WMI"), t("The same for the WMI path — fewer slow accesses to the controller."), !!m.off_wmi),
+    sw("monitor_off_all", t("All monitoring off"), t("Nothing is read at all: no Monitor page, no history, no overheat alerts; the liquid cooler in the automatic mode runs the fixed “Medium” preset."), !!m.off_all),
+    h("p", { class: "muted tiny" }, t("Now: {0}", t({ full: "full monitoring", light: "temperatures only, every 20 s", off: "monitoring off" }[m.level] || m.level))));
+}
+function renderMonOff(level) {
+  level = level || (S && S.monitoring) || "full";
+  const el = $("#mon-off"); if (!el) return;
+  el.classList.toggle("hidden", level === "full");
+  $("#page-monitor").classList.toggle("mon-off", level !== "full");
+  if (level !== "full") el.replaceChildren(h("b", {}, t("Monitoring is off")), " ",
+    t(level === "off" ? "All monitoring is switched off in EC Manager." : "Monitoring is switched off for this EC path in EC Manager: only the temperatures for the liquid cooler and the alerts are read, every 20 s."),
+    " ", h("a", { href: "#", onclick: e => { e.preventDefault(); $(`#nav a[data-page="driver"]`)?.click(); } }, t("Open EC Manager")));
+}
+
+// ---------------------------------------------------------------- platform profile
+const PLAT_STATUS = { verified: "verified", community: "from the community", draft: "draft (own self-check)", unknown: "unknown" };
+function renderPlatform(a) {
+  const p = a.platform || {}, box = $("#dm-platform-kv"); if (!box) return;
+  const dl = rows => { box.innerHTML = ""; for (const [k, v] of rows) box.append(h("dt", {}, k), h("dd", {}, v ?? "—")); };
+  const tested = p.tested ? [((p.tested.ec || []).length ? "EC " + p.tested.ec.join(", ") : ""), ((p.tested.bios || []).length ? "BIOS " + p.tested.bios.join(", ") : ""), p.tested.date || ""].filter(Boolean).join(" · ") : "";
+  dl([[t("Profile"), p.name], [t("Project"), p.project],
+    [t("Status"), h("span", { class: "tag " + (p.status === "verified" ? "good" : p.status === "unknown" ? "bad" : "") }, t(PLAT_STATUS[p.status] || p.status))],
+    [t("Source"), p.source === "user" ? (p.modified ? t("your profile (replaces the built-in one)") : t("your profile")) : t("built into the program")],
+    [t("Tested"), tested || "—"]]);
+  const notes = $("#dm-platform-notes"); notes.innerHTML = "";
+  for (const n of ((p.notes || {})[LANG] || (p.notes || {}).en || [])) notes.append(h("li", {}, n));
+  $("#dm-plat-reset").classList.toggle("hidden", p.source !== "user");
+}
+$("#dm-plat-export").addEventListener("click", async () => {
+  const r = await api("platform");
+  const blob = new Blob([JSON.stringify(r.profile, null, 2)], { type: "application/json" });
+  const el = h("a", { href: URL.createObjectURL(blob), download: (r.profile.id || "platform") + ".json" }); document.body.append(el); el.click(); el.remove();
+});
+$("#dm-plat-import").addEventListener("click", () => $("#dm-plat-file").click());
+$("#dm-plat-file").addEventListener("change", async e => {
+  const f = e.target.files[0]; e.target.value = "";
+  if (!f) return;
+  try {
+    const prof = JSON.parse(await f.text());
+    const r = await adminApi("platform/import", { profile: prof }); await refresh();
+    toast(t("Platform profile saved") + (r.restart_needed ? " — " + t("restart the service to apply it") : ""));
+  } catch (err) { toast(t("Import failed: {0}", err.message), true); }
+});
+$("#dm-plat-reset").addEventListener("click", () => act(async () => {
+  if (!confirm(t("Remove your platform profile and use the built-in one?"))) return;
+  const r = await adminApi("platform/reset", {}); await refresh();
+  if (r.restart_needed) toast(t("Restart the service to apply it"));
+}, t("Done")));
+
+// ---------------------------------------------------------------- self-check
+const SC_MARK = { ok: "✓", warn: "!", fail: "✕", skip: "–", unknown: "?" };
+const SC_GROUP = { identity: "Identity", paths: "Access paths", registers: "Registers", firmware: "Firmware", write: "Writes (stage 2)" };
+let scLoaded = null;
+async function renderSelfcheck(a) {
+  const sc = a.selfcheck || {};
+  const last = sc.last;
+  $("#dm-sc-state").textContent = sc.running ? t("Running stage {0}…", sc.running)
+    : last ? t("Last check: stage {0}, {1}", last.stage, new Date(last.time * 1000).toLocaleString()) : t("Not run yet.");
+  const key = last ? last.time : null;
+  if (!last || scLoaded === key || sc.running) { if (!last) $("#dm-sc-out").innerHTML = ""; $("#dm-sc-apply").disabled = !last; return; }
+  scLoaded = key;
+  let r;
+  try { r = (await api("selfcheck")).result; } catch (_) { return; }
+  const out = $("#dm-sc-out"); out.innerHTML = "";
+  if (!r) return;
+  if (r.error) out.append(h("p", { class: "red-warn" }, t("Error: {0}", r.error)));
+  const groups = {};
+  for (const it of r.items || []) (groups[it.group] = groups[it.group] || []).push(it);
+  for (const [g, items] of Object.entries(groups)) {
+    out.append(h("h4", {}, t(SC_GROUP[g] || g)));
+    const tb = h("div", { class: "sc-list" });
+    for (const it of items) tb.append(h("div", { class: "sc-row " + it.status }, h("span", { class: "sc-mark" }, SC_MARK[it.status] || "?"),
+      h("span", { class: "sc-name" }, t(it.name)), h("span", { class: "sc-detail muted" }, it.detail)));
+    out.append(tb);
+  }
+  if ((r.unknowns || []).length) {
+    out.append(h("h4", {}, t("Not clear")));
+    out.append(h("ul", { class: "sc-unknown" }, ...r.unknowns.map(u => h("li", {}, u))));
+  }
+  if (r.features) out.append(h("p", { class: "muted tiny" }, t("Functions for the draft profile:") + " " +
+    Object.entries(r.features).map(([k, v]) => `${t((EC_FEATURES[k] || {}).name || k)}: ${t({ on: "available", slow: "available, slow", off: "off" }[v] || v)}`).join(" · ")));
+  $("#dm-sc-apply").disabled = !r.draft;
+}
+async function runSelfcheck(stage) {
+  if (stage === 2 && !confirm(t("Stage 2 briefly switches functions of the controller and back (mode, Fan Boost, PL1, cTGP, charge limit, Fn Lock). The laptop must be on AC power. Continue?"))) return;
+  await act(async () => {
+    await (stage === 2 ? adminApi : api)("selfcheck", { stage });
+    localBusy = { op: "selfcheck", label: "stage " + stage, blocking: true, progress: 0 };
+    renderBusy((S && S.busy) || []);
+    for (let i = 0; i < 600; i++) {
+      await new Promise(r => setTimeout(r, 1000));
+      const st = await api("selfcheck").catch(() => null);
+      if (st && !st.running) break;
+    }
+    localBusy = null; scLoaded = null;
+  });
+}
+$("#dm-sc-1").addEventListener("click", () => runSelfcheck(1));
+$("#dm-sc-2").addEventListener("click", () => runSelfcheck(2));
+$("#dm-sc-export").addEventListener("click", async () => {
+  try {
+    const r = await api("selfcheck/export");
+    const blob = new Blob([JSON.stringify(r, null, 2)], { type: "application/json" });
+    const el = h("a", { href: URL.createObjectURL(blob), download: "uwcc-selfcheck.json" }); document.body.append(el); el.click(); el.remove();
+  } catch (e) { toast(t("Error: {0}", e.message), true); }
+});
+$("#dm-sc-apply").addEventListener("click", () => act(async () => {
+  if (!confirm(t("Save the result of the self-check as this laptop's platform profile (status: draft)? It decides which functions are available through WMI."))) return;
+  const r = await adminApi("platform/apply-draft", {}); await refresh();
+  if (r.restart_needed) toast(t("Restart the service to apply it"));
+}, t("Saved")));
+
+// ---------------------------------------------------------------- edition (free / non-free) and the OEM driver package
+function renderEdition(a) {
+  const box = $("#dm-edition"); if (!box) return;
+  const free = a.edition === "free", pkg = a.driver_package;
+  const need = a.active !== "oem";
+  box.classList.toggle("hidden", !free && !(pkg && need));
+  if (box.classList.contains("hidden")) return;
+  const kids = [];
+  if (free) {
+    kids.push(h("h3", {}, t("Free build")),
+      h("p", {}, t("This build does not contain the original OEM driver and is distributed completely freely (open source, MIT licence). Without the driver the program works through the open WMI implementation (beta).")),
+      h("p", {}, h("b", {}, t("Recommended:")), " ", t("put the OEM driver of the manufacturer's Control Center (UWACPIDriver.inf, UWACPIDriver.sys, UWACPIDriver.cat) into this folder and install it with the button below:")),
+      h("pre", { class: "code" }, a.driver_dir || "C:\\ProgramData\\UWCC\\driver"),
+      h("p", { class: "muted tiny" }, t("By installing the OEM driver you confirm that you have the right to use this file (UWACPIDriver.sys, part of the laptop manufacturer's Control Center).")));
+  } else {
+    kids.push(h("h3", {}, t("OEM driver package")));
+  }
+  kids.push(h("p", {}, pkg ? t("Driver package found: {0}{1}", pkg.dir, pkg.sys ? "" : " — " + t("UWACPIDriver.sys is missing"))
+    : t("No driver package in {0} yet.", a.driver_dir || "")));
+  if (pkg && need) kids.push(h("div", { class: "row" }, h("button", { class: "btn", onclick: () => act(async () => {
+    if (!confirm(t("Install the OEM driver from {0}? The service restarts and uses it.", pkg.dir))) return;
+    const r = await adminApi("ec-access/install-driver", {});
+    if (r.restarting) showRestart(); else await refresh();
+  }, t("Installed")) }, t("Install the OEM driver"))));
+  box.replaceChildren(...kids);
 }

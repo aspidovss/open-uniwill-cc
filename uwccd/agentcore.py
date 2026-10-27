@@ -60,7 +60,9 @@ TRAY = {
            "svc_restarting": "Restarting the Control Center service…", "svc_restarted": "The Control Center service is running again",
            "svc_restart_fail": "The service did not start", "svc_restart_fail_body": "See C:\\ProgramData\\UWCC\\log\\uwccd.log or reinstall Control Center.",
            "upd_check": "Check for updates", "upd_install": "Install update {}", "github": "Project on GitHub",
-           "upd_latest": "You have the latest version ({})", "upd_failed": "Update check failed"},
+           "upd_latest": "You have the latest version ({})", "upd_failed": "Update check failed",
+           "admin_declined": "Administrator rights were not granted — EC Manager stays locked",
+           "admin_fail": "uwccctl.exe not found"},
     "ru": {"open": "Открыть Control Center", "mode": "Режим", "boost": "Турбовентиляция", "kb": "Подсветка клавиатуры",
            "lc": "Система охлаждения", "lc_auto": "Автоматический", "lc_laptop": "Как у ноутбука", "lc_low": "Низкий",
            "lc_medium": "Средний", "lc_high": "Высокий", "lc_off": "Выкл", "lc_connect": "Подключить",
@@ -73,7 +75,9 @@ TRAY = {
            "svc_restarting": "Перезапуск службы Control Center…", "svc_restarted": "Служба Control Center снова работает",
            "svc_restart_fail": "Служба не запустилась", "svc_restart_fail_body": "Смотрите C:\\ProgramData\\UWCC\\log\\uwccd.log или переустановите Control Center.",
            "upd_check": "Проверить обновления", "upd_install": "Установить обновление {}", "github": "Проект на GitHub",
-           "upd_latest": "У вас последняя версия ({})", "upd_failed": "Не удалось проверить обновления"},
+           "upd_latest": "У вас последняя версия ({})", "upd_failed": "Не удалось проверить обновления",
+           "admin_declined": "Права администратора не получены — EC Manager остаётся заблокированным",
+           "admin_fail": "Не найден uwccctl.exe"},
 }
 
 

@@ -276,6 +276,116 @@ class MockEC(ECBase):
         self._save()
 
 
+class NullEC(ECBase):
+    """No EC access (Windows without the OEM driver and without consent to the WMI path): reads return 0,
+    writes are dropped. The service runs so the window can explain the situation and offer the choices."""
+    name = "none"
+    write_delay = 0
+    read_delay = 0
+
+    def _read(self, addr):
+        return 0
+
+    def _write(self, addr, val):
+        log.debug("EC write 0x%03X=0x%02X dropped: no EC access", addr, val)
+
+
+class CachedEC(ECBase):
+    """Read cache + write de-duplication for slow paths (WMI: ~125 ms per access).
+    cache_ms: how long a read stays valid; always_write: registers written even when unchanged (triggers,
+    handshakes); no_cache: registers always read fresh."""
+
+    def __init__(self, cache_ms=4000, always_write=(), no_cache=()):
+        super().__init__()
+        self.cache_ms = cache_ms
+        self.always_write = set(always_write)
+        self.no_cache = set(no_cache)
+        self.cache = {}
+        self.stats = {"reads": 0, "cached": 0, "writes": 0, "skipped": 0, "time": 0.0}
+
+    def read(self, addr):
+        with self.lock:
+            now = time.monotonic()
+            hit = self.cache.get(addr)
+            if hit and addr not in self.no_cache and (now - hit[1]) * 1000 < self.cache_ms:
+                self.stats["cached"] += 1
+                return hit[0]
+            t = time.perf_counter()
+            v = self._read(addr) & 0xFF
+            self.stats["time"] += time.perf_counter() - t
+            self.stats["reads"] += 1
+            self.cache[addr] = (v, time.monotonic())
+            return v
+
+    def write(self, addr, val):
+        val = int(val) & 0xFF
+        with self.lock:
+            hit = self.cache.get(addr)
+            if (hit and hit[0] == val and addr not in self.always_write
+                    and (time.monotonic() - hit[1]) * 1000 < self.cache_ms):
+                self.stats["skipped"] += 1
+                return
+            t = time.perf_counter()
+            self._write(addr, val)
+            self.stats["time"] += time.perf_counter() - t
+            self.stats["writes"] += 1
+            self.cache[addr] = (val, time.monotonic())
+
+    def invalidate(self):
+        with self.lock:
+            self.cache.clear()
+
+    def configure(self, cfg):
+        """Settings of the platform profile / ec_wmi.json once the project is known."""
+        poll = (cfg or {}).get("poll", {})
+        with self.lock:
+            self.cache_ms = poll.get("cache_ms", self.cache_ms)
+            self.always_write = _hexset(cfg.get("always_write", []))
+            self.no_cache = _hexset(cfg.get("no_cache", []))
+            self.limits = cfg.get("limits")
+            self.cache.clear()
+
+
+class MockWmiEC(CachedEC):
+    """Simulated WMI path for tests: the mock EC behind the cache, no SMRW / PWUP, optional delay."""
+    name = "wmi"
+
+    def __init__(self, cfg=None):
+        cfg = cfg or {}
+        poll = cfg.get("poll", {})
+        super().__init__(poll.get("cache_ms", 4000), _hexset(cfg.get("always_write", [])), _hexset(cfg.get("no_cache", [])))
+        self.inner = MockEC()
+        self.delay = float(os.environ.get("UWCC_MOCK_WMI_DELAY", "0"))
+        self.limits = cfg.get("limits")
+        self.smapc_source = "config"
+
+    def _read(self, addr):
+        time.sleep(self.delay)
+        return self.inner._read(addr)
+
+    def _write(self, addr, val):
+        time.sleep(self.delay)
+        self.inner._write(addr, val)
+
+    def smart_apc_table(self):
+        if not self.limits:
+            raise ECError("SMRW is not available through WMI and no limits are configured")
+        return dict(self.limits)
+
+
+def _hexset(items):
+    out = set()
+    for x in items or ():
+        if isinstance(x, int):
+            out.add(x)
+        elif "-" in str(x):
+            a, b = (int(v, 16) for v in str(x).split("-"))
+            out.update(range(a, b + 1))
+        else:
+            out.add(int(str(x), 16))
+    return out
+
+
 def open_ec(prefer=None):
     """Pick the best available backend. prefer: 'module' | 'acpi_call' | 'mock'."""
     if sys.platform == "win32" and prefer != "mock":

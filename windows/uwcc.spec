@@ -19,7 +19,8 @@ ctl_py = os.path.join(workpath, "uwccctl.py")
 os.makedirs(workpath, exist_ok=True)
 shutil.copyfile(os.path.join(ROOT, "bin", "uwccctl"), ctl_py)
 
-datas = [(os.path.join(ROOT, "uwccd", "web"), os.path.join("uwccd", "web"))]
+datas = [(os.path.join(ROOT, "uwccd", "web"), os.path.join("uwccd", "web")),
+         (os.path.join(ROOT, "uwccd", "platforms"), os.path.join("uwccd", "platforms"))]
 if os.path.isdir(os.path.join(ROOT, "uwccd", "data")):
     datas.append((os.path.join(ROOT, "uwccd", "data"), os.path.join("uwccd", "data")))
 

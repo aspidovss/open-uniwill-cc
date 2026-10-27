@@ -134,6 +134,7 @@ class FanTablesStd(FanTables):
                 if i < 15:
                     self.ec.write(down + i + 1, pts[i]["DownT"])
                 self.ec.write(duty + i, (pts[i]["Duty"] * 2) & 0xFF)
+                self._tick()
 
     def apply_default(self, name):
         """Fan safety protection: run the EC default table of the mode."""
@@ -187,7 +188,7 @@ class PowerManagerStd(PowerManager):
             if sm.get("PL4", 0) == 0 or all(v == 0xFF for v in sm.values()):   # CheckIvalidSmartAPCTable
                 raise ValueError(f"invalid table {sm}")
             sm = {k: (0 if v == 0xFF else v) for k, v in sm.items()}            # CheckInvalidSmartApcTable
-            src = "firmware"
+            src = getattr(self.ec, "smapc_source", "firmware")   # WMI: limits from ec_wmi.json
         except Exception as e:  # noqa: BLE001
             log.warning("Smart APC table unavailable (%s) — limits taken from the EC PL defaults", e)
             tb = self.pl_default["turbo"]
@@ -301,7 +302,7 @@ class PowerManagerStd(PowerManager):
         return self.option.get("SuperPerformance") == 1
 
     def user_set_super(self, on):
-        with self.lock:
+        with self._busy("super_performance"), self.lock:
             self.save_option(SuperPerformance=1 if on else 0)
             self.set_user_profile(self.option["OperatingMode"])
         log.info("super performance %s", "on" if on else "off")
@@ -425,7 +426,7 @@ class PowerManagerStd(PowerManager):
             raise ValueError("mode 0..3")
         if mode == R.MODE_TURBO and not self.pf.turbo_support:
             raise ValueError("turbo mode not supported")
-        with self.lock:
+        with self._busy(STD_MODE_NAMES.get(mode)), self.lock:
             if mode == MODE_CUSTOM and next_slot:
                 self.option["CustomProfileIndex"] = (int(self.option["CustomProfileIndex"]) + 1) % 5
             if mode != MODE_CUSTOM:
@@ -519,7 +520,7 @@ class PowerManagerStd(PowerManager):
             n = str(data["CustomizeName"]).strip()[:24]
             p["CustomizeName"] = n or name[-1]
         p["Activated"] = True
-        with self.lock:
+        with self._busy("profile"), self.lock:
             self.profiles[name] = p
             store.save_json(self._pfile(name), p)
             if self.current and self.current["Name"] == name:
@@ -533,7 +534,7 @@ class PowerManagerStd(PowerManager):
         if not spec:
             raise KeyError(name)
         _, cname, src, table = spec
-        with self.lock:
+        with self._busy("profile"), self.lock:
             self._refresh_mode(name, cname, self.pl_default[src], table)
             self.tables.restore_default(table)
             if self.current and self.current["Name"] == name:

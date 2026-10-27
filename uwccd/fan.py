@@ -3,7 +3,9 @@
 Port of MyFanManager_RamFan1p5_CML + FanTable_Manager1p5_CML + MyFanTableCtrl + GpuFeatures
 (the code path GCUService takes for PH4/PH6 "commercial" projects with RamFan 1.5 EC).
 """
+import contextlib
 import copy
+import json
 import logging
 import os
 import shutil
@@ -105,6 +107,15 @@ class FanTables:
         self.tables = {}
         self.defaults = {}
         self.lock = threading.Lock()
+        # slow EC path (WMI): a fan curve takes ~15 s, so it is written in the background after the mode itself
+        self.deferred = False
+        self.busy = None                # busy.Busy of the service (progress for the window)
+        self.last_key = None            # what was written to the EC last (skip an identical table)
+        self._pending = None
+        self._worker = None
+        self._wlock = threading.Lock()
+        self._ticks = 0
+        self._total = 1
 
     # -- persistence ---------------------------------------------------------
     def _file(self, name):
@@ -213,6 +224,7 @@ class FanTables:
                     self.ec.write(down + i + 1, pts[i]["DownT"])
                 d = pts[i]["Duty"]
                 self.ec.write(duty + i, d * 2 if d <= 100 else 0xFF)
+                self._tick()
 
     def set_respective(self, on):
         self.ec.set_bit(R.FAN_CTRL_7C5, 7, bool(on))
@@ -231,19 +243,84 @@ class FanTables:
         if t:
             self.apply_table(t)
 
-    def apply_table(self, t):
+    @staticmethod
+    def _key(t):
+        return json.dumps([t.get("CPU"), t.get("GPU"), bool(t.get("FanControlRespective", False))], sort_keys=True)
+
+    def _still_active(self):
+        """The EC still runs the RAM table (0x7C6 bit2) — it is cleared when the EC falls back to its own table."""
+        try:
+            return bool(self.ec.read(R.FAN_CTRL_7C6) & 0x04)
+        except Exception:  # noqa: BLE001
+            return False
+
+    def invalidate(self):
+        """Forget what was written (resume from sleep, fan control handed back): the next table is written again."""
+        self.last_key = None
+
+    def apply_table(self, t, force=False):
         name = t.get("Name")
         if getattr(self, "blocked", False):     # liquid-cooling super performance: the EC runs its own table
             log.info("fan table %s not applied: the EC liquid-cooling table is active", name)
             return
+        if self.deferred and threading.current_thread() is not self._worker:
+            with self._wlock:
+                self._pending = (t, force)
+                if not (self._worker and self._worker.is_alive()):
+                    self._worker = threading.Thread(target=self._work, daemon=True, name="fan-table")
+                    self._worker.start()
+            return
+        self._write_table(t, force)
+
+    def _work(self):
+        while True:
+            with self._wlock:
+                job, self._pending = self._pending, None
+                if job is None:
+                    self._worker = None
+                    return
+            t, force = job
+            try:
+                if self.busy:
+                    with self.busy.task("fan_table", label=t.get("Name"), blocking=False):
+                        self._write_table(t, force)
+                else:
+                    self._write_table(t, force)
+            except Exception:  # noqa: BLE001
+                log.exception("fan table %s", t.get("Name"))
+
+    def wait_idle(self, timeout=60):
+        """Wait for a background fan-table write (tests, shutdown)."""
+        end = time.monotonic() + timeout
+        while time.monotonic() < end:
+            with self._wlock:
+                if self._pending is None and not (self._worker and self._worker.is_alive()):
+                    return True
+            time.sleep(0.05)
+        return False
+
+    def _tick(self):
+        self._ticks += 1
+        if self.busy:
+            self.busy.progress("fan_table", self._ticks * 100 // max(1, self._total))
+
+    def _write_table(self, t, force=False):
+        name = t.get("Name")
+        key = self._key(t)
         with self.lock:
+            if not force and key == self.last_key and self._still_active():
+                log.info("fan table %s unchanged — not written again", name)
+                return
+            self._ticks, self._total = 0, 16 * (2 if self.nv and t.get("GPU") else 1)
             self.set_control_by_ramfan(False)
             self.set_respective(t.get("FanControlRespective", False))
             self.write_ec_table(t)
             self.set_control_by_ramfan(True)
+            self.last_key = key
         log.info("fan table %s applied", name)
 
     def disable(self):
+        self.last_key = None
         self.set_control_by_ramfan(False)
 
     # -- edit ------------------------------------------------------------------
@@ -366,6 +443,12 @@ class PowerManager:
         self.lock = threading.RLock()
         self.ac_online = True
         self.pl_default = {}
+        self.busy = None              # busy.Busy of the service: the window waits while a mode is applied
+
+    def _busy(self, label=None):
+        if not self.busy:
+            return contextlib.nullcontext()
+        return self.busy.task("apply", label=label, blocking=True)
 
     # -- startup (EnableByService) ------------------------------------------------
     def start(self):
@@ -613,7 +696,7 @@ class PowerManager:
             raise ValueError("mode 0..2")
         if mode == R.MODE_TURBO and not self.pf.turbo_support:
             raise ValueError("turbo mode not supported")
-        with self.lock:
+        with self._busy(MODE_NAMES.get(mode)), self.lock:
             self.option["OperatingMode"] = mode
             self.refresh_current_profile(mode)
             self.set_user_profile(mode)
@@ -636,7 +719,7 @@ class PowerManager:
         self.notify("fanboost", {"on": bool(on)})
 
     def restore(self):
-        with self.lock:
+        with self._busy("restore"), self.lock:
             self.load_default()
             self.init()
         self.notify("status", {})
