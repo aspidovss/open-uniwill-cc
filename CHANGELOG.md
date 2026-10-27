@@ -23,6 +23,8 @@
   handshake and the fan table): to the crash snapshot and a dated copy `selfcheck-backups/ec-backup-*.json` (the last
   ten are kept), both read back before anything is written; no backup — no test writes. The window shows *EC backup
   saved* with the file while the check runs, and at the end how many values read back equal after the restore.
+- EC Manager: the self-check buttons go left to right in the order of use; *Stage 2* is available only after a
+  stage 1 since the service started (also enforced by the service); every card folds by a click on its title (remembered).
 - New screenshots (English and Russian), including EC Manager and the help.
 
 ## 1.6.1
