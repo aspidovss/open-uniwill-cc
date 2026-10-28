@@ -172,6 +172,82 @@ class IdleTimer(threading.Thread):
                 self.callback(True)
 
 
+class KeyPresses(threading.Thread):
+    """Linux: key presses for the reactive BetterRGB effects, from /dev/input (EV_KEY, value 1 = pressed). Reads only
+    while such an effect runs (wanted() is True); the key names go to callback(names) — nothing is stored."""
+    EVENT = struct.Struct("llHHi")           # struct input_event: timeval, type, code, value
+
+    def __init__(self, wanted, callback):
+        super().__init__(daemon=True, name="keypresses")
+        self.wanted = wanted
+        self.callback = callback
+        self.stop = threading.Event()
+        self.fds = {}
+
+    def _rescan(self):
+        keep = set()
+        for ev in glob.glob("/dev/input/event*"):
+            name = os.path.basename(ev)
+            try:
+                keys = open("/sys/class/input/%s/device/capabilities/key" % name).read().split()
+            except OSError:
+                continue
+            # a keyboard reports KEY_A..KEY_Z: bits 16..50 in the lowest word of the key bitmap
+            if keys and int(keys[-1], 16) & (1 << 30) and int(keys[-1], 16) & (1 << 16):
+                keep.add(ev)
+        for ev in list(self.fds):
+            if ev not in keep:
+                os.close(self.fds.pop(ev))
+        for ev in keep - set(self.fds):
+            try:
+                self.fds[ev] = os.open(ev, os.O_RDONLY | os.O_NONBLOCK | os.O_CLOEXEC)
+            except OSError:
+                pass
+
+    def _close(self):
+        for fd in self.fds.values():
+            os.close(fd)
+        self.fds = {}
+
+    def run(self):
+        from .lighting.fx import EVDEV
+        size = self.EVENT.size
+        rescan = 0
+        while not self.stop.is_set():
+            if not self.wanted():
+                if self.fds:
+                    self._close()
+                self.stop.wait(1)
+                continue
+            if time.monotonic() > rescan:
+                self._rescan()
+                rescan = time.monotonic() + 30
+            fds = list(self.fds.values())
+            if not fds:
+                self.stop.wait(2)
+                continue
+            try:
+                r, _, _ = select.select(fds, [], [], 1.0)
+            except OSError:
+                self._rescan()
+                continue
+            names = []
+            for fd in r:
+                try:
+                    data = os.read(fd, size * 64)
+                except (BlockingIOError, OSError):
+                    continue
+                for off in range(0, len(data) - size + 1, size):
+                    _, _, typ, code, value = self.EVENT.unpack_from(data, off)
+                    if typ == 1 and value == 1 and code in EVDEV:
+                        names.append(EVDEV[code])
+            if names:
+                try:
+                    self.callback(names)
+                except Exception:  # noqa: BLE001
+                    log.exception("key presses")
+
+
 class AppBinding(threading.Thread):
     """GaingProfileBinding: switch operating mode while a bound program is running."""
 

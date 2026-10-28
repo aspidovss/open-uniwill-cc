@@ -54,7 +54,15 @@ _uwccctl() {
             elif ((n == 2)) && [[ $sub == typec ]]; then COMPREPLY=($(compgen -W "$onoff" -- "$cur"))
             fi ;;
         kb)
-            if ((n == 1)); then COMPREPLY=($(compgen -W "on off effects effect level" -- "$cur"))
+            if ((n == 1)); then COMPREPLY=($(compgen -W "on off effects effect level fx fx-config fx-calibrate" -- "$cur"))
+            elif ((n == 2)) && [[ $sub == fx ]]; then
+                COMPREPLY=($(compgen -W "breathing wave sparkle reactive colourwheel lightning flame rain matrix
+                    staticzones reactiveripple rainbow quicksand current reactivecurrent screenambient" -- "${cur,,}"))
+            elif [[ $sub == fx-config ]]; then
+                COMPREPLY=($(compgen -W "fps_ac= fps_battery= transition= transition_ms= bar= bar_direction= bar_start=
+                    bar_end=" -- "$cur")); compopt -o nospace
+            elif ((n == 2)) && [[ $sub == fx-calibrate ]]; then
+                COMPREPLY=($(compgen -W "start apply cancel reset" -- "$cur"))
             elif ((n == 2)) && [[ $sub == effect ]]; then
                 COMPREPLY=($(compgen -W "single breathing wave reactive rainbow ripple raindrop neon marquee stack impact
                     spark aurora usermode gaming flash mix rippleo alphabet thinking colorfulwave" -- "${cur,,}"))

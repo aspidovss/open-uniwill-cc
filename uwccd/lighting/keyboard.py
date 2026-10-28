@@ -1,9 +1,10 @@
 """Keyboard backlight manager: ITE RGB (KeyboardType '1') or EC single colour ('2')."""
 import logging
 import threading
+import time
 
 from .. import regs as R
-from . import ite
+from . import fx, ite
 
 log = logging.getLogger("uwccd.kb")
 
@@ -41,11 +42,97 @@ class KeyboardManager:
         self.kind = "none"
         self.lock = threading.RLock()
         self.idle_off = False
+        # BetterRGB effects: power source and service metrics (set by the service), values from the user session
+        self.ac_fn = lambda: True
+        self.metrics_fn = lambda: {}
+        self.session = {}             # key -> (value, time): volume / mic / audio from the tray or the agent
+        self._metrics = (0.0, {})
+
+    # -- BetterRGB effects ---------------------------------------------------------------
+    def fx_config(self):
+        return fx.clean_config(self.st.get("kb_fx"))
+
+    def fx_env(self):
+        now = time.monotonic()
+        t, m = self._metrics
+        if now - t > 1.0:
+            try:
+                m = dict(self.metrics_fn() or {})
+            except Exception:  # noqa: BLE001
+                m = {}
+            self._metrics = (now, m)
+        m = dict(m)
+        for k, (v, ts) in list(self.session.items()):
+            if now - ts < 3.0:
+                m[k] = v
+        try:
+            ac = bool(self.ac_fn())
+        except Exception:  # noqa: BLE001
+            ac = True
+        return {"config": self.fx_config(), "ac": ac, "metrics": m}
+
+    def engine(self):
+        return self.rgb.fx() if self.rgb else None
+
+    def set_fx_config(self, upd):
+        cur = self.fx_config()
+        for k, v in (upd or {}).items():
+            if k == "bar" and isinstance(v, dict):
+                cur["bar"] = {**cur["bar"], **v}
+            elif k in fx.DEFAULT_CONFIG:
+                cur[k] = v
+        cur = fx.clean_config(cur)
+        self.st.set("kb_fx", cur)
+        return cur
+
+    def fx_input(self, keys=None, screen=None, metrics=None):
+        """input from the user session: pressed keys (names), a small screen picture, audio levels"""
+        e = self.engine()
+        if keys and e:
+            e.press([str(k)[:16] for k in keys[:64]])
+        if screen and e:
+            e.feed_screen(fx.decode_screen(screen))
+        if metrics:
+            now = time.monotonic()
+            for k in ("volume", "mic", "audio"):
+                if metrics.get(k) is not None:
+                    self.session[k] = (max(0.0, min(1.0, float(metrics[k]))), now)
+        return {"needs": e.needs() if e else []}
+
+    def fx_calibrate(self, action, observed=None):
+        """white calibration: start (raw white on the keys) -> apply (the colour seen) | cancel | reset"""
+        e = self.engine()
+        if action == "start":
+            if not e:
+                raise ValueError("start a BetterRGB effect first — the calibration shows raw white through it")
+            e.calibrate(True)
+        elif action == "cancel":
+            if e:
+                e.calibrate(False)
+        elif action == "apply":
+            gains = fx.white_gains(observed or [])
+            if not gains:
+                raise ValueError("the colour is too dark to calibrate")
+            self.set_fx_config({"gains": gains})
+            if e:
+                e.calibrate(False)
+        elif action == "reset":
+            self.set_fx_config({"gains": [1000, 1000, 1000]})
+            if e:
+                e.calibrate(False)
+        else:
+            raise ValueError("action: start | apply | cancel | reset")
+        return {"gains": self.fx_config()["gains"], "calibrating": bool(e and e.calibrating)}
+
+    def needs_keys(self):
+        e = self.engine()
+        return bool(e and "keys" in e.needs())
 
     def start(self):
         self.rgb = ite.open_keyboard(self.ec, mock=self.mock)
         if self.rgb:
             self.kind = "rgb"
+            self.rgb.fx_env = self.fx_env
             try:
                 ec_caps = self.ec.read(R.EC_CAPS_742)
                 vendor = 4
@@ -114,7 +201,9 @@ class KeyboardManager:
         blocked = self.picture_modes_blocked()
         code = ite.EFFECTS.get(kw.get("idx"), (None, None))[1]
         zone_soft = bool(self.rgb.four_zone() and code in ite.FOUR_ZONE_SOFT)     # drawn zone by zone
-        if blocked and not zone_soft and (kw.get("idx") in (14, 15) or code in ite.AP_EFFECTS):
+        if fx.is_fx(kw.get("idx")):
+            kw = {k: kw[k] for k in ("idx", "light", "fx", "force") if k in kw}
+        elif blocked and not zone_soft and (kw.get("idx") in (14, 15) or code in ite.AP_EFFECTS):
             raise ValueError("this keyboard does not support per-key / gaming modes (see Settings to try anyway)")
         with self.lock:
             self.rgb.pictures_ok = not blocked      # single colour falls back to the firmware static effect
@@ -157,6 +246,11 @@ class KeyboardManager:
         """KeyboardCloseTimer: switch the backlight off after inactivity, back on at input."""
         if not self.st.get("kb_power", True):
             return
+        e = self.engine()
+        if e and self.fx_config()["transition"] != "off":
+            e.set_idle(idle)              # BetterRGB: the transition fades the keys out and back in
+            self.idle_off = bool(idle)
+            return
         with self.lock:
             if idle and not self.idle_off:
                 self.idle_off = True
@@ -187,7 +281,10 @@ class KeyboardManager:
              "picture_modes_blocked": self.picture_modes_blocked(),
              "picture_modes_switch": bool(self.rgb and not self.rgb.four_zone() and self.rgb.ver[0] == 0x11
                                           and not self.rgb.fw_effects()),
-             "default_colors": ite.DEFAULT_COLORS}
+             "default_colors": ite.DEFAULT_COLORS,
+             "fx_effects": fx.catalog(), "fx_config": self.fx_config(), "fx_transitions": fx.TRANSITIONS,
+             "fx_bar_modes": fx.BAR_MODES, "fx_bar_directions": fx.BAR_DIRECTIONS,
+             "fx": self.engine().info() if self.engine() else None}
         if self.lb:
             d["lightbar"] = {"device": self.lb.info(), "effects": list(ite.LB_EFFECTS),
                              "zones": {z: {"power": True, "effect": "static", "light": 4, "speed": 2,

@@ -71,7 +71,7 @@ Super / XMG NEO 16 (E23); on other models every function stays off until the sel
   <img src="docs/screenshots/modes.png" width="49%" alt="Modes and power limits">
   <img src="docs/screenshots/fans.png" width="49%" alt="Fan curves">
   <img src="docs/screenshots/liquid.png" width="49%" alt="Liquid cooler">
-  <img src="docs/screenshots/light.png" width="49%" alt="Keyboard lighting">
+  <img src="docs/screenshots/betterrgb.png" width="49%" alt="Keyboard lighting with the BetterRGB effects">
   <img src="docs/screenshots/battery.png" width="49%" alt="Battery care">
   <img src="docs/screenshots/info-windows.png" width="49%" alt="System information on Windows">
   <img src="docs/screenshots/ec-manager.png" width="49%" alt="EC Manager: free build, WMI path">
@@ -90,6 +90,9 @@ Super / XMG NEO 16 (E23); on other models every function stays off until the sel
 - **Fan curves** for CPU and GPU (16 points), presets, reset to factory
 - **Keyboard lighting**: 17 hardware effects, per-key colours, gaming zones, software effects, auto-off;
   **chassis light bar** (rear / base / logo zones)
+- **BetterRGB effects** (new in 1.6.3): 16 effects drawn by the service — Rain, Matrix, Flame, Lightning, Quicksand,
+  Screen ambient, reactive ripples … — with transitions, white calibration and a top-row bar (battery, volume, CPU,
+  GPU): [docs/LIGHTING.md](docs/LIGHTING.md)
 - **Battery**: protection modes, custom charge limits, USB-C charging priority
 - **Switches**: Win-key lock, Fn lock, touchpad, USB power in sleep, power-on with AC, MUX (dGPU direct), webcam
 - **Monitoring**: temperatures, load, clocks, fans, CPU and GPU power, memory, drives, battery; one-hour history
@@ -109,18 +112,35 @@ Full list with the EC registers behind each feature: [docs/FEATURES.md](docs/FEA
 
 ## Supported laptops
 
-The program reads the **project ID** from the EC and supports the same platforms as Control Center 5.52.x (MBB):
+**Control Center versions.** The service is a port of the official service GCUService 1.0.2.70 from Uniwill
+Control Center **5.52.x** (checked against 5.52.49.6, MBB). It replaces that Control Center:
 
-| Family | Projects |
+| Manufacturer's Control Center | Status |
 |---|---|
-| PHxT | PH4TRX1, PH4TUX1, PH4TQx1, PH6TRX1, PH6TQxx |
-| PHxA | PH4ARxx, PH4AUxx, PH4AXxx, PH6AQxx, PH6ARxx, PH6AGxx, PH4AUxf |
-| PHxP | PH4PRxx, PH4PUxx, PH4PGx1, PH4PGx2, PH6PRxx, PH6PGEx, PH6PG0x, PH6PG3x, PH6PG7x (also 150 W), PH4AQE3 |
-| other Uniwill projects with RamFan 1.5 | e.g. `0x10` — Custom-mode platforms |
+| 5.52.x (service GCUService 1.0.2.x) | **supported** — the program is ported from it |
+| 5.56.x with the newer service 1.2 (e.g. Mechrevo 5.56.60.12) | runs (same EC layout, RamFan 1.5), **not tested** — its code is protected, nothing was taken from it |
+| 3.x (and other vendor centers, e.g. Mechrevo's own 3.x) | **not supported** — not ported, not tested |
+
+**Theoretical list of platforms.** The program reads the **project ID** from the EC (`0x740`) and recognises these
+projects; only `0x10` has been checked on real hardware. The level is shown in the window (*Information*):
+
+| Family | Project ID | Projects / laptops | Level |
+|---|---|---|---|
+| — | `0x10` | MAIBENBEN Tsunami X629, Mechrevo Questyle 16 Super, XMG NEO 16 (E23) | **tested** |
+| PHxT | `0x12`–`0x16` | PH4TRX1, PH4TUX1, PH4TQx1, PH6TRX1, PH6TQxx | known |
+| PHxA | `0x17`, `0x1701`–`0x1707` | PH4ARxx, PH4AUxx, PH4AXxx, PH6AQxx, PH6ARxx, PH6AGxx, PH4AUxf | known |
+| PHxP | `0x18`, `0x1801`–`0x180D` | PH4PRxx, PH4PUxx, PH4PGx1, PH4PGx2, PH6PRxx, PH6PGEx, PH6PG0x, PH6PG3x, PH6PG7x (also 150 W), PH4AQE3 | known |
+| service 1.2 | `0x1A` | MECHREVO Kuangshi / Jiguang B2 | experimental |
+| any other Uniwill project with RamFan 1.5 | — | | experimental |
+
+*tested* — checked with this program; *known* — in the platform tables of the official service, not checked here;
+*experimental* — not in those tables. Fan control needs RamFan 1.5 (the window warns if the EC does not report it).
+On the WMI path only a platform with a profile gets functions; for the others use the OEM driver or make a profile
+with the [self-check](docs/EC/Platforms.md).
 
 These chassis are sold under many brands (MAIBENBEN, XMG/Schenker, Eluktronics, Mechrevo, Thunderobot, …).
 Run `uwccctl status` — the first line shows the project. **Not supported:** Tongfang GK/GM barebones (different EC),
-Clevo, Uniwill laptops that shipped with Control Center 3.x.
+Clevo, laptops with Control Center 3.x.
 
 **Tested on**
 

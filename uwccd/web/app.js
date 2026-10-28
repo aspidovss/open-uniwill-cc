@@ -578,7 +578,13 @@ function renderLight() {
   $("#light-sub").textContent = k.kind === "rgb" ? t("ITE controller {0}, firmware {1}", k.device.pid, k.device.fw) : k.kind === "single" ? t("Single-colour backlight (EC controlled)") : t("No backlight found");
   if (k.kind === "single") { $("#kb-level").value = k.level; $("#kb-level").nextElementSibling.textContent = k.level; }
   if (k.kind !== "rgb") return;
-  if (k.effect) { kbSel = { ...kbSel, effect: k.effect.idx, light: k.effect.light, speed: k.effect.speed, direction: k.effect.direction, circular: k.effect.circular }; if (k.effect.colors?.length) kbSel.colors = k.effect.colors; if (k.effect.user) userBuf = k.effect.user; }
+  if (k.effect) {
+    const e = k.effect;
+    kbSel = { ...kbSel, effect: e.idx, light: e.light };
+    for (const key of ["speed", "direction", "circular"]) if (e[key] !== undefined) kbSel[key] = e[key];
+    if (e.colors?.length) kbSel.colors = e.colors; if (e.user) userBuf = e.user;
+    if (e.fx) { fxParams[e.idx] = e.fx; kbSel.fx = e.fx; }
+  }
   const eb = $("#effects"); eb.innerHTML = "";
   for (const [id, name] of Object.entries(k.effects)) {
     const na = (k.unsupported_effects || []).includes(+id);
@@ -601,15 +607,133 @@ function renderLight() {
   $("#alphabet-row").classList.toggle("hidden", kbSel.effect !== 20);
   if (k.effect?.alphabet) $("#kb-alpha").value = k.effect.alphabet;
   drawKbGrid();
+  renderFx(k);
 }
 function applyKb() {
+  if (kbSel.effect >= 100) return act(() => api("keyboard/effect", { effect: kbSel.effect, light: kbSel.light, fx: kbSel.fx || fxDefaults(kbSel.effect) }));
   const body = { ...kbSel };
+  delete body.fx;
   if (kbSel.circular) body.colors = S.keyboard.default_colors;
   if (kbSel.effect === 14) body.user = userBuf;
   if (kbSel.effect === 20) body.alphabet = $("#kb-alpha").value || "HELLO";
   act(() => api("keyboard/effect", body));
 }
 $("#kb-power").addEventListener("change", e => act(() => api("keyboard/power", { on: e.target.checked })));
+
+// ---------------------------------------------------------------- BetterRGB effects (drawn by the service)
+const fxParams = {};                         // effect id -> the parameters last used
+const FX_LABEL = { speed: "Speed", smooth: "Smoothness", random: "Random colours", colors: "Colours", angle: "Angle, °",
+  density: "Density", duration: "Afterglow", reverse: "Reverse direction", width: "Width", concurrent: "Strikes at once",
+  color_count: "Number of colours", style: "Style", layout: "Layout", zones: "Zones", scale: "Scale", blur: "Blur",
+  response: "Response" };
+const FX_CHOICE = { short: "short", medium: "medium", long: "long", streaks: "streaks", columns: "columns", lasers: "lasers",
+  ripples: "ripples", horizontal: "horizontal (rows)", vertical: "vertical (columns)" };
+const FX_TRANS = { off: "Off", fade: "Fade", ripple_center: "Ripple from the centre", ripple_edges: "Ripple from the edges",
+  ripple_top: "Wipe from the top", ripple_bottom: "Wipe from the bottom", ripple_left: "Wipe from the left", ripple_right: "Wipe from the right",
+  snake_main_out_in: "Twin spiral ↘, inwards", snake_main_in_out: "Twin spiral ↘, outwards", snake_anti_out_in: "Twin spiral ↙, inwards",
+  snake_anti_in_out: "Twin spiral ↙, outwards" };
+const FX_BAR = { off: "Nothing", battery: "Battery charge", volume: "Volume", mic: "Microphone level (Windows)", cpu: "CPU load",
+  gpu: "GPU load", audio: "Playback level (Windows)" };
+const FX_DIR = { left_to_right: "left to right", right_to_left: "right to left", edges_to_center: "from the edges to the centre",
+  center_to_edges: "from the centre to the edges" };
+function fxDefaults(id) {
+  const c = S.keyboard.fx_effects[id]; const p = {};
+  for (const q of c.params) p[q.key] = JSON.parse(JSON.stringify(q.default));
+  return p;
+}
+const rgb2hex = c => "#" + c.map(v => Math.max(0, Math.min(255, v | 0)).toString(16).padStart(2, "0")).join("");
+function renderFx(k) {
+  const fb = $("#fx-effects"); fb.innerHTML = "";
+  for (const [id, c] of Object.entries(k.fx_effects || {})) {
+    const tip = c.needs.includes("keys") ? t("Reacts to key presses") : c.needs.includes("screen") ? t("Follows the colours of the screen") : "";
+    fb.append(h("div", { class: `eff${+id === kbSel.effect ? " on" : ""}`, title: tip,
+      onclick: () => { kbSel.effect = +id; kbSel.fx = fxParams[id] || fxDefaults(id); applyKb(); } },
+      h("div", { class: "sw8" }), t(c.name)));
+  }
+  const isFx = kbSel.effect >= 100 && k.fx_effects && k.fx_effects[kbSel.effect];
+  $("#fx-card").classList.toggle("hidden", !isFx);
+  for (const id of ["kb-speed-row", "kb-dir-row", "kb-colour-card"]) $("#" + id).classList.toggle("hidden", !!isFx);
+  if (isFx) drawFxParams(k);
+  renderFxEngine(k);
+}
+function drawFxParams(k) {
+  const c = k.fx_effects[kbSel.effect];
+  const p = kbSel.fx = { ...fxDefaults(kbSel.effect), ...(kbSel.fx || {}) };
+  const box = $("#fx-params"); box.innerHTML = "";
+  const needs = $("#fx-needs");
+  const note = c.needs.includes("keys") ? (S.platform.os === "windows" ? t("Reacts to key presses: the Control Center tray program sends them to the service while this effect runs (nothing is stored).")
+      : t("Reacts to key presses: the service reads them from the keyboard while this effect runs (nothing is stored)."))
+    : c.needs.includes("screen") ? (S.platform.os === "windows" ? t("Follows the screen: the tray program sends a 64×24 picture of the main screen 15 times a second while this effect runs (it is not stored).")
+      : t("Follows the screen: the session agent sends a 64×24 picture of the screen while this effect runs (X11 only; not on Wayland; it is not stored)."))
+    : "";
+  needs.textContent = note; needs.classList.toggle("hidden", !note);
+  if (k.four_zone) { needs.textContent = (note ? note + " " : "") + t("On a four-zone keyboard each zone shows the average of its keys."); needs.classList.remove("hidden"); }
+  const send = () => { fxParams[kbSel.effect] = p; applyKb(); };
+  for (const q of c.params) {
+    const label = t(FX_LABEL[q.key] || q.key);
+    if (q.kind === "int") {
+      const inp = h("input", { type: "range", min: q.min, max: q.max, step: 1, value: p[q.key] });
+      const out = h("output", {}, String(p[q.key]));
+      inp.addEventListener("input", () => { out.textContent = inp.value; });
+      inp.addEventListener("change", () => { p[q.key] = +inp.value; send(); });
+      box.append(h("label", { class: "slider" }, h("span", {}, label), inp, out));
+    } else if (q.kind === "bool") {
+      const inp = h("input", { type: "checkbox" }); inp.checked = !!p[q.key];
+      inp.addEventListener("change", () => { p[q.key] = inp.checked; send(); });
+      box.append(h("label", { class: "chk" }, inp, h("span", {}, " " + label)));
+    } else if (q.kind === "choice") {
+      const sel = h("select", {}, ...q.options.map(o => { const e = h("option", { value: o }, t(FX_CHOICE[o] || o)); if (o === p[q.key]) e.selected = true; return e; }));
+      sel.addEventListener("change", () => { p[q.key] = sel.value; send(); });
+      box.append(h("label", { class: "slider" }, h("span", {}, label), sel));
+    } else if (q.kind === "colors") {
+      if (q.key === "colors" && p.random) continue;                    // random colours: the colour is not used
+      const n = p.color_count ? Math.min(q.max, p.color_count) : p.zones ? Math.min(q.max, p.zones) : q.max;
+      const cols = p[q.key] = (p[q.key] || []).slice(0, q.max);
+      while (cols.length < q.max) cols.push([255, 255, 255]);
+      const row = h("div", { class: "row wrap" }, h("span", { class: "muted tiny" }, label));
+      for (let i = 0; i < n; i++) {
+        const inp = h("input", { type: "color", value: rgb2hex(cols[i]) });
+        inp.addEventListener("change", () => { cols[i] = hex2rgb(inp.value); send(); });
+        row.append(inp);
+      }
+      box.append(row);
+    }
+  }
+}
+function fxCfg(body) { return act(() => api("keyboard/fx/config", body)); }
+function renderFxEngine(k) {
+  const c = k.fx_config; if (!c) return;
+  const setRange = (id, v) => { const e = $("#" + id); if (document.activeElement === e) return; e.value = v; e.nextElementSibling.textContent = v; };
+  setRange("fx-fps-ac", c.fps_ac); setRange("fx-fps-bat", c.fps_battery); setRange("fx-trans-ms", c.transition_ms);
+  const fill = (id, list, names, cur) => { const sel = $("#" + id); sel.innerHTML = ""; for (const v of list) { const o = h("option", { value: v }, t(names[v] || v)); if (v === cur) o.selected = true; sel.append(o); } };
+  fill("fx-trans", k.fx_transitions, FX_TRANS, c.transition);
+  fill("fx-bar-mode", k.fx_bar_modes, FX_BAR, c.bar.mode);
+  fill("fx-bar-dir", k.fx_bar_directions, FX_DIR, c.bar.direction);
+  $("#fx-bar-start").value = rgb2hex(c.bar.start); $("#fx-bar-end").value = rgb2hex(c.bar.end);
+  $$("#fx-bar-audio input").forEach(i => { i.value = rgb2hex(c.bar.audio[+i.dataset.a]); });
+  $("#fx-bar-audio").classList.toggle("hidden", c.bar.mode !== "audio");
+  $("#fx-bar-box").classList.toggle("hidden", !!k.four_zone);
+  const g = c.gains;
+  $("#fx-gains").textContent = g.every(x => x === 1000) ? t("Calibration: none (neutral)") : t("Calibration: red {0} %, green {1} %, blue {2} %", g[0] / 10, g[1] / 10, g[2] / 10);
+  const cal = !!(k.fx && k.fx.calibrating);
+  $("#fx-cal-idle").classList.toggle("hidden", cal); $("#fx-cal-run").classList.toggle("hidden", !cal);
+  $("#fx-status").textContent = k.fx ? t("Running: {0} — {1} of {2} frames per second", t(k.fx.name), k.fx.fps ?? "—", k.fx.target_fps ?? "—")
+    : t("No BetterRGB effect is running — the settings apply when one is chosen.");
+}
+for (const [id, key] of [["fx-fps-ac", "fps_ac"], ["fx-fps-bat", "fps_battery"], ["fx-trans-ms", "transition_ms"]]) {
+  $("#" + id).addEventListener("input", e => { e.target.nextElementSibling.textContent = e.target.value; });
+  $("#" + id).addEventListener("change", e => fxCfg({ [key]: +e.target.value }));
+}
+$("#fx-trans").addEventListener("change", e => fxCfg({ transition: e.target.value }));
+$("#fx-bar-mode").addEventListener("change", e => fxCfg({ bar: { mode: e.target.value } }));
+$("#fx-bar-dir").addEventListener("change", e => fxCfg({ bar: { direction: e.target.value } }));
+$("#fx-bar-start").addEventListener("change", e => fxCfg({ bar: { start: hex2rgb(e.target.value) } }));
+$("#fx-bar-end").addEventListener("change", e => fxCfg({ bar: { end: hex2rgb(e.target.value) } }));
+$$("#fx-bar-audio input").forEach(i => i.addEventListener("change", () => fxCfg({ bar: { audio: $$("#fx-bar-audio input").map(x => hex2rgb(x.value)) } })));
+$("#fx-cal-start").addEventListener("click", () => act(() => api("keyboard/fx/calibrate", { action: "start" }), t("The keys show raw white now — pick the colour you see")));
+$("#fx-cal-apply").addEventListener("click", () => act(() => api("keyboard/fx/calibrate", { action: "apply", observed: hex2rgb($("#fx-cal-color").value) }), t("Calibration saved")));
+$("#fx-cal-cancel").addEventListener("click", () => act(() => api("keyboard/fx/calibrate", { action: "cancel" })));
+$("#fx-cal-reset").addEventListener("click", () => act(() => api("keyboard/fx/calibrate", { action: "reset" }), t("Calibration reset")));
 
 // ---------------------------------------------------------------- light bar (chassis)
 const LB_EFFECT_NAME = { static: "Static colour", breathing: "Breathing", breathing_multi: "Breathing, multicolour", wave: "Wave",
@@ -2146,6 +2270,7 @@ const HELP_PAGES = [
   { id: "ec-tool", name: "EC test tool (ec_tool.py)", en: "EC/README.md", ru: "EC/README.ru.md" },
   { group: "Program" },
   { id: "features", name: "Features and how they work", en: "FEATURES.md", ru: "FEATURES.md" },
+  { id: "lighting", name: "BetterRGB keyboard effects", en: "LIGHTING.md", ru: "LIGHTING.ru.md" },
   { id: "cli", name: "Command line (uwccctl)", en: "CLI.md", ru: "CLI.ru.md" },
 ];
 var helpCur = null;                     // var: setLang() may run before this line
@@ -2204,7 +2329,9 @@ $(`#nav a[data-page="help"]`)?.addEventListener("click", () => { if (!helpCur) o
 (function addHelpLinks() {                               // "?" next to the titles of the EC Manager cards
   const pairs = [["#dm-platform h3", "ec-manager", { en: "platform-profile", ru: "профиль-платформы" }],
     ["#dm-selfcheck h3", "ec-manager", { en: "self-check", ru: "самопроверка" }],
-    ["#dm-wmi h3", "wmi-config"]];
+    ["#dm-wmi h3", "wmi-config"],
+    ["#fx-card h3", "lighting", { en: "effects", ru: "эффекты" }],
+    ["#fx-engine-card h3", "lighting", { en: "engine-settings", ru: "настройки-движка" }]];
   const firstCard = $$("#page-driver .card h3").find(x => (x.dataset.en || x.textContent) === "EC access path");
   const mon = $$("#page-driver .card h3").find(x => (x.dataset.en || x.textContent) === "Monitoring");
   const els = pairs.map(([sel, id, a]) => [$(sel), id, a]).concat([[firstCard, "wmi-vs-driver"], [mon, "ec-manager", { en: "monitoring", ru: "мониторинг" }]]);

@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""User-session agent: OSD notifications, touchpad on/off, Fn launch key.
+"""User-session agent: OSD notifications, touchpad on/off, Fn launch key, input for the BetterRGB effects.
 
 Runs from ~/.config/autostart. Listens to the service event stream (SSE).
+BetterRGB effects: while the running effect needs it, the agent sends a small picture of the screen (X11 only) and
+the master volume (pactl) — key presses are read by the service itself. Nothing is stored.
 """
 import json
 import os
@@ -156,6 +158,109 @@ def handle(ev, osd_enabled):
         subprocess.Popen(["uwcc"])
 
 
+# ------------------------------------------------------------------ BetterRGB effects: input from this session
+SCREEN_W, SCREEN_H = 64, 24
+
+
+class X11Screen:
+    """the root window sampled on a SCREEN_W x SCREEN_H grid: one 1-pixel strip per output row (XGetImage)"""
+
+    def __init__(self):
+        import ctypes
+        import ctypes.util
+        lib = ctypes.util.find_library("X11")
+        if not lib or os.environ.get("XDG_SESSION_TYPE") == "wayland" or not os.environ.get("DISPLAY"):
+            raise OSError("screen ambient needs an X11 session")
+        x = ctypes.cdll.LoadLibrary(lib)
+        x.XOpenDisplay.restype = ctypes.c_void_p
+        x.XOpenDisplay.argtypes = [ctypes.c_char_p]
+        x.XDefaultRootWindow.restype = ctypes.c_ulong
+        x.XDefaultRootWindow.argtypes = [ctypes.c_void_p]
+        x.XDefaultScreen.argtypes = [ctypes.c_void_p]
+        x.XDisplayWidth.argtypes = x.XDisplayHeight.argtypes = [ctypes.c_void_p, ctypes.c_int]
+
+        class XImage(ctypes.Structure):
+            _fields_ = [("width", ctypes.c_int), ("height", ctypes.c_int), ("xoffset", ctypes.c_int),
+                        ("format", ctypes.c_int), ("data", ctypes.c_void_p), ("byte_order", ctypes.c_int),
+                        ("bitmap_unit", ctypes.c_int), ("bitmap_bit_order", ctypes.c_int), ("bitmap_pad", ctypes.c_int),
+                        ("depth", ctypes.c_int), ("bytes_per_line", ctypes.c_int), ("bits_per_pixel", ctypes.c_int)]
+        x.XGetImage.restype = ctypes.POINTER(XImage)
+        x.XGetImage.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_int, ctypes.c_int, ctypes.c_uint,
+                                ctypes.c_uint, ctypes.c_ulong, ctypes.c_int]
+        x.XFree.argtypes = [ctypes.c_void_p]
+        self.ct, self.x = ctypes, x
+        self.dpy = x.XOpenDisplay(None)
+        if not self.dpy:
+            raise OSError("cannot open the X display")
+        self.root = x.XDefaultRootWindow(self.dpy)
+        scr = x.XDefaultScreen(self.dpy)
+        self.w, self.h = x.XDisplayWidth(self.dpy, scr), x.XDisplayHeight(self.dpy, scr)
+
+    def grab(self):
+        import base64
+        out = bytearray()
+        for row in range(SCREEN_H):
+            y = int((row + 0.5) * self.h / SCREEN_H)
+            img = self.x.XGetImage(self.dpy, self.root, 0, y, self.w, 1, 0xFFFFFFFF, 2)      # ZPixmap
+            if not img:
+                return None
+            im = img.contents
+            line = self.ct.string_at(im.data, im.bytes_per_line) if im.bits_per_pixel == 32 else None
+            self.x.XFree(im.data)
+            self.x.XFree(img)
+            if line is None:
+                return None
+            for col in range(SCREEN_W):
+                o = int((col + 0.5) * self.w / SCREEN_W) * 4
+                out += bytes((line[o + 2], line[o + 1], line[o]))       # BGRX -> RGB
+        return {"w": SCREEN_W, "h": SCREEN_H, "rgb": base64.b64encode(bytes(out)).decode()}
+
+
+def master_volume():
+    """0..1 of the default output (pactl, PipeWire or PulseAudio); 0 when muted"""
+    try:
+        mute = subprocess.run(["pactl", "get-sink-mute", "@DEFAULT_SINK@"], capture_output=True, text=True, timeout=2).stdout
+        if "yes" in mute.lower():
+            return 0.0
+        out = subprocess.run(["pactl", "get-sink-volume", "@DEFAULT_SINK@"], capture_output=True, text=True, timeout=2).stdout
+        pct = [int(p.strip().rstrip("%")) for p in out.split("/") if p.strip().endswith("%")]
+        return min(1.0, pct[0] / 100.0) if pct else None
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None
+
+
+def fx_loop():
+    needs, asked = [], 0.0
+    screen, failed, next_vol = None, 0.0, 0.0
+    while True:
+        now = time.monotonic()
+        body = {}
+        if "screen" in needs and now > failed:
+            try:
+                screen = screen or X11Screen()
+                shot = screen.grab()
+                if shot:
+                    body["screen"] = shot
+            except Exception as e:  # noqa: BLE001
+                print("uwcc-agent: screen ambient:", e, file=sys.stderr)
+                screen, failed = None, now + 60
+        if "volume" in needs and now >= next_vol and shutil.which("pactl"):
+            next_vol = now + 0.3
+            v = master_volume()
+            if v is not None:
+                body["metrics"] = {"volume": v}
+        if body or now - asked > 2.0:
+            try:
+                req = urllib.request.Request(f"http://127.0.0.1:{PORT}/api/keyboard/fx/input", method="POST",
+                                             data=json.dumps(body).encode(),
+                                             headers={"X-UWCC-Token": token(), "Content-Type": "application/json"})
+                needs = json.load(urllib.request.urlopen(req, timeout=3)).get("needs") or []
+            except Exception:  # noqa: BLE001
+                needs = []
+            asked = now
+        time.sleep(1 / 15.0 if ("screen" in needs or "volume" in needs) else 2.0)
+
+
 def _service_answers(timeout=3):
     try:
         req = urllib.request.Request(f"http://127.0.0.1:{PORT}/api/state", headers={"X-UWCC-Token": token()})
@@ -196,6 +301,7 @@ def offer_restart():
 
 def main():
     import threading
+    threading.Thread(target=fx_loop, daemon=True, name="fx").start()
     osd_enabled = True
     last_state = 0
     offline = {"since": None, "offered": False}

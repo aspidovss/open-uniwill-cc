@@ -223,6 +223,19 @@ text of the Alphabet effect
 .BI "kb level " N
 Brightness 0..4.
 .TP
+.B kb fx
+BetterRGB effects (drawn by the service frame by frame): numbers, parameters and the engine settings.
+.TP
+.BI "kb fx " NAME | N " \fR[\fB\-\-light \fI0..4\fR] [\fIKEY\fB=\fIVALUE\fR ...]"
+Start a BetterRGB effect. Colours as \fBcolors=\fIRRGGBB\fB,\fIRRGGBB\fR, switches as \fBon\fR|\fBoff\fR.
+.TP
+.BI "kb fx\-config " KEY = VALUE " ..."
+\fBfps_ac\fR, \fBfps_battery\fR (10..60), \fBtransition\fR, \fBtransition_ms\fR, \fBbar\fR
+(off|battery|volume|mic|cpu|gpu|audio), \fBbar_direction\fR, \fBbar_start\fR, \fBbar_end\fR.
+.TP
+.BR "kb fx\-calibrate " start | cancel | reset ", " "kb fx\-calibrate apply \fIRRGGBB"
+White calibration: the keys show raw white, \fIRRGGBB\fR is the colour you see.
+.TP
 .BR "lb " [ hinge | base | logo "] " on | off
 .TP
 .BI "lb \fR[\fIZONE\fR] color " RRGGBB " \fR[\fIEFFECT\fR]"

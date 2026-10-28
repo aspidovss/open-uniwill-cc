@@ -104,6 +104,10 @@ uwccctl fan set current cpu 0/45:0 55/50:30 70/65:60 85/80:100
 | `kb effects` | эффекты с номерами и поддержкой на этой клавиатуре |
 | `kb effect ИМЯ\|N [параметры]` | включить эффект; неуказанные параметры сохраняются |
 | `kb level N` | яркость 0..4 |
+| `kb fx` | эффекты BetterRGB (рисует служба): номера, параметры, настройки |
+| `kb fx ИМЯ\|N [--light 0..4] [КЛЮЧ=ЗНАЧЕНИЕ ...]` | включить эффект BetterRGB; неуказанные параметры сохраняются |
+| `kb fx-config КЛЮЧ=ЗНАЧЕНИЕ ...` | `fps_ac`, `fps_battery` (10..60), `transition`, `transition_ms`, `bar`, `bar_direction`, `bar_start`, `bar_end` |
+| `kb fx-calibrate start\|cancel\|reset` / `kb fx-calibrate apply RRGGBB` | калибровка белого (RRGGBB — цвет, который вы видите) |
 | `lb [hinge\|base\|logo] on\|off` | зона световой полосы (по умолчанию `hinge`) |
 | `lb [ЗОНА] color RRGGBB [ЭФФЕКТ]` | цвет |
 | `lb [ЗОНА] effect static\|breathing\|breathing_multi\|wave\|cycle\|rainbow\|colorbreath\|colorwave` | эффект |
@@ -115,7 +119,11 @@ uwccctl fan set current cpu 0/45:0 55/50:30 70/65:60 85/80:100
 ```bash
 uwccctl kb effect wave --speed 3 --multi
 uwccctl kb effect single --color 00A0FF --light 2
+uwccctl kb fx rain density=4 color_count=2 colors=5080FF,FFFFFF
+uwccctl kb fx-config transition=ripple_center bar=battery
 ```
+
+Эффекты BetterRGB: [LIGHTING.ru.md](LIGHTING.ru.md).
 
 ## Переключатели и автоматизация
 

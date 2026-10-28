@@ -103,6 +103,7 @@ EC protocol: [PROTOCOL.md](PROTOCOL.md).
 |---|---|
 | `lighting/keyboard.py` | keyboard backlight manager (ITE RGB or single-colour EC) |
 | `lighting/ite.py` | ITE 829x per-key RGB controller over USB HID |
+| `lighting/fx.py` | BetterRGB effects drawn by the service: frames, transitions, white calibration, top-row bar, frame pacing (from BetterRGB, MIT) |
 | `lighting/oem/` | hardware and software effects ported from the OEM program |
 | `watercooler.py` | liquid cooler over Bluetooth LE: XMG Oasis Mk1 / Mk2 and twins, tiers, flow guard |
 | `monitor.py` | temperatures, load, clocks, fans, power, drives, battery |
@@ -124,6 +125,7 @@ EC protocol: [PROTOCOL.md](PROTOCOL.md).
 | `sysinfo.py`, `pdhpower.py` | monitor data on Windows, CPU power from the Energy Meter counters |
 | `winplat.py`, `winapi.py` | small Windows helpers (DMI, processes, WMI), ctypes layer |
 | `tray.py` | `ControlCenter.exe`: tray icon, OSD, notifications, updates, service restart |
+| `fxinput.py` | tray side of the BetterRGB effects: key presses, screen picture, audio levels |
 
 ## Linux packaging
 

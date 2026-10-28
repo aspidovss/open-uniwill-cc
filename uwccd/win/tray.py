@@ -5,6 +5,7 @@ Lives in the notification area (hidden by default), starts with Windows, and:
   * quick menu: mode, Fan Boost, keyboard backlight, liquid cooler, language, autostart;
   * shows notifications for service events (mode key, overheating, coolant flow, ...);
   * reports user idle time for the keyboard-backlight auto-off (a service cannot see input);
+  * sends key presses, a small screen picture and audio levels while a BetterRGB effect needs them (fxinput.py);
   * toggles the touchpad with Win+Ctrl+F24 when the touchpad key is pressed.
 
   ControlCenter.exe            tray only (what the Run key starts)
@@ -426,6 +427,11 @@ class Tray:
             except Exception:  # noqa: BLE001
                 self.idle_sent = None
 
+    def fx_loop(self):
+        """BetterRGB effects: input from this session (only while the running effect needs it)"""
+        from . import fxinput
+        fxinput.run(lambda body: self.api.call("keyboard/fx/input", body, timeout=3))
+
     def open_request_loop(self):
         """Another ControlCenter.exe --open signals this event."""
         kernel32 = _k32()
@@ -437,7 +443,7 @@ class Tray:
     def run(self):
         def setup(icon):
             icon.visible = True
-            for f in (self.events_loop, self.idle_loop, self.open_request_loop):
+            for f in (self.events_loop, self.idle_loop, self.open_request_loop, self.fx_loop):
                 threading.Thread(target=f, daemon=True).start()
             if self.show_at_start:
                 threading.Timer(1.5, self.open_window).start()

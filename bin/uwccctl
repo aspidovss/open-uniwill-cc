@@ -153,7 +153,15 @@ HELP = {
         "                  [--color RRGGBB[,RRGGBB...]] [--multi|--no-multi] [--text TEXT]\n"
         "                                         options not given keep their current values\n"
         "uwccctl kb level N                       brightness (RGB 0-4; single-colour keyboards 0-4)\n"
-        "  Example: uwccctl kb effect wave --speed 3 --multi"),
+        "uwccctl kb fx                            BetterRGB effects (drawn by the service) and their settings\n"
+        "uwccctl kb fx NAME|N [--light 0-4] [KEY=VALUE ...]   start one; KEY from `kb fx`, colours as\n"
+        "                                         colors=RRGGBB,RRGGBB, switches as on|off\n"
+        "uwccctl kb fx-config KEY=VALUE ...       fps_ac fps_battery (10-60) transition transition_ms (100-5000)\n"
+        "                                         bar (off|battery|volume|mic|cpu|gpu|audio) bar_direction\n"
+        "                                         bar_start bar_end (RRGGBB)\n"
+        "uwccctl kb fx-calibrate start|cancel|reset | apply RRGGBB   white calibration (RRGGBB: the colour seen)\n"
+        "  Example: uwccctl kb effect wave --speed 3 --multi\n"
+        "           uwccctl kb fx rain density=4 color_count=2 colors=5080FF,FFFFFF"),
     "lb": (
         "uwccctl lb [hinge|base|logo] on|off\n"
         "uwccctl lb [ZONE] color RRGGBB [EFFECT]\n"
@@ -724,7 +732,15 @@ def cmd_battery(a):
 def kb_text(k):
     lines = [f"kind {k.get('kind')}, power {'on' if k.get('power') else 'off'}"]
     e = k.get("effect")
-    if e:
+    if e and e.get("fx") is not None:
+        name = ((k.get("fx_effects") or {}).get(str(e.get("idx"))) or {}).get("name", e.get("idx"))
+        lines.append(f"BetterRGB effect {name} ({e.get('idx')}), light {e.get('light')}, " +
+                     " ".join(f"{a}={fx_val(b)}" for a, b in e["fx"].items() if not a.endswith("_i")))
+        f = k.get("fx") or {}
+        if f:
+            lines.append(f"running, {f.get('fps')} of {f.get('target_fps')} frames per second" +
+                         (f", needs {', '.join(f['needs'])}" if f.get("needs") else ""))
+    elif e:
         name = (k.get("effects") or {}).get(str(e.get("idx")), e.get("idx"))
         lines.append(f"effect {name} ({e.get('idx')}), light {e.get('light')}, speed {e.get('speed')}, "
                      f"direction {e.get('direction')}, multicolour {'on' if e.get('circular') else 'off'}, "
@@ -735,6 +751,66 @@ def kb_text(k):
         d = k["device"]
         lines.append(f"device {d.get('pid')} fw {d.get('fw')} type {d.get('type')}" +
                      (" (four-zone)" if k.get("four_zone") else ""))
+    return lines
+
+
+def fx_val(v):
+    if isinstance(v, bool):
+        return "on" if v else "off"
+    if isinstance(v, list):
+        return ",".join(hexrgb(c) for c in v)
+    return str(v)
+
+
+def fx_index(k, x):
+    effects = k.get("fx_effects") or {}
+    if str(x).isdigit() and str(x) in effects:
+        return int(x)
+    key = str(x).lower().replace("-", "").replace("_", "").replace(" ", "")
+    for i, e in effects.items():
+        if e["name"].lower().replace(" ", "") == key:
+            return int(i)
+    fail(f"{T('error')}: no BetterRGB effect {x} (uwccctl kb fx)", 2)
+
+
+def fx_params(spec, pairs):
+    out = {}
+    kinds = {q["key"]: q for q in spec["params"]}
+    for pair in pairs:
+        if "=" not in pair:
+            usage("kb")
+        key, val = pair.split("=", 1)
+        q = kinds.get(key)
+        if not q:
+            fail(f"{T('error')}: {key}: not a parameter of this effect ({', '.join(kinds)})", 2)
+        if q["kind"] == "int":
+            out[key] = num(val, "kb")
+        elif q["kind"] == "bool":
+            out[key] = val.lower() in ("on", "1", "yes", "true")
+        elif q["kind"] == "choice":
+            if val not in q["options"]:
+                fail(f"{T('error')}: {key}: {' | '.join(q['options'])}", 2)
+            out[key] = val
+        else:
+            out[key] = [rgb(c, "kb") for c in val.split(",")]
+    return out
+
+
+def fx_text(k):
+    lines = []
+    for i, e in (k.get("fx_effects") or {}).items():
+        ps = " ".join(f"{q['key']}=" + ("|".join(q["options"]) if q["kind"] == "choice" else
+                                        "on|off" if q["kind"] == "bool" else "RRGGBB,..." if q["kind"] == "colors" else
+                                        f"{q['min']}-{q['max']}") for q in e["params"])
+        needs = f"  [needs {', '.join(e['needs'])}]" if e["needs"] else ""
+        lines.append(f"{i:>4} {e['name']:<17} {ps}{needs}")
+    c = k.get("fx_config") or {}
+    if c:
+        b = c.get("bar") or {}
+        lines.append(f"settings: fps_ac={c.get('fps_ac')} fps_battery={c.get('fps_battery')} "
+                     f"transition={c.get('transition')} transition_ms={c.get('transition_ms')} "
+                     f"bar={b.get('mode')} bar_direction={b.get('direction')} bar_start={hexrgb(b.get('start'))} "
+                     f"bar_end={hexrgb(b.get('end'))} gains={'/'.join(str(g) for g in c.get('gains') or [])}")
     return lines
 
 
@@ -765,6 +841,48 @@ def cmd_kb(a):
                 for i, n in (k.get("effects") or {}).items()]
         return out(rows, lambda d: [f"{r['id']:3} {r['name']:14}" + ("" if r["supported"] else " (not on this keyboard)") +
                                     (" (drawn by the service)" if r["software"] and r["supported"] else "") for r in d])
+    elif op == "fx" and not a[1:]:
+        return out(call("state")["keyboard"], fx_text)
+    elif op == "fx":
+        o, pos = opts(a[1:], {"light": True})
+        if o is None or not pos:
+            usage("kb")
+        k = call("state")["keyboard"]
+        idx = fx_index(k, pos[0])
+        cur = k.get("effect") or {}
+        params = dict(cur.get("fx") or {}) if cur.get("idx") == idx else {}
+        params.update(fx_params(k["fx_effects"][str(idx)], pos[1:]))
+        call("keyboard/effect", {"effect": idx, "light": num(o["light"], "kb") if "light" in o else cur.get("light", 4),
+                                 "fx": {p: v for p, v in params.items() if not p.endswith("_i")}})
+    elif op == "fx-config" and a[1:]:
+        body, bar = {}, {}
+        for pair in a[1:]:
+            if "=" not in pair:
+                usage("kb")
+            key, val = pair.split("=", 1)
+            if key in ("fps_ac", "fps_battery", "transition_ms"):
+                body[key] = num(val, "kb")
+            elif key == "transition":
+                body[key] = val
+            elif key == "bar":
+                bar["mode"] = val
+            elif key == "bar_direction":
+                bar["direction"] = val
+            elif key in ("bar_start", "bar_end"):
+                bar[key[4:]] = rgb(val, "kb")
+            else:
+                usage("kb")
+        if bar:
+            body["bar"] = bar
+        call("keyboard/fx/config", body)
+        return out(call("state")["keyboard"], fx_text)
+    elif op == "fx-calibrate" and a[1:]:
+        act = a[1]
+        if act not in ("start", "apply", "cancel", "reset") or (act == "apply" and len(a) < 3):
+            usage("kb")
+        r = call("keyboard/fx/calibrate", {"action": act, "observed": rgb(a[2], "kb") if act == "apply" else None})
+        return out(r, lambda d: [f"gains {'/'.join(str(g) for g in d['gains'])} (per mille), "
+                                 f"calibrating {'yes' if d['calibrating'] else 'no'}"])
     elif op == "effect" and a[1:]:
         o, pos = opts(a[1:], {"light": True, "speed": True, "dir": True, "color": True, "multi": False,
                               "no-multi": False, "text": True})

@@ -103,6 +103,10 @@ uwccctl fan set current cpu 0/45:0 55/50:30 70/65:60 85/80:100
 | `kb effects` | effects with numbers and support on this keyboard |
 | `kb effect NAME\|N [options]` | start an effect; options not given keep their values |
 | `kb level N` | brightness 0..4 |
+| `kb fx` | BetterRGB effects (drawn by the service): numbers, parameters, settings |
+| `kb fx NAME\|N [--light 0..4] [KEY=VALUE ...]` | start a BetterRGB effect; parameters not given keep their values |
+| `kb fx-config KEY=VALUE ...` | `fps_ac`, `fps_battery` (10..60), `transition`, `transition_ms`, `bar`, `bar_direction`, `bar_start`, `bar_end` |
+| `kb fx-calibrate start\|cancel\|reset` / `kb fx-calibrate apply RRGGBB` | white calibration (RRGGBB: the colour you see) |
 | `lb [hinge\|base\|logo] on\|off` | light bar zone (default `hinge`) |
 | `lb [ZONE] color RRGGBB [EFFECT]` | colour |
 | `lb [ZONE] effect static\|breathing\|breathing_multi\|wave\|cycle\|rainbow\|colorbreath\|colorwave` | effect |
@@ -114,7 +118,11 @@ Effect options: `--light 0..4`, `--speed 0..4`, `--dir right|left|up|down`, `--c
 ```bash
 uwccctl kb effect wave --speed 3 --multi
 uwccctl kb effect single --color 00A0FF --light 2
+uwccctl kb fx rain density=4 color_count=2 colors=5080FF,FFFFFF
+uwccctl kb fx-config transition=ripple_center bar=battery
 ```
+
+BetterRGB effects: see [LIGHTING.md](LIGHTING.md).
 
 ## Switches and automation
 

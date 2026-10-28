@@ -362,18 +362,25 @@
         <div class="card">
           <h3 data-i>Lighting effects</h3>
           <div class="effects" id="effects"></div>
+          <div class="fx-head"><h4>BetterRGB</h4><span class="muted tiny" data-i>effects drawn by the service, frame by frame</span></div>
+          <div class="effects" id="fx-effects"></div>
+        </div>
+        <div class="card hidden" id="fx-card">
+          <h3 data-i>BetterRGB effect settings</h3>
+          <p class="muted tiny hidden" id="fx-needs"></p>
+          <div id="fx-params" class="fx-params"></div>
         </div>
         <div class="grid g2">
           <div class="card">
             <h3 data-i>Effect settings</h3>
             <label class="slider"><span data-i>Brightness</span> <input type="range" min="0" max="4" step="1" id="kb-light"><output></output></label>
-            <label class="slider"><span data-i>Speed</span> <input type="range" min="0" max="4" step="1" id="kb-speed"><output></output></label>
-            <label class="slider"><span data-i>Direction</span>
+            <label class="slider" id="kb-speed-row"><span data-i>Speed</span> <input type="range" min="0" max="4" step="1" id="kb-speed"><output></output></label>
+            <label class="slider" id="kb-dir-row"><span data-i>Direction</span>
               <select id="kb-dir"><option value="0" data-i>Right</option><option value="1" data-i>Left</option><option value="2" data-i>Up</option><option value="3" data-i>Down</option></select>
             </label>
             <label class="slider hidden" id="alphabet-row"><span data-i>Text</span> <input type="text" id="kb-alpha" maxlength="40" value="HELLO" placeholder="A–Z"></label>
           </div>
-          <div class="card">
+          <div class="card" id="kb-colour-card">
             <h3 data-i>Colour</h3>
             <div class="swatches" id="swatches"></div>
             <label class="chk"><input type="checkbox" id="kb-multi"> <span data-i>Multicolour (all palette colours in turn)</span></label>
@@ -385,6 +392,41 @@
             <div class="row"><input type="color" id="brush" value="#32dbbe"><button class="btn ghost" id="um-fill" data-i>Fill all</button><button class="btn ghost" id="um-clear" data-i>Clear</button><button class="btn" id="um-apply" data-i>Apply</button></div></div>
           <div class="kbgrid" id="kbgrid"></div>
           <p class="muted tiny" data-i>The 6×21 grid matches the LED matrix of the ITE controller. Click or drag to paint.</p>
+        </div>
+        <div class="card" id="fx-engine-card">
+          <h3 data-i>BetterRGB engine</h3>
+          <p class="muted tiny" id="fx-status"></p>
+          <div class="grid g2">
+            <div>
+              <label class="slider"><span data-i>Frames per second on AC</span> <input type="range" min="10" max="60" step="1" id="fx-fps-ac"><output></output></label>
+              <label class="slider"><span data-i>Frames per second on battery</span> <input type="range" min="10" max="60" step="1" id="fx-fps-bat"><output></output></label>
+              <label class="slider"><span data-i>Transition</span> <select id="fx-trans"></select></label>
+              <label class="slider"><span data-i>Transition time, ms</span> <input type="range" min="100" max="3000" step="100" id="fx-trans-ms"><output></output></label>
+              <p class="muted tiny" data-i>The transition shows when an effect starts, when the backlight turns off after inactivity (Switches → Keyboard backlight auto-off) and when it comes back.</p>
+            </div>
+            <div>
+              <h4 data-i>White calibration</h4>
+              <p class="muted tiny" data-i>If white looks tinted on the keys: start the calibration, the keys show raw white; pick the colour you actually see, not the white you want.</p>
+              <p class="tiny" id="fx-gains"></p>
+              <div class="row wrap" id="fx-cal-idle"><button class="btn ghost" id="fx-cal-start" data-i>Calibrate white</button><button class="btn ghost" id="fx-cal-reset" data-i>Reset calibration</button></div>
+              <div class="row wrap hidden" id="fx-cal-run"><input type="color" id="fx-cal-color" value="#ffffff"><button class="btn" id="fx-cal-apply" data-i>Apply</button><button class="btn ghost" id="fx-cal-cancel" data-i>Cancel</button></div>
+            </div>
+          </div>
+          <div id="fx-bar-box">
+            <h4 data-i>Top-row bar</h4>
+            <p class="muted tiny" data-i>The keys of the top row show a level over the effect. A change of the volume shows the volume for 1.8 s.</p>
+            <div class="grid g2">
+              <div>
+                <label class="slider"><span data-i>Shows</span> <select id="fx-bar-mode"></select></label>
+                <label class="slider"><span data-i>Fills</span> <select id="fx-bar-dir"></select></label>
+              </div>
+              <div>
+                <div class="row wrap"><span class="muted tiny" data-i>from</span><input type="color" id="fx-bar-start"><span class="muted tiny" data-i>to</span><input type="color" id="fx-bar-end"></div>
+                <div class="row wrap hidden" id="fx-bar-audio"><span class="muted tiny" data-i>playback colours</span><input type="color" data-a="0"><input type="color" data-a="1"><input type="color" data-a="2"></div>
+              </div>
+            </div>
+          </div>
+          <p class="muted tiny" data-i>Effects from BetterRGB ITE8291 Adaptive (MIT) by TheYamo and ZavierChen, rewritten for this program.</p>
         </div>
       </div>
       <div id="single-ui" class="card hidden">

@@ -225,6 +225,19 @@ FanBoost: оба вентилятора на максимуме.
 .BI "kb level " N
 Яркость 0..4.
 .TP
+.B kb fx
+Эффекты BetterRGB (служба рисует их кадр за кадром): номера, параметры и настройки движка.
+.TP
+.BI "kb fx " ИМЯ | N " \fR[\fB\-\-light \fI0..4\fR] [\fIКЛЮЧ\fB=\fIЗНАЧЕНИЕ\fR ...]"
+Включить эффект BetterRGB. Цвета: \fBcolors=\fIRRGGBB\fB,\fIRRGGBB\fR, переключатели: \fBon\fR|\fBoff\fR.
+.TP
+.BI "kb fx\-config " КЛЮЧ = ЗНАЧЕНИЕ " ..."
+\fBfps_ac\fR, \fBfps_battery\fR (10..60), \fBtransition\fR, \fBtransition_ms\fR, \fBbar\fR
+(off|battery|volume|mic|cpu|gpu|audio), \fBbar_direction\fR, \fBbar_start\fR, \fBbar_end\fR.
+.TP
+.BR "kb fx\-calibrate " start | cancel | reset ", " "kb fx\-calibrate apply \fIRRGGBB"
+Калибровка белого: клавиши показывают «сырой» белый, \fIRRGGBB\fR — цвет, который вы видите.
+.TP
 .BR "lb " [ hinge | base | logo "] " on | off
 .TP
 .BI "lb \fR[\fIЗОНА\fR] color " RRGGBB " \fR[\fIЭФФЕКТ\fR]"

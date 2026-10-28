@@ -30,6 +30,7 @@ Third-party libraries bundled with the Windows build: [THIRD_PARTY_LICENSES.txt]
 | [tomups/watercooler-manager](https://github.com/tomups/watercooler-manager) | GPL-3.0 | The Bluetooth protocol of the XMG Oasis / LCT21001 / LCT22002 liquid coolers was cross-checked against it. **No code was copied** — `uwccd/watercooler.py` is an independent implementation, so it stays MIT. |
 | [anvme/watercooler-xmg-neo-linux](https://github.com/anvme/watercooler-xmg-neo-linux) | not specified | Ideas: a laptop-following cooler mode, pump voltage tiers. No code copied. |
 | [faintonce/open-revo](https://github.com/faintonce/open-revo) | MIT | Ideas: custom performance mode, monitoring history, automation rules. No code copied. |
+| [ZavierChen/BetterRGB-ITE8291-Adaptive](https://github.com/ZavierChen/BetterRGB-ITE8291-Adaptive) (from [EpicYamo/Better-RGB-for-Tongfang-ITE8291](https://github.com/EpicYamo/Better-RGB-for-Tongfang-ITE8291)) | MIT | The BetterRGB keyboard effects, transitions, white calibration, top-row bar and frame pacing — rewritten in Python in `uwccd/lighting/fx.py`. Copyright (c) 2026 TheYamo, (c) 2026 ZavierChen and contributors; their MIT notice is kept in [THIRD_PARTY_LICENSES.txt](THIRD_PARTY_LICENSES.txt). |
 
 Thank you to all of them.
 

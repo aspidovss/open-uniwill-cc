@@ -65,6 +65,25 @@ class MockService(unittest.TestCase):
         return self.get(f"ec/{addr:x}")["value"]
 
     # -- tests ------------------------------------------------------------------
+    def test_betterrgb_fx_api(self):
+        st = self.get("state")["keyboard"]
+        self.assertIn("100", {str(k) for k in st["fx_effects"]})
+        self.assertEqual(self.post("keyboard/effect", {"effect": 107, "light": 3, "fx": {"density": 5}})[0], 200)
+        k = self.get("state")["keyboard"]
+        self.assertEqual((k["effect"]["idx"], k["effect"]["fx"]["density"]), (107, 5))
+        self.assertEqual(k["fx"]["name"], "Rain")
+        code, r = self.post("keyboard/fx/config", {"fps_ac": 20, "bar": {"mode": "battery"}})
+        self.assertEqual((code, r["fps_ac"], r["bar"]["mode"]), (200, 20, "battery"))
+        self.assertIn("volume", self.post("keyboard/fx/input", {"metrics": {"volume": 0.5}})[1]["needs"])
+        self.assertEqual(self.post("keyboard/fx/calibrate", {"action": "start"})[1]["calibrating"], True)
+        r = self.post("keyboard/fx/calibrate", {"action": "apply", "observed": [255, 230, 200]})[1]
+        self.assertEqual((r["calibrating"], r["gains"][2]), (False, 1000))
+        self.assertEqual(self.post("keyboard/fx/calibrate", {"action": "reset"})[1]["gains"], [1000, 1000, 1000])
+        self.assertEqual(self.post("keyboard/fx/input", {"screen": {"w": 2, "h": 2, "rgb": ""}})[0], 400)
+        self.post("keyboard/fx/config", {"bar": {"mode": "off"}})
+        self.assertEqual(self.post("keyboard/effect", {"effect": 1, "colors": [[0, 255, 0]]})[0], 200)
+        self.assertIsNone(self.get("state")["keyboard"]["fx"])
+
     def test_auth_required(self):
         code, _ = self.post("mode", {"mode": 0}, token=None)
         self.assertEqual(code, 401)
@@ -208,6 +227,18 @@ class CliService(MockService):
         self.assertIn("kb effect", self.cli("help", "kb"))
         self.assertIn("COMMAND", self.cli("help"))
         self.assertIn("error", self.j("nosuchcommand", code=2))
+
+    def test_cli_betterrgb(self):
+        self.assertIn("Quicksand", self.cli("kb", "fx"))
+        self.cli("kb", "fx", "rain", "density=4", "colors=5080FF,FFFFFF", "--light", "3")
+        k = self.get("state")["keyboard"]["effect"]
+        self.assertEqual((k["idx"], k["light"], k["fx"]["density"], k["fx"]["colors"][1]), (107, 3, 4, [255, 255, 255]))
+        self.assertIn("BetterRGB effect Rain", self.cli("kb"))
+        self.assertIn("transition=ripple_top", self.cli("kb", "fx-config", "transition=ripple_top", "bar=cpu"))
+        self.assertIn("calibrating yes", self.cli("kb", "fx-calibrate", "start"))
+        self.assertIn("calibrating no", self.cli("kb", "fx-calibrate", "cancel"))
+        self.cli("kb", "fx", "rain", "nope=1", code=2)
+        self.cli("kb", "effect", "single")
 
     def test_cli_modes_profiles(self):
         self.assertEqual(self.j("mode", "turbo")["mode"], "turbo")
@@ -1120,7 +1151,8 @@ class DriverCheckUnit(unittest.TestCase):
 class MarkdownHelpUnit(unittest.TestCase):
     def test_docs_exist(self):
         for f in ("EC/Platforms.md", "EC/Platforms.ru.md", "EC/OEM-driver.md", "EC/OEM-driver.ru.md", "EC/WMI-config.md",
-                  "EC/WMI-vs-Driver.md", "EC/Registers.md", "EC/README.md", "FEATURES.md", "CLI.md", "CLI.ru.md"):
+                  "EC/WMI-vs-Driver.md", "EC/Registers.md", "EC/README.md", "FEATURES.md", "CLI.md", "CLI.ru.md",
+                  "LIGHTING.md", "LIGHTING.ru.md"):
             self.assertTrue(os.path.isfile(os.path.join(ROOT, "docs", f)), f)
 
 
@@ -1228,6 +1260,106 @@ class KeyboardTimingUnit(unittest.TestCase):
         zones = [v for f, v in k.log if v.startswith("0014")][-4:]
         self.assertEqual([v[6:8] for v in zones], ["01", "02", "03", "04"])
         self.assertTrue(k.log[-1][1].startswith("000802010008"))   # static effect, colour argument 8
+
+
+class FxUnit(unittest.TestCase):
+    """BetterRGB effects (uwccd/lighting/fx.py)"""
+
+    def test_every_effect_draws_valid_frames(self):
+        from uwccd.lighting import fx
+        for idx in fx.EFFECTS:
+            e = fx.make(idx, {})
+            for i in range(40):
+                if "keys" in e.needs:
+                    e.press(fx.cell_of("J"), time.monotonic())
+                if "screen" in e.needs:
+                    e.feed((8, 4, bytes([200, 30, 10]) * 32))
+                f = e.frame(i / 30.0, 1.0)
+                self.assertEqual(len(f), 126, idx)
+                for c in f:
+                    self.assertEqual(len(c), 3)
+                    self.assertTrue(all(0.0 <= v <= 4.0 for v in c), (idx, c))      # > 1 is clipped on output
+
+    def test_params_are_cleaned(self):
+        from uwccd.lighting import fx
+        p = fx.clean_params(107, {"speed": 99, "density": "x", "colors": [[300, -1, 5], "bad"], "nope": 1})
+        self.assertEqual((p["speed"], p["density"], p["colors"]), (10, 3, [[255, 0, 5]]))
+        self.assertNotIn("nope", p)
+        self.assertEqual(fx.clean_params(108, {"style": "lasers"})["style_i"], 2)
+        self.assertEqual(fx.clean_params(108, {"style": "bogus"})["style"], "streaks")
+
+    def test_key_map_anchors(self):
+        from uwccd.lighting import fx
+        # GCUService gaming zones: W/A/S/D = 0x2D/0x41/0x42/0x43, arrows = 0x62/0x76/0x77/0x78
+        for name, cell in (("W", 0x2D), ("A", 0x41), ("S", 0x42), ("D", 0x43), ("Up", 0x62), ("Left", 0x76),
+                           ("Down", 0x77), ("Right", 0x78)):
+            self.assertEqual(fx.cell_of(name), cell, name)
+        self.assertEqual(fx.EVDEV[17], "W")
+        self.assertEqual(fx.VK[0x57], "W")
+        self.assertTrue(all(fx.cell_of(n) is not None for n in fx.EVDEV.values()))
+        self.assertTrue(all(fx.cell_of(n) is not None for n in fx.VK.values()))
+
+    def test_transitions_bar_gains_zones(self):
+        from uwccd.lighting import fx
+        for mode in fx.TRANSITIONS:
+            self.assertEqual(fx.coverage(mode, 1.0), [1.0] * 126, mode)
+            if mode != "off":
+                self.assertEqual(max(fx.coverage(mode, 0.0)), 0.0, mode)
+        full = [(1.0, 1.0, 1.0)] * 126
+        half = fx.bar_overlay(full, 0.5, "cpu", fx.BAR_DEFAULT, 0.0)
+        lit = [max(half[c]) > 0.01 for c in fx.BAR_KEYS]
+        self.assertEqual(lit[:9], [True] * 9)
+        self.assertEqual(lit[11:], [False] * 9)
+        self.assertEqual(half[30], (1.0, 1.0, 1.0))                     # other rows keep the effect
+
+        g = fx.white_gains([255, 255, 200])
+        self.assertTrue(g[2] == 1000 and g[0] < 1000 and g[0] == g[1])
+        self.assertIsNone(fx.white_gains([0, 0, 0]))
+        z = fx.zones_linear([(0.5, 0.0, 0.0)] * 126)
+        self.assertEqual(len(z), 4)
+        self.assertAlmostEqual(z[0][0], 0.5)
+        c = fx.clean_config({"fps_ac": 500, "transition": "x", "gains": [10, 2000], "bar": {"mode": "cpu", "start": "bad"}})
+        self.assertEqual((c["fps_ac"], c["transition"], c["gains"], c["bar"]["mode"], c["bar"]["start"]),
+                         (60, "fade", [50, 1000, 1000], "cpu", [0, 255, 80]))
+        img = fx.decode_screen({"w": 8, "h": 4, "rgb": __import__("base64").b64encode(bytes(96)).decode()})
+        self.assertEqual(img[:2], (8, 4))
+        with self.assertRaises(ValueError):
+            fx.decode_screen({"w": 8, "h": 4, "rgb": ""})
+
+    def test_engine_on_mock_keyboard(self):
+        from uwccd.ec import MockEC
+        from uwccd.lighting import fx, ite
+        ec = MockEC(os.path.join(tempfile.mkdtemp(), "ec.json"))
+        kb = ite.MockITE(ec)
+        kb.fx_env = lambda: {"config": fx.clean_config({"transition_ms": 200}), "ac": True, "metrics": {}}
+        kb.set_effect(110, light=2, fx={"speed": 8})
+        e = kb.fx()
+        self.assertIsNotNone(e)
+        self.assertEqual(e.needs(), ["keys"])
+        e.press(["J", "nosuchkey"])
+        time.sleep(0.5)
+        self.assertGreater(e.frames, 3)
+        pkts = [v for f, v in kb.log if f == "F"]
+        self.assertIn("000802330016000000", pkts)                       # 08h user mode, light 2 = 0x16
+        self.assertIn("001200000800000000", pkts)                       # 12h picture
+        e.set_idle(True)
+        time.sleep(0.5)
+        self.assertEqual(e.idle, "asleep")
+        e.set_idle(False)
+        time.sleep(0.5)
+        self.assertEqual(e.idle, "active")
+        kb.set_power(False)
+        self.assertIsNone(kb.ap)
+        kb.set_power(True)
+        self.assertIsNotNone(kb.fx())
+        self.assertEqual(kb.saved["fx"]["speed"], 8)
+        kb.set_effect(4)                                                  # firmware effect stops the engine
+        self.assertIsNone(kb.ap)
+        kb.kb_type = 2                                                    # four-zone keyboard: zone colours
+        kb.set_effect(111, light=4)
+        time.sleep(0.3)
+        self.assertTrue(any(f == "F" and v.startswith("0014") for f, v in kb.log))
+        kb.stop_ap()
 
 
 class DetectUnit(unittest.TestCase):

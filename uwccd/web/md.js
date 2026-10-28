@@ -21,12 +21,29 @@ const MD = (() => {
     return s.replace(/\u0000(\d+)\u0000/g, (_, i) => `<code>${esc(codes[+i])}</code>`);
   }
 
+  // a row split into cells; "|" inside `code` or escaped as \| stays in the cell
+  function cells(r) {
+    const out = [];
+    let cur = "", code = false;
+    const t = r.trim().replace(/^\|/, "").replace(/(?<!\\)\|$/, "");
+    for (let k = 0; k < t.length; k++) {
+      const ch = t[k];
+      if (ch === "\\" && t[k + 1] === "|") { cur += "|"; k++; continue; }
+      if (ch === "`") code = !code;
+      if (ch === "|" && !code) { out.push(cur.trim()); cur = ""; continue; }
+      cur += ch;
+    }
+    out.push(cur.trim());
+    return out;
+  }
+
   function table(rows) {
-    const cells = r => r.trim().replace(/^\||\|$/g, "").split(/(?<!\\)\|/).map(c => c.trim().replace(/\\\|/g, "|"));
     const head = cells(rows[0]);
+    const align = cells(rows[1]).map(c => /^:-+:$/.test(c) ? "center" : /^-+:$/.test(c) ? "right" : /^:-+$/.test(c) ? "left" : "");
+    const st = k => align[k] ? ` style="text-align:${align[k]}"` : "";
     const body = rows.slice(2).map(cells);
-    return `<div class="md-table"><table><thead><tr>${head.map(c => `<th>${inline(c)}</th>`).join("")}</tr></thead><tbody>` +
-      body.map(r => `<tr>${r.map(c => `<td>${inline(c)}</td>`).join("")}</tr>`).join("") + "</tbody></table></div>";
+    return `<div class="md-table"><table><thead><tr>${head.map((c, k) => `<th${st(k)}>${inline(c)}</th>`).join("")}</tr></thead><tbody>` +
+      body.map(r => `<tr>${r.map((c, k) => `<td${st(k)}>${inline(c)}</td>`).join("")}</tr>`).join("") + "</tbody></table></div>";
   }
 
   function list(lines) {
@@ -50,7 +67,7 @@ const MD = (() => {
     const lines = src.replace(/\r/g, "").split("\n");
     const out = [];
     let i = 0;
-    const isTableSep = s => /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?\s*$/.test(s);
+    const isTableSep = s => /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?\s*$/.test(s);    // GitHub: one dash is enough (|:-:|)
     while (i < lines.length) {
       const line = lines[i];
       let m;

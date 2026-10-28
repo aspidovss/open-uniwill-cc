@@ -18,6 +18,8 @@ import time
 if sys.platform != "win32":
     import fcntl
 
+from . import fx as fxmod
+
 try:                                   # OEM-derived code (proprietary, see uwccd/lighting/oem/LICENSE)
     from .oem import apfx
     from .oem import wkdcolor as W
@@ -228,6 +230,10 @@ class APEngine(threading.Thread):
             log.warning("software effect stopped: %s", e)
 
 
+def _fx_env_default():
+    return {"config": fxmod.clean_config(None), "ac": True, "metrics": {}}
+
+
 def zones_of(frame):
     """6 x 21 frame (row 0 = top) -> average colour of each of the four zones (black keys ignored)."""
     out = []
@@ -315,6 +321,7 @@ class ITEKeyboard:
         self._last_apply = 0.0
         self.pictures_ok = True    # False: the firmware ignores 12h/16h pictures (setting kb_picture_modes off)
         self._onkey = False
+        self.fx_env = _fx_env_default    # BetterRGB effects: settings, power source and metrics (set by KeyboardManager)
         self._detect()
 
     # -- low level -------------------------------------------------------------------
@@ -507,15 +514,43 @@ class ITEKeyboard:
             ctrl = 2
         self.cmd08(ctrl, effect, speed, light, color_arg, direction, 0)
 
+    def fx(self):
+        """the running BetterRGB effect engine, or None"""
+        return self.ap if isinstance(self.ap, fxmod.FxEngine) else None
+
     def stop_ap(self):
         if self.ap:
             self.ap.stop()
             self.ap.join(timeout=2)
             self.ap = None
 
+    def set_fx(self, idx, light=4, fx=None, force=False):
+        """BetterRGB effect: the service draws every frame (see fx.py)"""
+        want = dict(idx=idx, light=light, fx=fxmod.clean_params(idx, fx))
+        now = time.monotonic()
+        if want == self.saved and now - self._last_apply < REPEAT_WINDOW and not force:
+            return
+        had_ap = self.ap is not None
+        self.stop_ap()
+        lv = LIGHT[max(0, min(4, int(light)))]
+        with self.lock:
+            gap = max(MIN_GAP - (time.monotonic() - self._last_apply), 0.05 if had_ap else 0)
+            if gap > 0:
+                time.sleep(gap)
+            self.cmd08(5)
+            if self.four_zone():
+                self.cmd08(1)
+                time.sleep(0.03)
+            self.ap = fxmod.FxEngine(self, idx, lv, want["fx"], self.fx_env)
+            self.ap.start()
+            self.saved = want
+            self._last_apply = time.monotonic()
+
     def set_effect(self, idx, light=4, speed=2, direction=0, colors=None, circular=False, user=None, alphabet=None,
-                   force=False):
+                   force=False, fx=None):
         """ILM_RGBKB_SetEffectALL(mode=1) + Set_Lighting_Effect"""
+        if fxmod.is_fx(idx):
+            return self.set_fx(idx, light, fx, force)
         if idx not in EFFECTS:
             raise ValueError("unknown effect")
         code = EFFECTS[idx][1]
@@ -606,6 +641,8 @@ class ITEKeyboard:
             self._last_apply = time.monotonic()
 
     def set_power(self, on):
+        if not on and self.fx():
+            self.ap.fade_out()       # the chosen transition backwards, then dark
         self.stop_ap()               # outside the lock: the frame thread may be waiting for it
         with self.lock:
             if not on:
@@ -646,6 +683,7 @@ class MockITE(ITEKeyboard):
         self.saved = None
         self.ap = None
         self._last_apply, self._onkey, self.pictures_ok = 0.0, False, True
+        self.fx_env = _fx_env_default
         self.log = __import__("collections").deque(maxlen=500)
 
     def feature(self, data):

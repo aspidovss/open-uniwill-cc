@@ -301,3 +301,10 @@ pre.code{margin:0;padding:10px 12px;background:var(--bg0);border:1px solid var(-
 .fold-title::before{content:"▾";display:inline-block;width:16px;color:var(--muted);transition:transform .15s}
 .card.folded .fold-title::before{transform:rotate(-90deg)}
 .fold-title:hover{color:var(--acc)}
+
+/* BetterRGB effects */
+.fx-head { display: flex; align-items: baseline; gap: 10px; margin: 16px 0 8px; }
+.fx-head h4 { margin: 0; }
+.fx-params .row { margin: 8px 0; gap: 8px; }
+.fx-params input[type=color], #fx-engine-card input[type=color] { width: 34px; height: 26px; padding: 0; border: 1px solid var(--line, #333); border-radius: 6px; background: none; }
+#fx-engine-card h4 { margin: 12px 0 4px; }

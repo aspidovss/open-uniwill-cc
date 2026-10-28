@@ -11,7 +11,7 @@ from . import regs as R
 from . import store
 from .busy import Busy
 from .automation import DEFAULTS as AUTO_DEFAULTS, PowerSourceRules, Sampler, setting as auto_setting
-from .events import AppBinding, ECPoller, HotkeyEvents, IdleTimer
+from .events import AppBinding, ECPoller, HotkeyEvents, IdleTimer, KeyPresses
 from .fan import PowerManager
 from .fan_std import PowerManagerStd
 from .hw import Platform
@@ -77,6 +77,8 @@ class Service:
         self.settings = SettingsManager(self.ec, self.pf, self.nvram, self.settings_store, self.emit)
         self.battery = BatteryManager(self.ec, self.pf, self.nvram, self.settings_store)
         self.keyboard = KeyboardManager(self.ec, self.pf, self.settings_store, mock=mock)
+        self.keyboard.ac_fn = lambda: getattr(self.power, "ac_online", True)
+        self.keyboard.metrics_fn = self._fx_metrics
         if IS_WIN:          # also with --mock: /proc and /sys do not exist on Windows
             from .win.sysinfo import WinMonitor
             self.monitor = WinMonitor(self.ec, self.pf)
@@ -311,6 +313,25 @@ class Service:
             self.emit("setting", {"winkey_lock": value, "osd": True})
         elif key == "fnlock":
             self.emit("setting", {"fn_lock": value, "osd": True})
+
+    def _fx_metrics(self):
+        """battery charge, CPU and GPU load for the top-row bar of the BetterRGB effects (from the monitor sample;
+        CPU and GPU only while monitoring is on)"""
+        m = self.sampler.latest or {}
+        out = {}
+        bat = m.get("battery")
+        if not bat:
+            try:
+                bat = self.monitor.battery()
+            except Exception:  # noqa: BLE001
+                bat = None
+        if bat and bat.get("percent") is not None:
+            out["battery"] = bat["percent"]
+        if (m.get("cpu") or {}).get("usage") is not None:
+            out["cpu"] = m["cpu"]["usage"]
+        if (m.get("gpu") or {}).get("usage") is not None:
+            out["gpu"] = m["gpu"]["usage"]
+        return out
 
     # -- aggregated state for the UI ----------------------------------------------------------------
     def state(self):

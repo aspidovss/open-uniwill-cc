@@ -77,6 +77,7 @@ mkdir -p "$PREFIX"
 cp -r "$HERE/uwccd" "$HERE/bin" "$PREFIX/"
 mkdir -p "$PREFIX/docs/EC"                                   # built-in help (Markdown only)
 cp "$HERE"/docs/*.md "$PREFIX/docs/" && cp "$HERE"/docs/EC/*.md "$PREFIX/docs/EC/"
+for f in LICENSE NOTICE.md THIRD_PARTY_LICENSES.txt; do [ -f "$HERE/$f" ] && cp "$HERE/$f" "$PREFIX/"; done   # notices
 find "$PREFIX" -name '__pycache__' -prune -exec rm -rf {} +
 # build stamp: commit of a source checkout (a release archive has it in uwccd/_gitinfo.txt) and the install date
 COMMIT=""

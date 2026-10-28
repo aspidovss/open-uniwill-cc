@@ -111,6 +111,8 @@ to the hardware differs (see the last section).
 | User mode (per-key colour) and gaming mode (WASD/arrows) — per-key keyboards | ✅ | ✅ | picture 12h / rows 16h |
 | Software effects Neon, Stack, Impact, Alphabet | ✅ | ✅ | frames from `AP_Effect_Task` (`uwccd/lighting/oem`, proprietary) |
 | Reactive effects (Reactive, Ripple, Aurora, Spark) light pressed keys | ✅ | ✅ | EC `0x741` bit 3 |
+| *Not in the original:* 16 BetterRGB effects (Wave, Sparkle, Lightning, Flame, Rain, Matrix, Quicksand, Current, Screen ambient …) | ✅ | ✅ | frames from `uwccd/lighting/fx.py` (from BetterRGB, MIT): picture 12h on per-key keyboards, zone colours on four-zone ones — [LIGHTING.md](LIGHTING.md) |
+| *Not in the original:* transitions, white calibration, top-row bar, frame rate on AC / battery | ✅ | ✅ | `uwccd/lighting/fx.py`; key presses: Linux `/dev/input`, Windows the tray app; screen: Windows tray app, Linux agent (X11) |
 | LED colour correction per keyboard type / LED vendor | ✅ | ✅ | `WKDColor.cheatRGB_*` (`uwccd/lighting/oem`, proprietary) |
 | Chassis light bar (hinge / base / logo) | ✅ | ✅ | HIDLightbar4, HID 0x7000 |
 | Single-colour backlight (on/off, level) | ✅ | ✅ | EC `0x78C` |

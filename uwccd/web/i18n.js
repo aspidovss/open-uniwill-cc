@@ -689,3 +689,57 @@ Object.assign(RU, {
   "Backup file: {0}": "Файл копии: {0}", "EC backup": "Резервная копия EC",
   "Run stage 1 (read only) first": "Сначала выполните ступень 1 (только чтение)",
 });
+
+// BetterRGB effects (1.6.3)
+Object.assign(RU, {
+  "effects drawn by the service, frame by frame": "эффекты, которые служба рисует кадр за кадром",
+  "BetterRGB effect settings": "Настройки эффекта BetterRGB", "BetterRGB engine": "Движок BetterRGB",
+  "Sparkle": "Искры", "Colour wheel": "Цветовое колесо", "Lightning": "Молния", "Flame": "Пламя", "Rain": "Дождь",
+  "Matrix": "Матрица", "Static zones": "Статичные зоны", "Reactive ripple": "Волна от нажатия", "Quicksand": "Зыбучий песок",
+  "Current": "Течение", "Reactive current": "Течение от нажатия", "Screen ambient": "Цвета экрана",
+  "Reacts to key presses": "Реагирует на нажатия клавиш", "Follows the colours of the screen": "Повторяет цвета экрана",
+  "Smoothness": "Плавность", "Random colours": "Случайные цвета", "Colours": "Цвета", "Angle, °": "Угол, °", "Density": "Плотность",
+  "Afterglow": "Послесвечение", "Reverse direction": "Обратное направление", "Width": "Ширина", "Strikes at once": "Разрядов одновременно",
+  "Number of colours": "Количество цветов", "Style": "Стиль", "Layout": "Расположение", "Zones": "Зоны", "Scale": "Масштаб",
+  "Blur": "Размытие", "Response": "Отклик",
+  "short": "короткое", "medium": "среднее", "long": "долгое", "streaks": "полосы", "columns": "столбцы", "lasers": "лазеры",
+  "ripples": "круги", "horizontal (rows)": "горизонтально (ряды)", "vertical (columns)": "вертикально (столбцы)",
+  "Fade": "Затухание", "Ripple from the centre": "Волна из центра", "Ripple from the edges": "Волна от краёв",
+  "Wipe from the top": "Шторка сверху", "Wipe from the bottom": "Шторка снизу", "Wipe from the left": "Шторка слева",
+  "Wipe from the right": "Шторка справа", "Twin spiral ↘, inwards": "Двойная спираль ↘, внутрь",
+  "Twin spiral ↘, outwards": "Двойная спираль ↘, наружу", "Twin spiral ↙, inwards": "Двойная спираль ↙, внутрь",
+  "Twin spiral ↙, outwards": "Двойная спираль ↙, наружу",
+  "Nothing": "Ничего", "Battery charge": "Заряд батареи", "Volume": "Громкость", "Microphone level (Windows)": "Уровень микрофона (Windows)",
+  "CPU load": "Загрузка ЦП", "GPU load": "Загрузка ГП", "Playback level (Windows)": "Уровень воспроизведения (Windows)",
+  "left to right": "слева направо", "right to left": "справа налево", "from the edges to the centre": "от краёв к центру",
+  "from the centre to the edges": "от центра к краям",
+  "Frames per second on AC": "Кадров в секунду от сети", "Frames per second on battery": "Кадров в секунду от батареи",
+  "Transition": "Переход", "Transition time, ms": "Длительность перехода, мс",
+  "The transition shows when an effect starts, when the backlight turns off after inactivity (Switches → Keyboard backlight auto-off) and when it comes back.":
+    "Переход показывается при запуске эффекта, при выключении подсветки после бездействия (Переключатели → Автоотключение подсветки клавиатуры) и при её возвращении.",
+  "White calibration": "Калибровка белого",
+  "If white looks tinted on the keys: start the calibration, the keys show raw white; pick the colour you actually see, not the white you want.":
+    "Если белый на клавишах с оттенком: запустите калибровку, клавиши покажут «сырой» белый; выберите цвет, который вы действительно видите, а не белый, который хотите получить.",
+  "Calibrate white": "Калибровать белый", "Reset calibration": "Сбросить калибровку",
+  "Top-row bar": "Полоса в верхнем ряду",
+  "The keys of the top row show a level over the effect. A change of the volume shows the volume for 1.8 s.":
+    "Клавиши верхнего ряда показывают уровень поверх эффекта. При изменении громкости на 1,8 с показывается громкость.",
+  "Shows": "Показывает", "Fills": "Заполняется", "from": "от", "to": "до", "playback colours": "цвета воспроизведения",
+  "Effects from BetterRGB ITE8291 Adaptive (MIT) by TheYamo and ZavierChen, rewritten for this program.":
+    "Эффекты из BetterRGB ITE8291 Adaptive (MIT, авторы TheYamo и ZavierChen), переписанные для этой программы.",
+  "Reacts to key presses: the Control Center tray program sends them to the service while this effect runs (nothing is stored).":
+    "Реагирует на нажатия клавиш: программа Control Center в трее передаёт их службе, пока работает этот эффект (ничего не сохраняется).",
+  "Reacts to key presses: the service reads them from the keyboard while this effect runs (nothing is stored).":
+    "Реагирует на нажатия клавиш: служба читает их с клавиатуры, пока работает этот эффект (ничего не сохраняется).",
+  "Follows the screen: the tray program sends a 64×24 picture of the main screen 15 times a second while this effect runs (it is not stored).":
+    "Повторяет экран: программа в трее 15 раз в секунду передаёт картинку основного экрана 64×24, пока работает этот эффект (она не сохраняется).",
+  "Follows the screen: the session agent sends a 64×24 picture of the screen while this effect runs (X11 only; not on Wayland; it is not stored).":
+    "Повторяет экран: агент сеанса передаёт картинку экрана 64×24, пока работает этот эффект (только X11, не Wayland; она не сохраняется).",
+  "On a four-zone keyboard each zone shows the average of its keys.": "На четырёхзонной клавиатуре каждая зона показывает средний цвет своих клавиш.",
+  "Calibration: none (neutral)": "Калибровка: нет (нейтрально)", "Calibration: red {0} %, green {1} %, blue {2} %": "Калибровка: красный {0} %, зелёный {1} %, синий {2} %",
+  "Running: {0} — {1} of {2} frames per second": "Работает: {0} — {1} из {2} кадров в секунду",
+  "No BetterRGB effect is running — the settings apply when one is chosen.": "Эффект BetterRGB не запущен — настройки применятся, когда вы его выберете.",
+  "The keys show raw white now — pick the colour you see": "Клавиши показывают «сырой» белый — выберите цвет, который видите",
+  "Calibration saved": "Калибровка сохранена", "Calibration reset": "Калибровка сброшена",
+  "BetterRGB keyboard effects": "Эффекты клавиатуры BetterRGB",
+});

@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.6.3
+
+- **BetterRGB keyboard effects** — 16 effects drawn by the service frame by frame, rewritten in Python from
+  [BetterRGB ITE8291 Adaptive](https://github.com/ZavierChen/BetterRGB-ITE8291-Adaptive) (MIT, ZavierChen; based on
+  Better RGB by TheYamo): Breathing, Wave, Sparkle, Reactive, Colour wheel, Lightning, Flame, Rain, Matrix (four
+  styles), Static zones, Reactive ripple, Rainbow, Quicksand, Current, Reactive current and Screen ambient. Each has
+  its own parameters (speed, density, width, colours …) in the window (*Keyboard backlight → BetterRGB*) and on the
+  command line (`uwccctl kb fx`).
+  - Per-key keyboards get the user-mode picture (`08h`, `12h`, 8 rows of 65 bytes — the packets BetterRGB sends);
+    four-zone keyboards (MAIBENBEN Tsunami) get the average colour of each zone.
+  - **Engine:** frame rate on AC and on battery (10–60, lowered automatically while the keyboard does not keep up),
+    transitions (fade, ripples, wipes, twin spirals) when an effect starts and when the backlight goes dark after
+    inactivity and comes back, **white calibration** (raw white on the keys → pick the colour you see → per-channel
+    gains), **top-row bar** (battery, volume, microphone, CPU, GPU, playback level; a volume change shows the volume
+    for 1.8 s).
+  - **Input from the user session** only while an effect needs it, nothing stored: key presses (Linux: the service
+    reads `/dev/input`; Windows: the tray program), a 64 × 24 picture of the screen (Windows: the tray program;
+    Linux: the session agent, X11 only), volume and audio levels (Windows: Core Audio; Linux: volume through `pactl`).
+  - API `POST /api/keyboard/fx/config | fx/calibrate | fx/input`, the effect body gets `"fx": {...}`.
+  - Help page *BetterRGB keyboard effects* (`docs/LIGHTING.md`); the MIT notice of BetterRGB is in
+    `THIRD_PARTY_LICENSES.txt`, credits in `NOTICE.md`. The Linux installer now copies `LICENSE`, `NOTICE.md` and
+    `THIRD_PARTY_LICENSES.txt` too.
+- **Fix — built-in help, tables:** a table whose separator row has centred columns with one dash (`|---|:-:|:-:|---|`,
+  e.g. *What was ported* in `docs/FEATURES.md`) was shown as plain text with `|`. The viewer now accepts one dash like
+  GitHub, aligns the columns as the separator row says, and keeps `|` inside `code` and `\|` in a cell.
+- README: supported Control Center versions (5.52.x supported, 5.56.x with service 1.2 untested, 3.x not supported)
+  and the theoretical list of platforms with their support level.
+
 ## 1.6.2
 
 - **Built-in help** (*Help* in the side bar): the documentation inside the program, offline, in English and Russian —

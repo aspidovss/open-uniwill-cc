@@ -32,3 +32,35 @@ PyInstaller (build tool)    GPL-2.0 with the bootloader exception: the produced
 
 Inno Setup (installer)      Inno Setup License, Copyright (c) Jordan Russell and Martijn Laan
   https://jrsoftware.org/files/is/license.txt
+
+
+Code derived from other projects
+================================
+
+uwccd/lighting/fx.py (BetterRGB effects) is rewritten in Python from
+BetterRGB ITE8291 Adaptive 3.7.0, which derives from Better RGB by TheYamo.
+  https://github.com/ZavierChen/BetterRGB-ITE8291-Adaptive
+  https://github.com/EpicYamo/Better-RGB-for-Tongfang-ITE8291
+
+MIT License
+
+Copyright (c) 2026 TheYamo
+Copyright (c) 2026 ZavierChen and BetterRGB Adaptive contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
