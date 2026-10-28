@@ -289,6 +289,10 @@ uwccctl --json status            любая команда в JSON, для ск�
 
 MIT — см. [LICENSE](LICENSE), **кроме** `kernel/` (GPL-2.0), а также `proprietary/` и `uwccd/lighting/oem/`
 (файлы производителя и производный от них код, все права у владельцев, включены для совместимости).
+Эффекты клавиатуры BetterRGB (`uwccd/lighting/fx.py`) переписаны из
+[BetterRGB ITE8291 Adaptive](https://github.com/ZavierChen/BetterRGB-ITE8291-Adaptive) (автор ZavierChen) и
+[Better RGB](https://github.com/EpicYamo/Better-RGB-for-Tongfang-ITE8291) (автор TheYamo) — тоже под MIT; их уведомления
+об авторских правах сохранены в [LICENSE](LICENSE) и [THIRD_PARTY_LICENSES.txt](THIRD_PARTY_LICENSES.txt).
 Благодарности и проекты, которые помогли: [NOTICE.md](NOTICE.md).
 
 **Пользовательское соглашение** ([English](uwccd/web/eula.en.txt) · [Русский](uwccd/web/eula.ru.txt)) — его показывают
