@@ -22,6 +22,10 @@ TESTED_IDS = {0x10}
 # Platforms of the newer official service 1.2 (its code is protected, so nothing could be taken over from it):
 # they report RamFan 1.5 like the others and run with the same port, but are untested.
 SERVICE_1_2_IDS = {0x1A}
+# Single-colour keyboard backlight through EC 0x78C (MyControlCenter.SingleColorKeyboard): projects 0x12..0x14 in
+# GCUService 1.0.2.70; 0x1A (MECHREVO Kuangshi / Jiguang B2, Aurora X) from the log of its Control Center 5.56
+# ("SingleZone | SetBrightness_EC | ADDR_SINGLEKBL_ENABLE 0x78C"). An ITE RGB keyboard is still looked for first.
+SINGLE_COLOR_EC_IDS = {0x12, 0x13, 0x14, 0x1A}
 # ProjectIdExtensions.CommercialProjectIDs — all of them select the "_CML" fan manager
 COMMERCIAL_IDS = {9, 0xE, 0x11, 0x12, 0x13, 0x14, 0x15, 0x17, 0x1701, 0x1702, 0x1703, 0x1704, 0x1705,
                   0x1707, 0x18, 0x1801, 0x1802, 0x1803, 0x1804, 0x1805, 0x1806, 0x1807, 0x1808,

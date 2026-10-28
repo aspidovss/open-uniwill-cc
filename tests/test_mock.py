@@ -483,6 +483,14 @@ class EcAccessService(MockService):
         self.assertEqual(r["features"]["fan_tables"], "slow")
         exp = self.get("selfcheck/export")
         self.assertEqual(exp["draft_profile"]["status"], "draft")
+        # a report runs stage 1 again but keeps the stage 2 result shown in EC Manager
+        st = self.post("report/start", {"sections": ["selfcheck"], "name": "uwcc-report-sc-1.zip"})[1]
+        for _ in range(100):
+            if self.get("report/status")["state"] != "running":
+                break
+            time.sleep(0.2)
+        self.assertEqual(self.get("report/status")["state"], "done")
+        self.assertEqual(self.get("selfcheck/export")["result"]["stage"], 2)
         # the draft becomes this laptop's platform profile (administrator), then back to the built-in one
         self.assertEqual(self.post("platform/apply-draft", {})[0], 403)
         code, p = self.apost("platform/apply-draft", {})
@@ -902,9 +910,17 @@ class CustomModeService(MockService):
         self.assertEqual(resp.headers["X-UWCC-Filename"], "uwcc-report-test-1.zip")
         z = zipfile.ZipFile(_io.BytesIO(resp.read()))
         self.assertTrue({"report.json", "report.txt", "uwccd.log"} <= set(z.namelist()))
-        self.assertTrue(all(n.startswith(("report.", "uwccd.log", "acpi/", "oem/")) for n in z.namelist()))
+        self.assertTrue(all(n.startswith(("report.", "uwccd.log", "acpi/", "oem/", "selfcheck.json")) for n in z.namelist()))
         rep = json.loads(z.read("report.json"))
         self.assertEqual(rep["private_included"], ["mac"])
+        # 1.6.4: self-check stage 1 (read only) is part of the report by default
+        self.assertEqual(rep["selfcheck"]["stage"], 1, rep["selfcheck"])
+        self.assertTrue(rep["selfcheck"]["items"])
+        sc = json.loads(z.read("selfcheck.json"))
+        self.assertEqual(sc["result"]["stage"], 1)
+        self.assertIn("draft_profile", sc)
+        self.assertIn("self-check, stage 1 (read only)", z.read("report.txt").decode())
+        self.assertTrue(self.get("ec-access")["selfcheck"]["stage1_done"])
         self.assertIn("0700-07FF", rep["ec"]["dump"])
         self.assertEqual(rep["ec"]["named"]["PROJECT_ID"]["addr"], "0x740")
         self.assertNotIn("hostname", rep["system"])
@@ -1190,6 +1206,41 @@ class PlatformDbUnit(unittest.TestCase):
         self.assertEqual(v["status"], "community")                             # only built-in profiles are verified
         with self.assertRaises(ValueError):
             platformdb.validate({"id": "Bad Id", "match": {"project": ["0x22"]}})
+
+
+class SingleColorKeyboardUnit(unittest.TestCase):
+    def test_project_0x1a_uses_ec_single_colour(self):
+        """MECHREVO Kuangshi / Jiguang B2 (Aurora X): no ITE device, EC 0x78C single-colour backlight"""
+        from uwccd.ec import MockEC
+        from uwccd.lighting import ite, keyboard
+        ec = MockEC(os.path.join(tempfile.mkdtemp(), "ec.json"))
+        ec.write(0x78C, 0x80)
+
+        class Pf:
+            project_id = 0x1A
+
+        class St(dict):
+            def set(self, k, v):
+                self[k] = v
+        orig = ite.open_keyboard
+        ite.open_keyboard = lambda ec, mock=False: None
+        try:
+            kb = keyboard.KeyboardManager(ec, Pf(), St(), mock=False)
+            kb.lb = None
+            orig_lb = ite.open_lightbar
+            ite.open_lightbar = lambda ec, mock=False: None
+            try:
+                kb.start()
+            finally:
+                ite.open_lightbar = orig_lb
+        finally:
+            ite.open_keyboard = orig
+        self.assertEqual(kb.kind, "single")
+        self.assertEqual(kb.status()["level"], 4)
+        kb.set_level(2)
+        self.assertEqual(ec.read(0x78C), 0x50)
+        kb.set_power(False)
+        self.assertTrue(ec.read(0x78C) & 0x02)
 
 
 class PlatformSupportUnit(unittest.TestCase):

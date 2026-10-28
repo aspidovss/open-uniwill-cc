@@ -742,4 +742,5 @@ Object.assign(RU, {
   "The keys show raw white now — pick the colour you see": "Клавиши показывают «сырой» белый — выберите цвет, который видите",
   "Calibration saved": "Калибровка сохранена", "Calibration reset": "Калибровка сброшена",
   "BetterRGB keyboard effects": "Эффекты клавиатуры BetterRGB",
+  "Self-check, stage 1 (read only): what works on this laptop, a draft platform profile": "Самопроверка, ступень 1 (только чтение): что работает на этом ноутбуке, черновик профиля платформы",
 });

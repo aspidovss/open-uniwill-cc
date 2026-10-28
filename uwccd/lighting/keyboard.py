@@ -4,6 +4,7 @@ import threading
 import time
 
 from .. import regs as R
+from ..hw import SINGLE_COLOR_EC_IDS
 from . import fx, ite
 
 log = logging.getLogger("uwccd.kb")
@@ -160,7 +161,7 @@ class KeyboardManager:
                     self.rgb.set_power(False)
             except (NotImplementedError, ValueError, OSError) as e:
                 log.warning("restore keyboard effect: %s", e)
-        elif self.pf.project_id in (0x12, 0x13, 0x14) or self.st.get("force_single_color"):
+        elif self.pf.project_id in SINGLE_COLOR_EC_IDS or self.st.get("force_single_color"):
             self.single = SingleColor(self.ec)
             self.kind = "single"
             lvl = self.st.get("kb_single_level")

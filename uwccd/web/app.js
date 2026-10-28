@@ -1408,6 +1408,7 @@ const REP_SECTIONS = [["system", "System, BIOS and EC versions"], ["platform", "
   ["ec", "EC registers (read only)"], ["bios", "BIOS settings: UniWillVariable, SmartAPC limits"],
   ["acpi", "ACPI tables of the firmware (without the Windows licence tables)"],
   ["firmware", "EC interface devices (ACPI / WMI) and their drivers"],
+  ["selfcheck", "Self-check, stage 1 (read only): what works on this laptop, a draft platform profile"],
   ["oem_registry", "Settings and feature flags of the original Control Center (registry, Windows)"],
   ["oem_software", "Services, packages and versions of the original Control Center (Windows)"],
   ["oem_files", "Settings files, tables and logs of the original Control Center (Windows)"],

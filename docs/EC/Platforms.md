@@ -119,7 +119,9 @@ window shows how many match — and the current mode profile is applied again.
 
 **Result:** every check with ✓ / ! / ✕ / – and its evidence, the list **Not clear**, the functions for a draft
 profile. *Export for GitHub* writes `uwcc-selfcheck.json` (no serial numbers): attach it to an issue to have your
-model added. *Apply as platform profile* (administrator) saves the draft as this laptop's profile; on the WMI path it
+model added. The **diagnostic report** (*Information → Diagnostic report*, `uwccctl report`) runs stage 1 too and adds the
+table to `report.txt` and the same file as `selfcheck.json` (section *Self-check, stage 1*, on by default); a stage 2
+result shown here is kept. *Apply as platform profile* (administrator) saves the draft as this laptop's profile; on the WMI path it
 then decides which functions are available (restart the service).
 
 ```powershell

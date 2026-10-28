@@ -130,7 +130,7 @@ projects; only `0x10` has been checked on real hardware. The level is shown in t
 | PHxT | `0x12`–`0x16` | PH4TRX1, PH4TUX1, PH4TQx1, PH6TRX1, PH6TQxx | known |
 | PHxA | `0x17`, `0x1701`–`0x1707` | PH4ARxx, PH4AUxx, PH4AXxx, PH6AQxx, PH6ARxx, PH6AGxx, PH4AUxf | known |
 | PHxP | `0x18`, `0x1801`–`0x180D` | PH4PRxx, PH4PUxx, PH4PGx1, PH4PGx2, PH6PRxx, PH6PGEx, PH6PG0x, PH6PG3x, PH6PG7x (also 150 W), PH4AQE3 | known |
-| service 1.2 | `0x1A` | MECHREVO Kuangshi / Jiguang B2 | experimental |
+| service 1.2 | `0x1A` | MECHREVO Kuangshi / Jiguang B2 (Jiguang X / Aurora X) | experimental (works by a user report, see below) |
 | any other Uniwill project with RamFan 1.5 | — | | experimental |
 
 *tested* — checked with this program; *known* — in the platform tables of the official service, not checked here;
@@ -147,12 +147,13 @@ Clevo, laptops with Control Center 3.x.
 | Laptop | CPU / GPU | Project | BIOS / EC | Linux | Windows |
 |---|---|---|---|---|---|
 | MAIBENBEN Tsunami Series | i9-12900HX / NVIDIA | `0x10` | N.1.23A14 / 1.13 | ✅ Ubuntu 24.04 | ✅ Windows 11 24H2 |
+| MECHREVO Aurora X (Kuangshi / Jiguang B2) — user report | i7-13700HX / RTX 5060 | `0x1A` | N.1.25MRO33 / 1.31 | — | ✅ Windows 11 (OEM driver): modes, fans, limits, monitoring; single-colour backlight from 1.6.4; BIOS-variable features not yet |
 
 Tested yours? Please open a [model report](https://github.com/aspidovss/open-uniwill-cc/issues/new?template=model_report.yml).
 
 **Your laptop is not supported or something does not work?** Create a diagnostic report: *Information → Diagnostic
 report → Create report* (or `uwccctl report`). It collects what is needed to add a platform — EC registers, BIOS
-settings, keyboard / light bar devices, NVIDIA limits, the log — without serial numbers, MAC addresses or user names
+settings, the self-check stage 1 (read only) with a draft platform profile, keyboard / light bar devices, NVIDIA limits, the log — without serial numbers, MAC addresses or user names
 (those can be ticked separately if asked). Attach the zip to an issue or send it to **OUCC@aspidov.ru**.
 
 ## Download
@@ -285,6 +286,10 @@ debug logging, where the logs are, what to attach to a bug report.
 
 MIT — see [LICENSE](LICENSE), **except** `kernel/` (GPL-2.0), and `proprietary/` and `uwccd/lighting/oem/`
 (OEM files and OEM-derived code, all rights reserved by their owners, included for interoperability).
+The BetterRGB keyboard effects (`uwccd/lighting/fx.py`) are rewritten from
+[BetterRGB ITE8291 Adaptive](https://github.com/ZavierChen/BetterRGB-ITE8291-Adaptive) by ZavierChen and
+[Better RGB](https://github.com/EpicYamo/Better-RGB-for-Tongfang-ITE8291) by TheYamo — MIT as well; their copyright
+notices are kept in [LICENSE](LICENSE) and [THIRD_PARTY_LICENSES.txt](THIRD_PARTY_LICENSES.txt).
 Credits and the projects that helped: [NOTICE.md](NOTICE.md).
 
 **User agreement** ([English](uwccd/web/eula.en.txt) · [Русский](uwccd/web/eula.ru.txt)) — shown by the installers and

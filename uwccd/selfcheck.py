@@ -140,21 +140,45 @@ class SelfCheck:
             self.running = stage
         threading.Thread(target=self._run, args=(stage,), daemon=True, name="selfcheck").start()
 
-    def _run(self, stage):
+    def run_now(self, stage=1, wait=90):
+        """Synchronous run for the diagnostic report: waits while another self-check runs, then runs `stage`
+        (only 1 — read only — is used there) without covering the window. -> the result (also kept as `last`)."""
+        if stage != 1:
+            raise ValueError("only stage 1 runs from the report")
+        end = time.time() + wait
+        while True:
+            with self.lock:
+                if self.svc.ec_info.get("active") == "none":
+                    raise LookupError("no EC access")
+                if not self.running:
+                    self.running = stage
+                    break
+            if time.time() > end:
+                raise TimeoutError("another self-check is still running")
+            time.sleep(0.5)
+        return self._run(stage, blocking=False, keep_stage2=True)
+
+    def _run(self, stage, blocking=True, keep_stage2=False):
+        """-> the result. keep_stage2: a stage 1 from the report does not replace a stage 2 result in EC Manager."""
+        r = None
         try:
-            with self.svc.busy.task("selfcheck", label=f"stage {stage}", blocking=True):
+            with self.svc.busy.task("selfcheck", label=f"stage {stage}", blocking=blocking):
                 r = self.run(stage)
-            self.last = r
-            store.save_json(store.path(LAST), r)
+            if not (keep_stage2 and (self.last or {}).get("stage", 0) >= 2 and not (self.last or {}).get("error")):
+                self.last = r
+                store.save_json(store.path(LAST), r)
             self.stage1_done = r.get("path")
             log.info("self-check stage %d: %s", stage, self.summary()["last"]["counts"])
         except Exception as e:  # noqa: BLE001
             log.exception("self-check")
-            self.last = {"time": time.time(), "stage": stage, "error": str(e), "items": [], "unknowns": [str(e)]}
+            r = {"time": time.time(), "stage": stage, "error": str(e), "items": [], "unknowns": [str(e)]}
+            if not keep_stage2:
+                self.last = r
         finally:
             with self.lock:
                 self.running = None
             self.svc.emit("selfcheck", self.summary())
+        return r
 
     def run(self, stage):
         svc = self.svc

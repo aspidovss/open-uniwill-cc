@@ -27,8 +27,8 @@ from . import regs as R
 
 log = logging.getLogger("uwccd.report")
 
-SECTIONS = ("system", "platform", "ec", "bios", "acpi", "firmware", "oem_registry", "oem_software", "oem_files", "oem_files_full",
-            "power", "lighting", "nvidia", "sensors", "original", "cooler", "log", "settings")
+SECTIONS = ("system", "platform", "ec", "bios", "acpi", "firmware", "selfcheck", "oem_registry", "oem_software", "oem_files",
+            "oem_files_full", "power", "lighting", "nvidia", "sensors", "original", "cooler", "log", "settings")
 DEFAULT_SECTIONS = tuple(s for s in SECTIONS if s != "oem_files_full")      # the complete OEM folders are large
 PRIVATE = ("serial", "uuid", "mac", "names", "apps")
 EC_AREAS = ((0x400, 0x100), (0x700, 0x100), (0xD40, 0x10), (0xF00, 0x80))  # areas GCUService reads (0xD48: LC HWOC support)
@@ -346,6 +346,40 @@ class Job:
             return cls.current
 
 
+MARK = {"ok": "OK  ", "warn": "!   ", "fail": "FAIL", "skip": "-   ", "na": "-   "}
+
+
+def selfcheck_info(svc):
+    """Self-check stage 1 (read only) run now: the table of checks, what is not clear, the draft platform profile.
+    -> (result, {"selfcheck.json": the same file as EC Manager -> Export for GitHub})"""
+    sc = getattr(svc, "selfcheck", None)
+    if sc is None:
+        return {"error": "no self-check in this service"}, {}
+    from . import version_string
+    r = sc.run_now(1)
+    exp = {"program": version_string(), "result": r, "draft_profile": r.get("draft"), "from": "diagnostic report"}
+    return r, {"selfcheck.json": json.dumps(exp, indent=1, ensure_ascii=False, default=str)}
+
+
+def selfcheck_text(r):
+    """report.txt: the stage 1 table"""
+    if not isinstance(r, dict):
+        return []
+    out = ["", "self-check, stage 1 (read only)", "-" * 31]
+    if r.get("error"):
+        return out + [f"error: {r['error']}"]
+    out.append(f"EC path: {r.get('path')}")
+    for it in r.get("items") or []:
+        out.append(f"{MARK.get(it.get('status'), str(it.get('status'))[:4].ljust(4))} {str(it.get('group', '')):<10} "
+                   f"{str(it.get('name', '')):<44} {str(it.get('detail', ''))[:160]}")
+    if r.get("unknowns"):
+        out += ["", "not clear:"] + [f"  - {u}" for u in r["unknowns"]]
+    f = r.get("features")
+    if isinstance(f, dict) and f:
+        out += ["", "features (draft): " + ", ".join(f"{k}={v}" for k, v in f.items())]
+    return out
+
+
 def build(svc, sections=DEFAULT_SECTIONS, private=()):
     """-> (zip bytes, file name)."""
     sections = [s for s in sections if s in SECTIONS]
@@ -373,6 +407,7 @@ def build(svc, sections=DEFAULT_SECTIONS, private=()):
     redact_text = lambda t: _redact(t, private, secrets_)          # noqa: E731
     collectors.update({
         "acpi": with_files(O.acpi_tables), "firmware": O.firmware_info, "oem_registry": O.oem_registry,
+        "selfcheck": with_files(lambda: selfcheck_info(svc)),
         "oem_software": O.oem_software, "power": O.power_info,
         "oem_files": with_files(lambda: O.oem_files("oem_files_full" in sections, redact_text)),
     })
@@ -402,6 +437,8 @@ def build(svc, sections=DEFAULT_SECTIONS, private=()):
     js = _redact(json.dumps(data, indent=1, ensure_ascii=False, default=str), private, secrets_)
     s = data["summary"] if isinstance(data["summary"], dict) else {}
     txt = ["open-uniwill-cc diagnostic report", "=" * 34] + [f"{k:12} {v}" for k, v in s.items()]
+    if "selfcheck" in sections:
+        txt += selfcheck_text(data.get("selfcheck"))
     txt += ["", f"sections:         {', '.join(sections)}",
             f"private included: {', '.join(private) or 'none'}", "", f"Send to: {CONTACT} or GitHub issues."]
     buf = io.BytesIO()

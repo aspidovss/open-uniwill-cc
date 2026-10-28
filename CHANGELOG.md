@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.6.4
+
+- **Diagnostic report: self-check stage 1 by default** — the report runs the read-only stage 1 and adds its table
+  (✓ / ! / ✕ / – with the evidence, *Not clear*, the functions found) to `report.txt`, the whole result to
+  `report.json` and `selfcheck.json` — the same file as *EC Manager → Export for GitHub*, with the draft platform
+  profile. One report is enough to add a laptop. The section *Self-check, stage 1 (read only)* can be unticked; the
+  check does not cover the window, waits while another self-check runs and keeps a stage 2 result shown in EC Manager;
+  stage 2 becomes available after the report.
+- **MECHREVO Kuangshi / Jiguang B2 (Aurora X, project `0x1A`): single-colour keyboard backlight** through EC `0x78C`
+  (on / off, level 0–4), as its Control Center 5.56 does (*SingleZone*). An ITE RGB keyboard is still looked for first.
+  README: the model in *Tested on* from a user report (Windows, OEM driver: modes, fans, limits, monitoring).
+
 ## 1.6.3
 
 - **BetterRGB keyboard effects** — 16 effects drawn by the service frame by frame, rewritten in Python from
