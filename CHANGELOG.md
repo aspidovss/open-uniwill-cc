@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.6.7 (in progress)
+## 1.6.7
 
 - **Project 0x1A: Mechrevo Yaoshi (X6AR55xY, Core Ultra 9 275HX, RTX 5080)** — a second model of this project (user
   report, OEM driver): self-check stage 2 passed completely. The window now names 0x1A laptops by vendor + model

@@ -30,8 +30,10 @@ STATUSES = ("verified", "community", "draft", "unknown")
 SCHEMA = 1
 
 # Hard caps: no profile, import or ec_wmi.json may go above them.
-CAPS = {"PL1": 200, "PL2": 250, "PL4": 300, "TccOffset": 63, "DefaultTGP": 200, "ConfigurableTGP": 50,
-        "DynamicBoost": 50, "TargetTemperature": 100, "DynamicBoostCpuTdp": 200}
+# Raised in 1.6.6 by a report of a Mechrevo Yaoshi (Core Ultra 9 275HX, RTX 5080): PL1 210 W, cTGP +70 W over the
+# default 80 W (150 W in all); DynamicBoostCpuTdp 255 is the firmware's "no value".
+CAPS = {"PL1": 250, "PL2": 250, "PL4": 300, "TccOffset": 63, "DefaultTGP": 200, "ConfigurableTGP": 100,
+        "DynamicBoost": 50, "TargetTemperature": 100, "DynamicBoostCpuTdp": 255}
 # for a project with a verified built-in profile these may only be lowered (TccOffset: a larger offset is cooler)
 NOT_ABOVE_BUILTIN = ("PL1", "PL2", "PL4", "DefaultTGP", "ConfigurableTGP", "DynamicBoost", "DynamicBoostCpuTdp",
                      "TargetTemperature")

@@ -360,6 +360,11 @@ def selfcheck_info(svc):
     from . import version_string
     r = sc.run_now(1)
     exp = {"program": version_string(), "result": r, "draft_profile": r.get("draft"), "from": "diagnostic report"}
+    kept = sc.last if isinstance(sc.last, dict) and sc.last.get("stage", 0) >= 2 and not sc.last.get("error") else None
+    if kept:                       # EC Manager keeps an earlier stage 2: it says more than this stage 1 (writes tested)
+        r = {**r, "stage2": kept}
+        exp["stage2"] = kept
+        exp["draft_profile"] = kept.get("draft") or r.get("draft")
     return r, {"selfcheck.json": json.dumps(exp, indent=1, ensure_ascii=False, default=str)}
 
 
@@ -379,6 +384,16 @@ def selfcheck_text(r):
     f = r.get("features")
     if isinstance(f, dict) and f:
         out += ["", "features (draft): " + ", ".join(f"{k}={v}" for k, v in f.items())]
+    s2 = r.get("stage2")
+    if isinstance(s2, dict):
+        when = time.strftime("%Y-%m-%d %H:%M", time.localtime(s2.get("time") or 0))
+        out += ["", f"self-check, stage 2 (with writes) kept from {when}, path {s2.get('path')}", "-" * 31]
+        for it in s2.get("items") or []:
+            if it.get("group") == "write":
+                out.append(f"{MARK.get(it.get('status'), str(it.get('status'))[:4].ljust(4))} {str(it.get('name', '')):<44} "
+                           f"{str(it.get('detail', ''))[:160]}")
+        if isinstance(s2.get("features"), dict):
+            out += ["", "features (stage 2): " + ", ".join(f"{k}={v}" for k, v in s2["features"].items())]
     return out
 
 

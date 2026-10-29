@@ -38,7 +38,7 @@ No profile, import or `ec_wmi.json` can go above these limits:
 
 | PL1 | PL2 | PL4 | TCC offset | Base TGP | cTGP | Dynamic Boost | GPU temperature limit |
 |---|---|---|---|---|---|---|---|
-| 200 W | 250 W | 300 W | 63 °C | 200 W | 50 W | 50 W | 100 °C |
+| 250 W | 250 W | 300 W | 63 °C | 200 W | 100 W | 50 W | 100 °C |
 
 For a project with a **verified** built-in profile the power limits may only go **down** from the factory values
 (PL1 / PL2 160 W, PL4 250 W, base TGP 150 W, Dynamic Boost 25 W on project `0x10`).

@@ -15,7 +15,10 @@ PROJECT_NAMES = {
 }
 # Names for the window only, for projects that are not in the tables of GCUService 1.0.2.70. project_name stays the
 # raw "0x.." for them: it names the folder of the saved fan curves and the backup check.
-DISPLAY_NAMES = {0x10: "MAIBENBEN Tsunami", 0x1A: "MECHREVO Kuangshi / Jiguang B2"}
+DISPLAY_NAMES = {0x10: "MAIBENBEN Tsunami", 0x1A: "MECHREVO (project 0x1A)"}
+# Projects shared by several models (0x1A: Mechrevo Kuangshi / Jiguang B2, Yaoshi X6AR55xY, ...): the window shows
+# vendor + model from DMI instead of one fixed name.
+DMI_NAME_IDS = {0x1A}
 # Support level shown in the window: "tested" — checked on real hardware with this program; "known" — in the
 # platform tables of the original service this program was ported from; anything else is "experimental".
 TESTED_IDS = {0x10}
@@ -135,6 +138,10 @@ class Platform:
         self.commercial = self.project_id in COMMERCIAL_IDS
         self.balanced_protect = self.project_id in (0x1807, 0x1808, 0x1809)
         self.display_name = DISPLAY_NAMES.get(self.project_id, self.project_name)
+        if self.project_id in DMI_NAME_IDS:
+            vendor, product = dmi("sys_vendor"), dmi("product_name")
+            if product and product.lower() not in ("", "default string", "to be filled by o.e.m."):
+                self.display_name = " ".join(x for x in (vendor, product) if x)
         self.support = ("tested" if self.project_id in TESTED_IDS else
                         "experimental" if self.project_id in SERVICE_1_2_IDS or self.project_id not in PROJECT_NAMES else "known")
 

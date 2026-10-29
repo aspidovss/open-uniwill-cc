@@ -586,9 +586,16 @@ class SelfCheck:
         lim = None
         sm = (r.get("smapc") or {})
         if sm.get("values"):
-            lim = {k: v for k, v in sm["values"].items() if k in platformdb.CAPS}
+            lim = {}
+            for k, v in sm["values"].items():          # one value out of range drops only that value
+                if k not in platformdb.CAPS:
+                    continue
+                if isinstance(v, int) and 0 <= v <= platformdb.CAPS[k]:
+                    lim[k] = v
+                else:
+                    r["unknowns"].append(f"power limit not used for the draft: {k} = {v} (allowed 0..{platformdb.CAPS[k]})")
             try:
-                lim = platformdb.check_limits(lim)
+                lim = platformdb.check_limits(lim) if lim else None
             except ValueError as e:
                 r["unknowns"].append(f"power limits not used for the draft: {e}")
                 lim = None
