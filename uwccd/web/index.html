@@ -75,7 +75,8 @@
             </div></div></div>
         <div class="hist-wrap"><svg id="hist-chart" viewBox="0 0 800 180" preserveAspectRatio="none" class="chart hist"></svg>
           <div id="hist-dots" class="hist-dots"></div><div id="hist-tip" class="hist-tip hidden"></div></div>
-        <div class="row between wrap"><div class="legend" id="hist-legend"></div><div class="muted tiny" id="hist-stats" style="margin:0"></div></div>
+        <div class="row between wrap"><div class="legend" id="hist-legend"></div><div class="row" style="gap:10px"><div class="muted tiny" id="hist-stats" style="margin:0"></div><button class="btn ghost sm hidden" id="hist-zoom-reset" data-i>Reset zoom</button></div></div>
+        <p class="muted tiny hist-hint" id="hist-hint" data-i>Drag across the chart to zoom in on a period; double-click, Esc or “Reset zoom” to go back. A click pins a point.</p>
         <div id="hist-detail" class="hist-detail hidden"></div>
       </div>
       <div class="grid g3">
@@ -362,6 +363,9 @@
         <div class="card">
           <h3 data-i>Lighting effects</h3>
           <div class="effects" id="effects"></div>
+          <div class="kb-feedback hidden" id="kb-feedback"></div>
+          <label class="chk unlock-row" id="kb-unlock-row"><input type="checkbox" id="kb-unlock"> <span><span data-i>Unlock untested effects (experimental)</span>
+            <small class="muted" data-i> — greyed effects that the original program does not offer for this keyboard; the first try asks, then tell whether it worked (it goes into the diagnostic report)</small></span></label>
           <div class="fx-head"><h4>BetterRGB</h4><span class="muted tiny" data-i>effects drawn by the service, frame by frame</span></div>
           <div class="effects" id="fx-effects"></div>
         </div>

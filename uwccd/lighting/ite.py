@@ -547,18 +547,23 @@ class ITEKeyboard:
             self._last_apply = time.monotonic()
 
     def set_effect(self, idx, light=4, speed=2, direction=0, colors=None, circular=False, user=None, alphabet=None,
-                   force=False, fx=None):
-        """ILM_RGBKB_SetEffectALL(mode=1) + Set_Lighting_Effect"""
+                   force=False, fx=None, untested=False):
+        """ILM_RGBKB_SetEffectALL(mode=1) + Set_Lighting_Effect.
+        untested: send an effect that the original window does not offer for this keyboard type (four-zone keyboards,
+        light-bar effects on a keyboard) — the firmware draws it, ignores it or shows something else; nothing is
+        stored in the controller, another effect brings it back. Music mode stays out (it needs audio capture)."""
         if fxmod.is_fx(idx):
             return self.set_fx(idx, light, fx, force)
         if idx not in EFFECTS:
             raise ValueError("unknown effect")
         code = EFFECTS[idx][1]
-        if code == 0x22 or (code in LB_ONLY_EFFECTS and self.kb_type not in ME_LIGHTBAR):
+        if code == 0x22 or (code in LB_ONLY_EFFECTS and self.kb_type not in ME_LIGHTBAR and not untested):
             raise NotImplementedError("software effect")
         colors = [tuple(c) for c in (colors or [])]
         want = dict(idx=idx, light=light, speed=speed, direction=direction,
                     colors=colors, circular=circular, user=user, alphabet=alphabet)
+        if untested:
+            want["untested"] = True
         now = time.monotonic()
         if want == self.saved and now - self._last_apply < REPEAT_WINDOW and not force:
             log.debug("keyboard effect repeated within %.1f s — skipped", REPEAT_WINDOW)
@@ -567,7 +572,7 @@ class ITEKeyboard:
         self.stop_ap()
         lv, sp = LIGHT[max(0, min(4, light))], SPEED[max(0, min(4, speed))]
         dr = DIRECTION.get(direction, 1)
-        if self.four_zone() and code not in FOUR_ZONE_EFFECTS | FOUR_ZONE_SOFT:
+        if self.four_zone() and code not in FOUR_ZONE_EFFECTS | FOUR_ZONE_SOFT and not untested:
             raise ValueError("this effect is not available on a four-zone keyboard")
         with self.lock:
             gap = MIN_GAP - (time.monotonic() - self._last_apply)

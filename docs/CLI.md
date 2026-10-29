@@ -102,6 +102,8 @@ uwccctl fan set current cpu 0/45:0 55/50:30 70/65:60 85/80:100
 | `kb` / `kb on\|off` | state / power |
 | `kb effects` | effects with numbers and support on this keyboard |
 | `kb effect NAME\|N [options]` | start an effect; options not given keep their values |
+| `kb effect NAME --try` | an effect not checked on this keyboard (greyed in the window) |
+| `kb feedback NAME yes\|no` | did the untested effect work? (kept for the diagnostic report) |
 | `kb level N` | brightness 0..4 |
 | `kb fx` | BetterRGB effects (drawn by the service): numbers, parameters, settings |
 | `kb fx NAME\|N [--light 0..4] [KEY=VALUE ...]` | start a BetterRGB effect; parameters not given keep their values |

@@ -6,6 +6,26 @@
   (`rapl_package0_pkg`, `_pp0` cores, `_pp1` integrated graphics, `_dram`), and all instances with "package" in the
   name were added up — the cores were counted twice (e.g. 68 W shown, 41 W real, as OCCT shows). Now only the
   package domain counts. Linux was not affected.
+- **History: zoom with the mouse** — drag across the chart to look at a period in detail: the chart shows only that
+  period with clock-time labels, the figures below it (last / average / max) are for the period, refresh pauses
+  while zoomed. A click still pins a point (also inside the period); double-click, Esc or *Reset zoom* go back.
+- **Folding cards:** *Profile settings* (Mode selection) and *Diagnostic report* (Information) fold by a click on
+  their title, like the EC Manager cards; the window remembers it.
+- **Fix — help pages broke the keyboard page:** a heading such as *Effects* got the same id as an element of the
+  window (`#effects`), so the effect tiles were drawn into the help page. Help headings now have their own ids.
+- *RamFan 1.5* explained in the help (*Features*) and as a tooltip in *Information*.
+- **Untested keyboard effects can be tried** — the greyed effects (not offered for this keyboard type by the original
+  window, e.g. Reactive or Ripple on four-zone keyboards; light-bar effects on a keyboard) are no longer a dead end:
+  - *Unlock untested effects (experimental)* under the effects shows them as dashed tiles; without it a greyed tile
+    can still be clicked;
+  - before the first try a question explains what can happen (*Try it* / *Yes, do not ask again* / *Cancel*);
+    locking again asks again;
+  - after the try: *Does it work on this keyboard? Yes / No* — the answer is kept per keyboard type (PID, ITE
+    firmware, type), marked ✓ / ✕ on the tile and included in the diagnostic report, so the effect can be marked as
+    working for everybody in a later version;
+  - Music mode stays off (it needs audio capture). No administrator rights needed: it is only the lighting, nothing
+    is stored in the controller;
+  - `uwccctl kb effect NAME --try`, `uwccctl kb feedback NAME yes|no`; `kb effects` marks them.
 - Help (*Features*): what the CPU values mean next to OCCT / HWiNFO — the clock is the clock of the busy cores like
   *Speed* in Task Manager, not the lower "effective" clock.
 

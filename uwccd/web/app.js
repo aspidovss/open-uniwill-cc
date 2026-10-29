@@ -155,7 +155,7 @@ function render() {
   $("#brand-sub").textContent = S.platform.display_name || S.platform.project_name;
   renderModes(); renderFanPage(); renderLiquid(); renderLight(); renderBattery(); renderSwitches(); renderBinding(); renderInfo(); renderAuto(); renderAbout(); renderReportCard();
   renderHistSeg(); drawHistory();
-  renderDriver(); renderEcBanner(); applyFeatures(); renderBusy(S.busy || []); renderMonOff();
+  renderDriver(); renderEcBanner(); applyFeatures(); renderBusy(S.busy || []); renderMonOff(); setupCollapsible();
 }
 
 // ---------------------------------------------------------------- monitor
@@ -586,16 +586,26 @@ function renderLight() {
     if (e.fx) { fxParams[e.idx] = e.fx; kbSel.fx = e.fx; }
   }
   const eb = $("#effects"); eb.innerHTML = "";
+  const fb = k.feedback || {};
   for (const [id, name] of Object.entries(k.effects)) {
-    const na = (k.unsupported_effects || []).includes(+id);
-    eb.append(h("div", { class: `eff${+id === kbSel.effect ? " on" : ""}${na ? " na" : ""}`, title: na ? (k.four_zone && !(+id === 13) ? t("Not available on this keyboard") : +id === 13 ? t("Music mode needs audio capture — not supported") : (+id === 14 || +id === 15) ? t("Not supported by this keyboard firmware") : t("Light bar only effect")) : "",
+    const grey = (k.unsupported_effects || []).includes(+id);
+    const untested = grey && (k.untested_effects || []).includes(+id);    // greyed, but may be tried
+    const na = grey && !untested;
+    const why = grey ? (+id === 13 ? t("Music mode needs audio capture — not supported") : k.four_zone ? t("Not available on this keyboard")
+      : (+id === 14 || +id === 15) ? t("Not supported by this keyboard firmware") : t("Light bar only effect")) : "";
+    const verdict = fb[id] ? (fb[id].works ? " ✓" : " ✕") : "";
+    const title = untested ? why + " — " + t("not checked on this keyboard; click to try") + (verdict ? " · " + t(fb[id].works ? "you said: works" : "you said: does not work") : "") : why;
+    eb.append(h("div", { class: `eff${+id === kbSel.effect ? " on" : ""}${na ? " na" : ""}${untested ? (k.untested_unlocked ? " untested" : " na untested") : ""}`, title,
       onclick: () => {
         if (na) return toast(t("This effect is not available for this keyboard"), true);
+        if (untested) return tryUntested(+id, name);
         if (+id === 2 && kbSel.effect !== 2) kbSel.circular = true;      // Wave: all palette colours by default
-        kbSel.effect = +id; applyKb();
+        kbSel.effect = +id; hideKbFeedback(); applyKb();
       } },
-      h("div", { class: "sw8" }), t(EFFECT_NAME[name] || name)));
+      h("div", { class: "sw8" }), t(EFFECT_NAME[name] || name) + verdict));
   }
+  $("#kb-unlock").checked = !!k.untested_unlocked;
+  $("#kb-unlock-row").classList.toggle("hidden", !(k.untested_effects || []).length);
   for (const [id, key] of [["kb-light", "light"], ["kb-speed", "speed"]]) { $("#" + id).value = kbSel[key]; $("#" + id).nextElementSibling.textContent = kbSel[key]; }
   $("#kb-dir").value = kbSel.direction; $("#kb-multi").checked = kbSel.circular;
   const sw = $("#swatches"); sw.innerHTML = "";
@@ -613,12 +623,53 @@ function applyKb() {
   if (kbSel.effect >= 100) return act(() => api("keyboard/effect", { effect: kbSel.effect, light: kbSel.light, fx: kbSel.fx || fxDefaults(kbSel.effect) }));
   const body = { ...kbSel };
   delete body.fx;
+  if ((S.keyboard.untested_effects || []).includes(kbSel.effect)) body.untested = true;
   if (kbSel.circular) body.colors = S.keyboard.default_colors;
   if (kbSel.effect === 14) body.user = userBuf;
   if (kbSel.effect === 20) body.alphabet = $("#kb-alpha").value || "HELLO";
   act(() => api("keyboard/effect", body));
 }
 $("#kb-power").addEventListener("change", e => act(() => api("keyboard/power", { on: e.target.checked })));
+
+// -- untested effects: unlock (switch), ask before the first try, then "does it work?"
+function askUntested(name) {          // -> "once" | "always" | null
+  return new Promise(res => {
+    const close = v => { box.remove(); res(v); };
+    const box = h("div", { class: "eula", role: "dialog", "aria-modal": "true" },
+      h("div", { class: "eula-card ask-card" },
+        h("h3", {}, t("Try “{0}”?", t(EFFECT_NAME[name] || name))),
+        h("p", {}, t("This effect is not offered for this keyboard by the original Control Center and has not been checked on it. The keyboard may draw it, ignore it or show something else; nothing is stored in the controller — choose another effect or switch the backlight off and on to go back.")),
+        h("div", { class: "row end wrap" },
+          h("button", { class: "btn ghost", onclick: () => close(null) }, t("Cancel")),
+          h("button", { class: "btn ghost", onclick: () => close("always") }, t("Yes, do not ask again")),
+          h("button", { class: "btn", onclick: () => close("once") }, t("Try it")))));
+    box.addEventListener("keydown", e => { if (e.key === "Escape") close(null); });
+    document.body.append(box); box.querySelector(".btn:last-child").focus();
+  });
+}
+async function tryUntested(id, name) {
+  const k = S.keyboard;
+  if (k.untested_ask) {
+    const a = await askUntested(name);
+    if (!a) return;
+    if (a === "always") await api("setting", { key: "kb_untested_no_ask", value: true }).catch(() => {});
+  }
+  kbSel.effect = id; applyKb();
+  showKbFeedback(id, name);
+}
+function showKbFeedback(id, name) {
+  const bar = $("#kb-feedback"); bar.innerHTML = "";
+  const answer = works => act(async () => { await api("keyboard/feedback", { effect: id, works }); hideKbFeedback(); },
+    t("Thank you — the answer is kept for the diagnostic report"));
+  bar.append(h("span", {}, t("Does “{0}” work on this keyboard?", t(EFFECT_NAME[name] || name))),
+    h("button", { class: "btn sm", onclick: () => answer(true) }, "✓ " + t("Yes")),
+    h("button", { class: "btn ghost sm", onclick: () => answer(false) }, "✕ " + t("No")),
+    h("button", { class: "btn ghost sm", onclick: hideKbFeedback }, t("Later")));
+  bar.classList.remove("hidden");
+}
+function hideKbFeedback() { $("#kb-feedback").classList.add("hidden"); }
+$("#kb-unlock").addEventListener("change", e => act(() => api("setting", { key: "kb_unlock_effects", value: e.target.checked }),
+  e.target.checked ? t("Untested effects unlocked") : t("Untested effects locked again")));
 
 // ---------------------------------------------------------------- BetterRGB effects (drawn by the service)
 const fxParams = {};                         // effect id -> the parameters last used
@@ -912,7 +963,7 @@ function renderInfo() {
     [t("Processor"), i.cpu], [t("Memory"), `${(i.memory.total_mb / 1024).toFixed(1)} ${t("GB")}`], [t(p.os === "windows" ? "Operating system" : "Linux kernel"), i.kernel]]);
   dl($("#info-svc"), [[t("Project (Project ID)"), `${p.display_name || p.project_name} (0x${p.project_id.toString(16).toUpperCase()})`], [t("Support"), t({ tested: "tested", known: "known platform", experimental: "experimental" }[p.support] || "—")], [t("EC access"), p.ec_backend],
     [t("Hotkeys"), p.hotkeys ? (p.os === "windows" ? "WMI (AcpiTest_EventULong)" : t("uwcc kernel module")) : t("EC polling (no module)")], ["NVRAM (UniWillVariable)", p.nvram ? t("available") : t("unavailable")],
-    ["RamFan 1.5", p.ramfan15 ? t("yes") : t("no")], [t("Turbo mode"), p.turbo_support ? t("supported") : t("no")], [t("NVIDIA graphics"), p.nv_gpu ? t("yes") : t("no")],
+    [h("span", { title: t("Fan control of the EC firmware (name from the original Uniwill service): fan curves in the EC memory, Custom mode, power limits. Without it the program does not control the fans."), class: "has-tip" }, "RamFan 1.5 ⓘ"), p.ramfan15 ? t("yes") : t("no")], [t("Turbo mode"), p.turbo_support ? t("supported") : t("no")], [t("NVIDIA graphics"), p.nv_gpu ? t("yes") : t("no")],
     [t("Platform"), p.amd ? "AMD" : "Intel"], [t("Power adapter"), `${p.adapter_watt} ${t("W")}`],
     [t("Liquid cooling (EC)"), lc.ec_support ? (lc.ec_table ? t("supported, EC targets") : t("supported")) : t("not declared")]]);
   const d = $("#info-disks"); d.innerHTML = "";
@@ -1137,6 +1188,7 @@ const HIST = {
 };
 const HIST_RANGES = [[60, "1 min"], [300, "5 min"], [900, "15 min"], [3600, "1 hour"], [86400, "24 hours"]];
 let histKey = "temp", histData = [], histT = 0, histNow = Date.now() / 1000, histPin = null, histBase = "", histMax = 1;
+let histZoom = null;                     // {t0, t1}: a period chosen by dragging across the chart (refresh paused)
 let histRange = 3600;
 try { const r = +localStorage.getItem("uwcc-hist-range"); if (HIST_RANGES.some(x => x[0] === r)) histRange = r; } catch (_) {}
 const histStep = () => histRange <= 900 ? 2 : histRange <= 3600 ? 5 : 60;
@@ -1148,11 +1200,11 @@ function renderHistSeg() {
   const rs = $("#hist-range"); rs.innerHTML = "";
   for (const [sec, name] of HIST_RANGES) rs.append(h("button", { class: sec === histRange ? "on" : "", onclick: () => {
     histRange = sec; try { localStorage.setItem("uwcc-hist-range", sec); } catch (_) {}
-    unpinHistory(false); renderHistSeg(); loadHistory(true);
+    histZoom = null; unpinHistory(false); renderHistSeg(); loadHistory(true);
   } }, t(name)));
 }
 async function loadHistory(force) {
-  if (histPin) return drawHistory();                       // paused on a point
+  if (histPin || histZoom) return drawHistory();           // paused on a point / on a zoomed period
   const age = histRange <= 900 ? 1900 : histRange <= 3600 ? 9000 : 55000;
   if (!force && Date.now() - histT < age) return drawHistory();
   try {
@@ -1165,32 +1217,47 @@ function relLabel(sec) {
   if (sec <= 0) return t("now");
   return sec < 60 ? `−${sec} ${t("s")}` : sec < 3600 ? `−${Math.round(sec / 60)} ${t("min")}` : `−${Math.round(sec / 3600)} ${t("h")}`;
 }
-const histX = tt => Math.max(0, (tt - (histNow - histRange)) / histRange * HIST_W);
+const histV0 = () => histZoom ? histZoom.t0 : histNow - histRange;      // the period on screen
+const histSpan = () => histZoom ? histZoom.t1 - histZoom.t0 : histRange;
+const histX = tt => (tt - histV0()) / histSpan() * HIST_W;
+function histVisible() {                // points of the period on screen, with one neighbour each side for the lines
+  if (!histZoom) return histData;
+  const a = histData.findIndex(p => p.t >= histZoom.t0);
+  if (a < 0) return [];
+  let b = histData.length - 1;
+  while (b > 0 && histData[b].t > histZoom.t1) b--;
+  return histData.slice(Math.max(0, a - 1), Math.min(histData.length, b + 2));
+}
+const histIn = p => !histZoom || (p.t >= histZoom.t0 && p.t <= histZoom.t1);
 const histY = v => HIST_H - Math.min(1, v / histMax) * HIST_H;
 function drawHistory() {
   const svg = $("#hist-chart"), W = HIST_W, H = HIST_H, d = HIST[histKey];
+  const all = histData, pts = histVisible(), inView = pts.filter(histIn);
+  $("#hist-zoom-reset").classList.toggle("hidden", !histZoom);
   let max = d.max;
   const marks = d.marks || [];
-  if (histKey === "total") histData.forEach(p => { p.adapter = S && S.platform && S.platform.adapter_watt || null; });
+  if (histKey === "total") all.forEach(p => { p.adapter = S && S.platform && S.platform.adapter_watt || null; });
   if (!max) {
     max = 10;
-    for (const p of histData) for (const [k] of d.lines) if (p[k] > max) max = p[k];
+    for (const p of inView) for (const [k] of d.lines) if (p[k] > max) max = p[k];
     // keep the limit marks in view, but not a 330 W adapter line over a 20 W curve
-    for (const p of histData) for (const [k] of marks) if (p[k] > max && p[k] < max * 3) max = p[k];
+    for (const p of inView) for (const [k] of marks) if (p[k] > max && p[k] < max * 3) max = p[k];
     max = Math.ceil(max * 1.1 / 10) * 10;
   }
   histMax = max;
   let g = "";
   for (const f of [0.25, 0.5, 0.75]) { const y = H - f * H; g += `<line x1="0" x2="${W}" y1="${y}" y2="${y}" stroke="#1f2830"/><text x="4" y="${y - 3}" fill="#55636e" font-size="10">${Math.round(max * f)} ${t(d.unit)}</text>`; }
-  const nt = { 60: 4, 300: 5, 900: 3, 3600: 4, 86400: 4 }[histRange] || 4;
+  const nt = histZoom ? 4 : { 60: 4, 300: 5, 900: 3, 3600: 4, 86400: 4 }[histRange] || 4;
   for (let i = 0; i <= nt; i++) {
     const x = i === nt ? W - 4 : (i / nt) * W + 2;
-    g += `<text x="${x}" y="${H - 3}" fill="#55636e" font-size="10" text-anchor="${i === nt ? "end" : "start"}">${relLabel(Math.round(histRange * (1 - i / nt)))}</text>`;
+    const label = histZoom ? new Date((histV0() + histSpan() * i / nt) * 1000).toLocaleTimeString()
+      : relLabel(Math.round(histRange * (1 - i / nt)));
+    g += `<text x="${x}" y="${H - 3}" fill="#55636e" font-size="10" text-anchor="${i === nt ? "end" : "start"}">${label}</text>`;
   }
   const gap = histStep() * 4;
   for (const [k, , color] of d.lines) {
     let path = "", pen = false, prevT = null;
-    for (const p of histData) {
+    for (const p of pts) {
       const v = p[k];
       if (v == null || (prevT && p.t - prevT > gap)) pen = false;
       prevT = p.t;
@@ -1201,7 +1268,7 @@ function drawHistory() {
   }
   for (const [k, n, color] of marks) {            // limits: dashed step line + label at the latest value
     let path = "", last = null, lastX = 0;
-    for (const p of histData) {
+    for (const p of pts) {
       const v = p[k]; if (v == null || v > max) { last = null; continue; }
       const x = histX(p.t), y = H - v / max * H;
       path += (last == null ? " M" : ` L${x.toFixed(1)},${(H - last / max * H).toFixed(1)} L`) + x.toFixed(1) + "," + y.toFixed(1);
@@ -1211,41 +1278,42 @@ function drawHistory() {
       `<text x="${Math.min(lastX, W - 4)}" y="${H - last / max * H - 4}" fill="${color}" font-size="10" text-anchor="end">${t(n)} ${last} ${t("W")}</text>`;
   }
   const recording = !S || !S.settings || S.settings.history_record !== false;
-  const hasData = histData.some(p => d.lines.some(([k]) => p[k] != null));
-  const msg = !histData.length ? (recording ? t("collecting data…") : t("History recording is off (Settings → Switches)")) : !hasData ? t(d.nodata || "no data") : "";
+  const hasData = inView.some(p => d.lines.some(([k]) => p[k] != null));
+  const msg = !all.length ? (recording ? t("collecting data…") : t("History recording is off (Settings → Switches)")) : !hasData ? t(d.nodata || "no data") : "";
   histBase = msg ? g + `<text x="${W / 2}" y="${H / 2}" fill="#55636e" font-size="13" text-anchor="middle">${msg}</text>` : g;
   svg.innerHTML = histBase + histOverlay(histPin, true);
   histDots(histPin);
   const notes = [];
-  if (!recording && histData.length) notes.push(t("Recording is off"));
+  if (!recording && all.length) notes.push(t("Recording is off"));
   if (histRange === 86400) notes.push(t("one point per minute (average)"));
+  if (histZoom) notes.push(t("zoomed: {0} – {1}", new Date(histZoom.t0 * 1000).toLocaleTimeString(), new Date(histZoom.t1 * 1000).toLocaleTimeString()));
   if (hasData) {                                  // latest / average / max of the visible series
     for (const [k, n] of d.lines) {
-      const v = histData.map(p => p[k]).filter(x => x != null);
-      const mx = histData.map(p => p[k + "_mx"] ?? p[k]).filter(x => x != null);
+      const v = inView.map(p => p[k]).filter(x => x != null);
+      const mx = inView.map(p => p[k + "_mx"] ?? p[k]).filter(x => x != null);
       if (!v.length) continue;
       const avg = v.reduce((a, b) => a + b, 0) / v.length;
-      notes.push(`${t(n)}: ${t("now")} ${v[v.length - 1]} · ${t("avg")} ${Math.round(avg * 10) / 10} · ${t("max")} ${Math.max(...mx)} ${t(d.unit)}`);
+      notes.push(`${t(n)}: ${histZoom ? t("last") : t("now")} ${v[v.length - 1]} · ${t("avg")} ${Math.round(avg * 10) / 10} · ${t("max")} ${Math.max(...mx)} ${t(d.unit)}`);
     }
     for (const [k, n] of marks) {
-      const v = histData.map(p => p[k]).filter(x => x != null);
+      const v = inView.map(p => p[k]).filter(x => x != null);
       if (v.length) notes.push(`${t(n)}: ${v[v.length - 1]} ${t("W")}`);
     }
   }
   $("#hist-stats").textContent = notes.join("  |  ");
   const lg = $("#hist-legend"); lg.innerHTML = "";
   for (const [, n, color] of d.lines) lg.append(h("span", { class: "lg", style: `--c:${color}` }, t(n)));
-  for (const [k, n, color] of marks) if (histData.some(p => p[k] != null)) lg.append(h("span", { class: "lg dash", style: `--c:${color}` }, t(n)));
+  for (const [k, n, color] of marks) if (inView.some(p => p[k] != null)) lg.append(h("span", { class: "lg dash", style: `--c:${color}` }, t(n)));
   renderHistDetail();
 }
 // -- hover / pinned point
 function histNearest(evt) {
   const svg = $("#hist-chart"), r = svg.getBoundingClientRect();
   if (!histData.length || !r.width) return null;
-  const tt = histNow - histRange + (evt.clientX - r.left) / r.width * histRange;
+  const tt = histV0() + (evt.clientX - r.left) / r.width * histSpan();
   let best = null;
-  for (const p of histData) if (!best || Math.abs(p.t - tt) < Math.abs(best.t - tt)) best = p;
-  return best && Math.abs(best.t - tt) <= Math.max(histStep() * 3, histRange / 100) ? best : null;
+  for (const p of histData) if (histIn(p) && (!best || Math.abs(p.t - tt) < Math.abs(best.t - tt))) best = p;
+  return best && Math.abs(best.t - tt) <= Math.max(histStep() * 3, histSpan() / 100) ? best : null;
 }
 function histDots(...pts) {                     // HTML dots: the SVG is stretched, circles would be ellipses
   const box = $("#hist-dots"); box.innerHTML = "";
@@ -1296,9 +1364,47 @@ function renderHistDetail() {
   box.append(grid);
   box.classList.remove("hidden");
 }
+function zoomHistory(t0, t1) {
+  const inside = histData.filter(p => p.t >= t0 && p.t <= t1).length;
+  if (inside < 2) { toast(t("Choose a longer period — it has fewer than two points"), true); drawHistory(); return; }
+  histZoom = { t0, t1 };
+  if (histPin && !histIn(histPin)) histPin = null;
+  drawHistory();
+}
+function resetHistoryZoom() {
+  if (!histZoom) return;
+  histZoom = null;
+  if (!histPin) loadHistory(true); else drawHistory();
+}
+$("#hist-zoom-reset").addEventListener("click", resetHistoryZoom);
 (() => {
   const svg = $("#hist-chart"), tip = $("#hist-tip");
+  let drag = null, dragged = false;                 // drag: {x0, x} (client px) while the mouse button is down
+  const timeAt = clientX => { const r = svg.getBoundingClientRect(); return histV0() + Math.min(1, Math.max(0, (clientX - r.left) / r.width)) * histSpan(); };
+  svg.addEventListener("mousedown", e => { if (e.button === 0 && histData.length) { drag = { x0: e.clientX, x: e.clientX }; e.preventDefault(); } });
+  window.addEventListener("mousemove", e => {
+    if (!drag) return;
+    drag.x = e.clientX;
+    if (Math.abs(drag.x - drag.x0) < 6) return;
+    const r = svg.getBoundingClientRect();
+    const x0 = Math.max(0, (Math.min(drag.x0, drag.x) - r.left) / r.width * HIST_W);
+    const x1 = Math.min(HIST_W, (Math.max(drag.x0, drag.x) - r.left) / r.width * HIST_W);
+    svg.innerHTML = histBase + histOverlay(histPin, true) +
+      `<rect x="${x0}" y="0" width="${Math.max(0, x1 - x0)}" height="${HIST_H}" fill="var(--acc)" fill-opacity=".13" stroke="var(--acc)" stroke-opacity=".6" vector-effect="non-scaling-stroke"/>`;
+    histDots(histPin);
+    tip.classList.add("hidden");
+  });
+  window.addEventListener("mouseup", () => {
+    if (!drag) return;
+    const d = drag; drag = null;
+    if (Math.abs(d.x - d.x0) < 6) return;
+    dragged = true;
+    setTimeout(() => { dragged = false; }, 0);      // the click that follows the mouseup is not a click on a point
+    zoomHistory(timeAt(Math.min(d.x0, d.x)), timeAt(Math.max(d.x0, d.x)));
+  });
+  svg.addEventListener("dblclick", e => { e.preventDefault(); resetHistoryZoom(); });
   svg.addEventListener("mousemove", e => {
+    if (drag && Math.abs(drag.x - drag.x0) >= 6) return;
     const p = histNearest(e);
     svg.innerHTML = histBase + histOverlay(histPin, true) + (p && p !== histPin ? histOverlay(p, false) : "");
     histDots(histPin, p);
@@ -1311,12 +1417,17 @@ function renderHistDetail() {
   });
   svg.addEventListener("mouseleave", () => { tip.classList.add("hidden"); svg.innerHTML = histBase + histOverlay(histPin, true); histDots(histPin); });
   svg.addEventListener("click", e => {
+    if (dragged) return;
     const p = histNearest(e);
     if (histPin && (!p || p === histPin)) return unpinHistory();
     if (!p) return;
     histPin = p; drawHistory();
   });
-  document.addEventListener("keydown", e => { if (e.key === "Escape" && histPin) unpinHistory(); });
+  document.addEventListener("keydown", e => {
+    if (e.key !== "Escape") return;
+    if (histPin) unpinHistory(!histZoom);
+    else if (histZoom) resetHistoryZoom();
+  });
 })();
 
 function downloadHistory(fmt) {
@@ -2307,7 +2418,7 @@ async function openHelp(id, anchor) {
   body.querySelectorAll("a[data-md-link]").forEach(a => {
     const href = a.getAttribute("href");
     if (/^https?:/i.test(href)) { a.target = "_blank"; a.rel = "noopener"; return; }
-    if (href.startsWith("#")) { a.addEventListener("click", e => { e.preventDefault(); body.querySelector(CSS.escape ? "#" + CSS.escape(decodeURIComponent(href.slice(1))) : href)?.scrollIntoView({ behavior: "smooth" }); }); return; }
+    if (href.startsWith("#")) { a.addEventListener("click", e => { e.preventDefault(); body.querySelector("#md-" + CSS.escape(decodeURIComponent(href.slice(1))))?.scrollIntoView({ behavior: "smooth" }); }); return; }
     const { path, hash } = resolveDoc(file, href);
     if (path.endsWith(".md") && !path.startsWith("..")) {
       const known = HELP_PAGES.find(x => x.en === path || x.ru === path);
@@ -2318,7 +2429,7 @@ async function openHelp(id, anchor) {
       a.target = "_blank"; a.rel = "noopener";
     }
   });
-  const target = anchor ? body.querySelector("#" + CSS.escape(anchor)) : null;
+  const target = anchor ? body.querySelector("#md-" + CSS.escape(anchor)) : null;
   if (target) target.scrollIntoView({ block: "start" });
   else { const m = body.closest("main"); if (m) m.scrollTop = 0; window.scrollTo(0, 0); }
 }
@@ -2347,7 +2458,9 @@ $(`#nav a[data-page="help"]`)?.addEventListener("click", () => { if (!helpCur) o
 function setupCollapsible() {
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem("uwcc-folded") || "{}"); } catch (_) {}
-  for (const card of $$("#page-driver > .card")) {
+  // EC Manager cards, the profile settings (Mode selection) and the diagnostic report (Information)
+  for (const card of $$("#page-driver > .card, #profile-editor, #report-card")) {
+    card.classList.add("foldable");
     const h3 = card.querySelector("h3");
     if (!h3) continue;
     let head = h3;                                   // the direct child of the card that holds the title

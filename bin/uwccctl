@@ -149,6 +149,8 @@ HELP = {
         "uwccctl kb                               status\n"
         "uwccctl kb on|off\n"
         "uwccctl kb effects                       effects of this keyboard (number, name, support)\n"
+        "uwccctl kb effect NAME --try             an effect not checked on this keyboard (greyed in the window)\n"
+        "uwccctl kb feedback NAME yes|no          did it work? (kept for the diagnostic report)\n"
         "uwccctl kb effect NAME|N [--light 0-4] [--speed 0-4] [--dir right|left|up|down]\n"
         "                  [--color RRGGBB[,RRGGBB...]] [--multi|--no-multi] [--text TEXT]\n"
         "                                         options not given keep their current values\n"
@@ -837,10 +839,16 @@ def cmd_kb(a):
         k = call("state")["keyboard"]
         bad = set(k.get("unsupported_effects") or [])
         soft = set(k.get("software_effects") or [])
-        rows = [{"id": int(i), "name": n, "supported": int(i) not in bad, "software": int(i) in soft}
-                for i, n in (k.get("effects") or {}).items()]
-        return out(rows, lambda d: [f"{r['id']:3} {r['name']:14}" + ("" if r["supported"] else " (not on this keyboard)") +
+        tryable = set(k.get("untested_effects") or [])
+        rows = [{"id": int(i), "name": n, "supported": int(i) not in bad, "software": int(i) in soft,
+                 "untested": int(i) in tryable} for i, n in (k.get("effects") or {}).items()]
+        return out(rows, lambda d: [f"{r['id']:3} {r['name']:14}" + ("" if r["supported"] else
+                                    " (not checked on this keyboard: --try)" if r["untested"] else " (not on this keyboard)") +
                                     (" (drawn by the service)" if r["software"] and r["supported"] else "") for r in d])
+    elif op == "feedback" and len(a) == 3 and a[2] in ("yes", "no"):
+        k = call("state")["keyboard"]
+        r = call("keyboard/feedback", {"effect": effect_index(k, a[1]), "works": a[2] == "yes"})
+        return out(r, lambda d: [f"{v['name']}: {'works' if v['works'] else 'does not work'}" for v in d.values()])
     elif op == "fx" and not a[1:]:
         return out(call("state")["keyboard"], fx_text)
     elif op == "fx":
@@ -885,7 +893,7 @@ def cmd_kb(a):
                                  f"calibrating {'yes' if d['calibrating'] else 'no'}"])
     elif op == "effect" and a[1:]:
         o, pos = opts(a[1:], {"light": True, "speed": True, "dir": True, "color": True, "multi": False,
-                              "no-multi": False, "text": True})
+                              "no-multi": False, "text": True, "try": False})
         if o is None or len(pos) != 1:
             usage("kb")
         k = call("state")["keyboard"]
@@ -910,6 +918,8 @@ def cmd_kb(a):
             body["circular"] = False
         if "text" in o:
             body["alphabet"] = o["text"]
+        if o.get("try"):
+            body["untested"] = True             # an effect not checked on this keyboard type
         call("keyboard/effect", body)
     elif op != "status":
         usage("kb")

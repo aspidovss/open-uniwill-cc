@@ -16,6 +16,13 @@ driver stays an option for speed and for `PWUP` / `SMRW`. Comparison and measure
 
 The original service has two different mode managers and picks one by the project ID from the EC; this port does the same:
 
+> **RamFan 1.5** is not a separate project: it is the name the original Uniwill service (GCUService,
+> `MyFanManager_RamFan1p5`) gives to the fan control of the EC firmware. The fan curve (16 levels "temperature → speed"
+> for CPU and GPU) lives in the EC RAM at `0xF00–0xF5C` and is handed over with `0xF5D–0xF5F`; with it come the Custom
+> mode, PL1 / PL2 / PL4 / TCC and the Smart APC limit table. The EC reports it in `0x78E` bit 6 (*Information →
+> RamFan 1.5*). Without it the program does not control the fans. ("RAM fan table, version 1.5" is our reading of the
+> name; there is no public description.)
+
 | | Commercial projects (PH4/PH6 list, `_CML` manager) | All other projects (RamFan1p5 manager) |
 |---|---|---|
 | Modes | Office, Gaming, Turbo | Office, Gaming, Turbo, **Custom** |
@@ -44,7 +51,8 @@ WhisperMode.
 
 ## Monitoring extras
 
-* **History** on the Monitor page (1 min … 24 h, a point can be pinned for details, CSV / JSON export): temperatures,
+* **History** on the Monitor page (1 min … 24 h, a point can be pinned for details, a period can be zoomed by dragging
+  across the chart, CSV / JSON export): temperatures,
   load, clocks, CPU package power and power limits, GPU power, CPU + GPU and battery power, fans, cooler.
 * **What the CPU values mean** (compared with OCCT, HWiNFO …): *power draw* is the RAPL **package** domain (Linux
   powercap `package-0`, Windows Energy Meter `rapl_package0_pkg`); the *clock* is the clock of the busy cores, as
@@ -116,6 +124,7 @@ to the hardware differs (see the last section).
 | User mode (per-key colour) and gaming mode (WASD/arrows) — per-key keyboards | ✅ | ✅ | picture 12h / rows 16h |
 | Software effects Neon, Stack, Impact, Alphabet | ✅ | ✅ | frames from `AP_Effect_Task` (`uwccd/lighting/oem`, proprietary) |
 | Reactive effects (Reactive, Ripple, Aurora, Spark) light pressed keys | ✅ | ✅ | EC `0x741` bit 3 |
+| *Not in the original:* untested effects — the greyed effects (not offered for this keyboard type by the original window, light-bar effects on a keyboard) can be tried: *Unlock untested effects*, a question before the first try, then *Does it work? Yes / No* (kept per keyboard, part of the diagnostic report). Music mode stays off | ✅ | ✅ | the same `08h` effect command; nothing is stored in the controller; `uwccctl kb effect NAME --try`, `uwccctl kb feedback NAME yes\|no` |
 | *Not in the original:* 16 BetterRGB effects (Wave, Sparkle, Lightning, Flame, Rain, Matrix, Quicksand, Current, Screen ambient …) | ✅ | ✅ | frames from `uwccd/lighting/fx.py` (from BetterRGB, MIT): picture 12h on per-key keyboards, zone colours on four-zone ones — [LIGHTING.md](LIGHTING.md) |
 | *Not in the original:* transitions, white calibration, top-row bar, frame rate on AC / battery | ✅ | ✅ | `uwccd/lighting/fx.py`; key presses: Linux `/dev/input`, Windows the tray app; screen: Windows tray app, Linux agent (X11) |
 | LED colour correction per keyboard type / LED vendor | ✅ | ✅ | `WKDColor.cheatRGB_*` (`uwccd/lighting/oem`, proprietary) |

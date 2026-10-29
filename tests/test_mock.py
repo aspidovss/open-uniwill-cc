@@ -65,6 +65,26 @@ class MockService(unittest.TestCase):
         return self.get(f"ec/{addr:x}")["value"]
 
     # -- tests ------------------------------------------------------------------
+    def test_untested_effects(self):
+        k = self.get("state")["keyboard"]
+        self.assertIn(21, k["untested_effects"])                     # Star hitting: light bar only, may be tried
+        self.assertNotIn(13, k["untested_effects"])                  # Music: never
+        self.assertEqual(self.post("keyboard/effect", {"effect": 21})[0], 501)
+        self.assertEqual(self.post("keyboard/effect", {"effect": 21, "untested": True})[0], 200)
+        self.assertTrue(self.get("state")["keyboard"]["effect"]["untested"])
+        self.assertEqual(self.post("keyboard/effect", {"effect": 13, "untested": True})[0], 501)
+        code, fb = self.post("keyboard/feedback", {"effect": 21, "works": False})
+        self.assertEqual((code, fb["21"]["works"]), (200, False))
+        k = self.get("state")["keyboard"]
+        self.assertEqual(k["feedback"]["21"]["name"], "StarHitting")
+        self.post("setting", {"key": "kb_unlock_effects", "value": True})
+        self.post("setting", {"key": "kb_untested_no_ask", "value": True})
+        k = self.get("state")["keyboard"]
+        self.assertEqual((k["untested_unlocked"], k["untested_ask"]), (True, False))
+        self.post("setting", {"key": "kb_unlock_effects", "value": False})      # locking again asks again
+        self.assertTrue(self.get("state")["keyboard"]["untested_ask"])
+        self.assertEqual(self.post("keyboard/effect", {"effect": 1, "colors": [[0, 255, 0]]})[0], 200)
+
     def test_betterrgb_fx_api(self):
         st = self.get("state")["keyboard"]
         self.assertIn("100", {str(k) for k in st["fx_effects"]})
@@ -1221,6 +1241,24 @@ class EnergyMeterUnit(unittest.TestCase):
         self.assertAlmostEqual(m.package_mw({"rapl_package0": 30000.0, "rapl_package0_pp0": 20000.0}), 30000.0)
         self.assertAlmostEqual(m.package_mw({"rapl_package0_pkg": 30000.0, "rapl_package1_pkg": 20000.0}), 50000.0)
         self.assertIsNone(m.package_mw({"rapl_package0_pp0": 1.0, "_total": 0.0}))
+
+
+class UntestedEffectUnit(unittest.TestCase):
+    def test_four_zone_untested(self):
+        from uwccd.ec import MockEC
+        from uwccd.lighting import ite
+        kb = ite.MockITE(MockEC(os.path.join(tempfile.mkdtemp(), "ec.json")))
+        kb.kb_type = 2                                           # four-zone keyboard
+        with self.assertRaises(ValueError):
+            kb.set_effect(3)                                     # Reactive: not offered on four zones
+        kb.set_effect(3, untested=True)
+        self.assertTrue(kb.saved["untested"])
+        self.assertTrue(any(f == "F" and v.startswith("00080204") for f, v in kb.log))    # 08h, Reactive
+        kb.set_power(False)
+        kb.set_power(True)                                       # restored from the saved effect, still allowed
+        self.assertEqual(kb.saved["idx"], 3)
+        with self.assertRaises(NotImplementedError):
+            kb.set_effect(13, untested=True)                     # Music needs audio capture
 
 
 class SingleColorKeyboardUnit(unittest.TestCase):

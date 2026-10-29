@@ -82,7 +82,8 @@ const MD = (() => {
       }
       if ((m = line.match(/^(#{1,6})\s+(.*?)\s*#*\s*$/))) {
         const n = m[1].length;
-        out.push(`<h${n} id="${esc(slug(m[2]))}">${inline(m[2])}</h${n}>`);
+        // "md-" prefix: a heading such as "Effects" must not get the id of an element of the window (#effects)
+        out.push(`<h${n} id="md-${esc(slug(m[2]))}">${inline(m[2])}</h${n}>`);
         i++; continue;
       }
       if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(line)) { out.push("<hr>"); i++; continue; }

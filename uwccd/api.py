@@ -350,7 +350,8 @@ class Handler(BaseHTTPRequestHandler):
                                       speed=int(b.get("speed", 2)), direction=int(b.get("direction", 0)),
                                       colors=b.get("colors"), circular=bool(b.get("circular")), user=b.get("user"),
                                       alphabet=(str(b["alphabet"])[:40] if b.get("alphabet") else None),
-                                      fx=b.get("fx") if isinstance(b.get("fx"), dict) else None)
+                                      fx=b.get("fx") if isinstance(b.get("fx"), dict) else None,
+                                      untested=bool(b.get("untested")))
             elif path in ("/api/import", "/api/import/original"):
                 from . import backup
                 if path == "/api/import/original":
@@ -424,6 +425,10 @@ class Handler(BaseHTTPRequestHandler):
                 s.keyboard.set_power(bool(b["on"]))
             elif path == "/api/keyboard/level":
                 s.keyboard.set_level(int(b["level"]))
+            elif path == "/api/keyboard/feedback":          # untested effect: does it work on this keyboard?
+                r = s.keyboard.feedback(int(b["effect"]), bool(b.get("works")))
+                s.emit("keyboard", s.keyboard.status())
+                return self._json(200, r)
             elif path == "/api/keyboard/fx/input":         # tray / agent: key presses, screen picture, audio levels
                 return self._json(200, s.keyboard.fx_input(keys=b.get("keys"), screen=b.get("screen"),
                                                            metrics=b.get("metrics")))
@@ -618,6 +623,10 @@ class Handler(BaseHTTPRequestHandler):
             s.settings_store.set("history_record", bool(value))
         elif key == "update_check":
             s.settings_store.set("update_check", bool(value))
+        elif key in ("kb_unlock_effects", "kb_untested_no_ask"):   # untested keyboard effects (no admin: lighting only)
+            s.settings_store.set(key, bool(value))
+            if key == "kb_unlock_effects" and not value:
+                s.settings_store.set("kb_untested_no_ask", False)      # locking again asks again next time
         elif key == "kb_picture_modes":
             s.settings_store.set("kb_picture_modes", bool(value))
         elif key == "tcc_extended":

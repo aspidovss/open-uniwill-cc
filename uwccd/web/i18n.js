@@ -133,7 +133,7 @@ const RU = {
   "I understand the risks": "Я понимаю риски",
   "Import": "Импорт",
   "Import failed: {0}": "Импорт не удался: {0}",
-  "Later": "Позже",
+  "Later": "Позже", "Yes": "Да", "No": "Нет",
   "Light bar (EC trigger)": "Световая полоса (через EC)",
   "Limits instead of SMRW (project {0})": "Пределы вместо SMRW (проект {0})",
   "Liquid cooler: EC targets and flag": "СЖО: цели EC и флаг подключения",
@@ -743,4 +743,34 @@ Object.assign(RU, {
   "Calibration saved": "Калибровка сохранена", "Calibration reset": "Калибровка сброшена",
   "BetterRGB keyboard effects": "Эффекты клавиатуры BetterRGB",
   "Self-check, stage 1 (read only): what works on this laptop, a draft platform profile": "Самопроверка, ступень 1 (только чтение): что работает на этом ноутбуке, черновик профиля платформы",
+});
+
+// history zoom (1.6.5)
+Object.assign(RU, {
+  "Reset zoom": "Сбросить масштаб",
+  "Fan control of the EC firmware (name from the original Uniwill service): fan curves in the EC memory, Custom mode, power limits. Without it the program does not control the fans.":
+    "Управление вентиляторами в прошивке EC (название из оригинальной службы Uniwill): кривые вентиляторов в памяти EC, пользовательский режим, пределы мощности. Без него программа не управляет вентиляторами.",
+  "Drag across the chart to zoom in on a period; double-click, Esc or “Reset zoom” to go back. A click pins a point.":
+    "Выделите участок графика мышью, чтобы рассмотреть его подробнее; двойной щелчок, Esc или «Сбросить масштаб» — назад. Щелчок закрепляет точку.",
+  "zoomed: {0} – {1}": "участок: {0} – {1}",
+  "last": "последнее",
+  "Choose a longer period — it has fewer than two points": "Выделите участок длиннее — в нём меньше двух точек",
+});
+
+// untested keyboard effects (1.6.5)
+Object.assign(RU, {
+  "Unlock untested effects (experimental)": "Разблокировать непроверенные эффекты (экспериментально)",
+  " — greyed effects that the original program does not offer for this keyboard; the first try asks, then tell whether it worked (it goes into the diagnostic report)":
+    " — серые эффекты, которые оригинальная программа не предлагает для этой клавиатуры; при первой попытке будет вопрос, потом скажите, сработало ли (ответ попадёт в диагностический отчёт)",
+  "not checked on this keyboard; click to try": "не проверен на этой клавиатуре; щёлкните, чтобы попробовать",
+  "you said: works": "вы ответили: работает", "you said: does not work": "вы ответили: не работает",
+  "Try “{0}”?": "Попробовать «{0}»?",
+  "This effect is not offered for this keyboard by the original Control Center and has not been checked on it. The keyboard may draw it, ignore it or show something else; nothing is stored in the controller — choose another effect or switch the backlight off and on to go back.":
+    "Оригинальный Control Center не предлагает этот эффект для этой клавиатуры, и на ней он не проверялся. Клавиатура может его показать, проигнорировать или показать что-то другое; в контроллере ничего не сохраняется — чтобы вернуться, выберите другой эффект или выключите и включите подсветку.",
+  "Yes, do not ask again": "Да, больше не спрашивать", "Try it": "Попробовать",
+  "Does “{0}” work on this keyboard?": "«{0}» работает на этой клавиатуре?",
+  "Later": "Позже", "Yes": "Да", "No": "Нет",
+  "Thank you — the answer is kept for the diagnostic report": "Спасибо — ответ сохранён для диагностического отчёта",
+  "Untested effects unlocked": "Непроверенные эффекты разблокированы",
+  "Untested effects locked again": "Непроверенные эффекты снова заблокированы",
 });

@@ -204,13 +204,41 @@ class KeyboardManager:
         zone_soft = bool(self.rgb.four_zone() and code in ite.FOUR_ZONE_SOFT)     # drawn zone by zone
         if fx.is_fx(kw.get("idx")):
             kw = {k: kw[k] for k in ("idx", "light", "fx", "force") if k in kw}
-        elif blocked and not zone_soft and (kw.get("idx") in (14, 15) or code in ite.AP_EFFECTS):
+        elif blocked and not zone_soft and (kw.get("idx") in (14, 15) or code in ite.AP_EFFECTS) and not kw.get("untested"):
             raise ValueError("this keyboard does not support per-key / gaming modes (see Settings to try anyway)")
         with self.lock:
             self.rgb.pictures_ok = not blocked      # single colour falls back to the firmware static effect
             self.rgb.set_effect(**kw)
             self.st.set("kb_effect", self.rgb.saved)
             self.st.set("kb_power", True)
+
+    # -- untested effects: tried by the user, with feedback ------------------------------------------
+    def keyboard_id(self):
+        """the keyboard type an answer applies to: PID / ITE firmware / keyboard type / usage page"""
+        if not self.rgb:
+            return None
+        i = self.rgb.info()
+        up = i.get("usage_page")
+        return f"{i.get('pid')}/fw{i.get('fw')}/type{i.get('type')}/up{up:04X}" if up else \
+            f"{i.get('pid')}/fw{i.get('fw')}/type{i.get('type')}"
+
+    def untested_effects(self, unsupported):
+        """effects that are greyed out on this keyboard but may be tried (not Music: it needs audio capture)"""
+        return [i for i in unsupported if ite.EFFECTS.get(i, (None, None))[1] != 0x22]
+
+    def feedback(self, idx, works):
+        """the user's answer for an untested effect -> settings (and the diagnostic report)"""
+        if idx not in ite.EFFECTS:
+            raise ValueError("unknown effect")
+        kid = self.keyboard_id()
+        if not kid:
+            raise ValueError("no RGB keyboard")
+        allfb = dict(self.st.get("kb_effect_feedback") or {})
+        mine = dict(allfb.get(kid) or {})
+        mine[str(idx)] = {"name": ite.EFFECTS[idx][0], "works": bool(works), "time": int(time.time())}
+        allfb[kid] = mine
+        self.st.set("kb_effect_feedback", allfb)
+        return mine
 
     def set_power(self, on):
         with self.lock:
@@ -283,9 +311,14 @@ class KeyboardManager:
              "picture_modes_switch": bool(self.rgb and not self.rgb.four_zone() and self.rgb.ver[0] == 0x11
                                           and not self.rgb.fw_effects()),
              "default_colors": ite.DEFAULT_COLORS,
+             "untested_unlocked": bool(self.st.get("kb_unlock_effects")),
+             "untested_ask": not self.st.get("kb_untested_no_ask"),
+             "keyboard_id": self.keyboard_id(),
+             "feedback": (self.st.get("kb_effect_feedback") or {}).get(self.keyboard_id() or "", {}),
              "fx_effects": fx.catalog(), "fx_config": self.fx_config(), "fx_transitions": fx.TRANSITIONS,
              "fx_bar_modes": fx.BAR_MODES, "fx_bar_directions": fx.BAR_DIRECTIONS,
              "fx": self.engine().info() if self.engine() else None}
+        d["untested_effects"] = self.untested_effects(d["unsupported_effects"]) if self.kind == "rgb" else []
         if self.lb:
             d["lightbar"] = {"device": self.lb.info(), "effects": list(ite.LB_EFFECTS),
                              "zones": {z: {"power": True, "effect": "static", "light": 4, "speed": 2,

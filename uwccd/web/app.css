@@ -294,9 +294,11 @@ pre.code{margin:0;padding:10px 12px;background:var(--bg0);border:1px solid var(-
 .busy-backup{margin:0;padding:10px 12px;border:1px solid var(--acc);border-radius:10px;background:rgba(50,219,190,.08);font-size:13px;overflow-wrap:anywhere}
 /* EC Manager: folding cards, spacing under the header buttons */
 #page-driver .card-head{margin-bottom:12px}
-#page-driver .card.folded .card-head{margin-bottom:0}
-#page-driver .card.folded > :not(.card-head){display:none!important}
-#page-driver .card.folded .card-head .row:not(.h-help){display:none}
+.card.foldable.folded .card-head{margin-bottom:0}
+.card.foldable.folded > :not(.card-head){display:none!important}
+.card.foldable.folded .card-head .row:not(.h-help){display:none}
+.card.foldable.folded .card-head > .btn{display:none}
+.card.foldable.folded .card-head h3,.card.foldable.folded > h3{margin:0}
 .fold-title{cursor:pointer;user-select:none}
 .fold-title::before{content:"▾";display:inline-block;width:16px;color:var(--muted);transition:transform .15s}
 .card.folded .fold-title::before{transform:rotate(-90deg)}
@@ -308,3 +310,18 @@ pre.code{margin:0;padding:10px 12px;background:var(--bg0);border:1px solid var(-
 .fx-params .row { margin: 8px 0; gap: 8px; }
 .fx-params input[type=color], #fx-engine-card input[type=color] { width: 34px; height: 26px; padding: 0; border: 1px solid var(--line, #333); border-radius: 6px; background: none; }
 #fx-engine-card h4 { margin: 12px 0 4px; }
+
+/* history: zoom by dragging */
+.hist-hint{margin:6px 0 0}
+.chart.hist *{pointer-events:none}      /* the chart is redrawn between the clicks of a double-click: events go to the svg itself */
+.btn.sm{padding:4px 10px;font-size:12.5px}
+
+.has-tip{cursor:help;border-bottom:1px dotted var(--muted)}
+
+/* untested keyboard effects */
+.eff.untested:not(.na){border-style:dashed}
+.eff.na.untested{cursor:pointer}
+.eff.na.untested:hover,.eff.on.untested{opacity:1}
+.unlock-row{margin-top:12px}
+.kb-feedback{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px;padding:10px 12px;border:1px solid var(--acc);border-radius:10px;background:rgba(50,219,190,.07)}
+.ask-card{max-width:560px}
