@@ -60,7 +60,7 @@ sends them — **only while an effect that needs them runs**, and nothing is sto
 | | Windows | Linux |
 |---|---|---|
 | key presses | the tray program (`ControlCenter.exe`) polls the keys 60 times a second and sends the names of newly pressed keys | the service reads `/dev/input` itself |
-| screen | the tray program sends a 64 × 24 picture of the main screen 15 times a second | the session agent (`uwcc-agent`) — X11 only, not on Wayland |
+| screen | the tray program sends a 64 × 24 picture of the main screen 15 times a second | the session agent (`uwcc-agent`) — X11 only, not on Wayland; **off by default**: *BetterRGB engine → Allow Screen ambient* (`uwccctl set kb_fx_screen on`) |
 | volume | Core Audio | `pactl` (PipeWire / PulseAudio) |
 | microphone / playback level | Core Audio peak meters | — |
 

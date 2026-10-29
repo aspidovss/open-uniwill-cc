@@ -98,6 +98,8 @@ Super / XMG NEO 16 (E23); on other models every function stays off until the sel
 - **Monitoring**: temperatures, load, clocks, fans, CPU and GPU power, memory, drives, battery; one-hour history
   with export to CSV / JSON / PNG
 - **Automation**: mode per power source, overheating alerts (with optional Fan Boost), app → mode binding
+- **Control Center 3.0 / Clevo** (new in 1.6.6, experimental, separate module): power modes, fan modes and curve,
+  keyboard colour and effects on laptops with Control Center 3.x — [docs/CLEVO.md](docs/CLEVO.md)
 - **Liquid cooler** XMG Oasis (LCT21001 Mk1 / LCT22002 Mk2), Eluktronics Liquid Pad Pro, PCS Liquid Series,
   TUXEDO Aquaris: automatic temperature tiers, follow-the-laptop mode, lighting, coolant flow guard, filling cycle
 - **English and Russian** interface; tray app with notifications on Windows; desktop notifications on Linux
@@ -119,7 +121,8 @@ Control Center **5.52.x** (checked against 5.52.49.6, MBB). It replaces that Con
 |---|---|
 | 5.52.x (service GCUService 1.0.2.x) | **supported** — the program is ported from it |
 | 5.56.x with the newer service 1.2 (e.g. Mechrevo 5.56.60.12) | runs (same EC layout, RamFan 1.5), **not tested** — its code is protected, nothing was taken from it |
-| 3.x (and other vendor centers, e.g. Mechrevo's own 3.x) | **not supported** — not ported, not tested |
+| 3.x (Clevo, Microsoft Store app) | **experimental** since 1.6.6 — separate module *Control Center 3.0 / Clevo* (Clevo DCHU interface), not tested on a Clevo laptop yet: [docs/CLEVO.md](docs/CLEVO.md) |
+| other vendor centers (e.g. Mechrevo's own 3.x) | **not supported** — not ported, not tested |
 
 **Theoretical list of platforms.** The program reads the **project ID** from the EC (`0x740`) and recognises these
 projects; only `0x10` has been checked on real hardware. The level is shown in the window (*Information*):
@@ -139,8 +142,9 @@ On the WMI path only a platform with a profile gets functions; for the others us
 with the [self-check](docs/EC/Platforms.md).
 
 These chassis are sold under many brands (MAIBENBEN, XMG/Schenker, Eluktronics, Mechrevo, Thunderobot, …).
-Run `uwccctl status` — the first line shows the project. **Not supported:** Tongfang GK/GM barebones (different EC),
-Clevo, laptops with Control Center 3.x.
+Run `uwccctl status` — the first line shows the project. **Not supported:** Tongfang GK/GM barebones (different EC).
+Clevo laptops with Control Center 3.x: only the experimental *Control Center 3.0 / Clevo* module
+([docs/CLEVO.md](docs/CLEVO.md)).
 
 **Tested on**
 

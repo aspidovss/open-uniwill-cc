@@ -153,9 +153,14 @@ function render() {
   const mode = S.power.mode;
   const pill = $("#modepill"); pill.textContent = MODES[mode] ? t(MODES[mode].name) : "—"; pill.className = "modepill m" + mode;
   $("#brand-sub").textContent = S.platform.display_name || S.platform.project_name;
+  if (S.ec_access && S.ec_access.reason === "clevo_only") {      // Control Center 3.0 / Clevo laptop: no Uniwill EC
+    $("#brand-sub").textContent = "Clevo · Control Center 3.0";
+    const pm = (S.clevo && S.clevo.state || {}).power_mode;
+    pill.textContent = pm ? t((CLEVO_POWER.find(x => x[0] === pm) || [, pm])[1]) : "—"; pill.className = "modepill";
+  }
   renderModes(); renderFanPage(); renderLiquid(); renderLight(); renderBattery(); renderSwitches(); renderBinding(); renderInfo(); renderAuto(); renderAbout(); renderReportCard();
   renderHistSeg(); drawHistory();
-  renderDriver(); renderEcBanner(); applyFeatures(); renderBusy(S.busy || []); renderMonOff(); setupCollapsible();
+  renderClevo(); renderDriver(); renderEcBanner(); applyFeatures(); renderBusy(S.busy || []); renderMonOff(); setupCollapsible();
 }
 
 // ---------------------------------------------------------------- monitor
@@ -696,9 +701,13 @@ const rgb2hex = c => "#" + c.map(v => Math.max(0, Math.min(255, v | 0)).toString
 function renderFx(k) {
   const fb = $("#fx-effects"); fb.innerHTML = "";
   for (const [id, c] of Object.entries(k.fx_effects || {})) {
-    const tip = c.needs.includes("keys") ? t("Reacts to key presses") : c.needs.includes("screen") ? t("Follows the colours of the screen") : "";
-    fb.append(h("div", { class: `eff${+id === kbSel.effect ? " on" : ""}`, title: tip,
-      onclick: () => { kbSel.effect = +id; kbSel.fx = fxParams[id] || fxDefaults(id); applyKb(); } },
+    const off = c.needs.includes("screen") && !k.fx_screen_allowed;          // Linux: Screen ambient is off by default
+    const tip = off ? t("Off on Linux by default — turn it on below in BetterRGB engine") : c.needs.includes("keys") ? t("Reacts to key presses") : c.needs.includes("screen") ? t("Follows the colours of the screen") : "";
+    fb.append(h("div", { class: `eff${+id === kbSel.effect ? " on" : ""}${off ? " na" : ""}`, title: tip,
+      onclick: () => {
+        if (off) return toast(t("Screen ambient is off on Linux — turn it on in BetterRGB engine"), true);
+        kbSel.effect = +id; kbSel.fx = fxParams[id] || fxDefaults(id); applyKb();
+      } },
       h("div", { class: "sw8" }), t(c.name)));
   }
   const isFx = kbSel.effect >= 100 && k.fx_effects && k.fx_effects[kbSel.effect];
@@ -764,6 +773,8 @@ function renderFxEngine(k) {
   $$("#fx-bar-audio input").forEach(i => { i.value = rgb2hex(c.bar.audio[+i.dataset.a]); });
   $("#fx-bar-audio").classList.toggle("hidden", c.bar.mode !== "audio");
   $("#fx-bar-box").classList.toggle("hidden", !!k.four_zone);
+  $("#fx-screen-row").classList.toggle("hidden", !k.fx_screen_switch);
+  $("#fx-screen").checked = !!k.fx_screen_allowed;
   const g = c.gains;
   $("#fx-gains").textContent = g.every(x => x === 1000) ? t("Calibration: none (neutral)") : t("Calibration: red {0} %, green {1} %, blue {2} %", g[0] / 10, g[1] / 10, g[2] / 10);
   const cal = !!(k.fx && k.fx.calibrating);
@@ -776,6 +787,7 @@ for (const [id, key] of [["fx-fps-ac", "fps_ac"], ["fx-fps-bat", "fps_battery"],
   $("#" + id).addEventListener("change", e => fxCfg({ [key]: +e.target.value }));
 }
 $("#fx-trans").addEventListener("change", e => fxCfg({ transition: e.target.value }));
+$("#fx-screen").addEventListener("change", e => act(() => api("setting", { key: "kb_fx_screen", value: e.target.checked })));
 $("#fx-bar-mode").addEventListener("change", e => fxCfg({ bar: { mode: e.target.value } }));
 $("#fx-bar-dir").addEventListener("change", e => fxCfg({ bar: { direction: e.target.value } }));
 $("#fx-bar-start").addEventListener("change", e => fxCfg({ bar: { start: hex2rgb(e.target.value) } }));
@@ -813,6 +825,105 @@ function renderLightbar() {
     sw.append(h("div", { class: "swatch" + (on ? " on" : ""), style: `background:rgb(${c})`, onclick: () => lbSet({ colors: [c] }) }));
   }
 }
+// ---------------------------------------------------------------- Control Center 3.0 / Clevo (experimental, uwccd/clevo)
+const CLEVO_POWER = [["quiet", "Silent", "Low noise, lower performance"], ["powersave", "Power saving", "Longest battery time"],
+  ["performance", "Performance", "Highest performance"], ["entertainment", "Entertainment", "Balanced"]];
+const CLEVO_FAN = { auto: "Automatic", max: "Maximum", maxq: "Max-Q", custom: "Custom" };
+const CLEVO_FX = { random: "Random", breathe: "Breathing", cycle: "Cycle", wave: "Wave", dance: "Dance", tempo: "Tempo", flash: "Flashing" };
+const CLEVO_FAN_NAME = { cpu: "Processor fan", gpu1: "Graphics card fan", gpu2: "Graphics card fan 2" };
+const CLEVO_SLEEP = [[0, "Never"], [15, "15 s"], [30, "30 s"], [60, "1 min"], [180, "3 min"], [300, "5 min"], [600, "10 min"]];
+let clevoTimer = null, clevoCurve = null;
+function clevoCmd(body, ok) { return act(() => api("clevo", body), ok); }
+function clevoFans(c) {
+  const box = h("div", { class: "clevo-fans", id: "clevo-fans" });
+  for (const f of c.fans || []) box.append(h("div", { class: "clevo-fan" }, h("small", {}, t(CLEVO_FAN_NAME[f.fan] || f.fan)),
+    h("b", {}, `${f.rpm} ${t("rpm")}`), h("small", {}, `${f.duty}% · ${f.temp != null ? f.temp + " °C" : "—"}`)));
+  if (c.fans_error) box.append(h("p", { class: "muted" }, c.fans_error));
+  return box;
+}
+async function clevoPoll() {
+  if (!$("#page-clevo").classList.contains("active") || !S || !S.clevo || !S.clevo.present) return;
+  try { const c = await api("clevo"); const old = $("#clevo-fans"); if (old) old.replaceWith(clevoFans(c)); } catch (_) {}
+}
+function renderClevo() {
+  const c = S.clevo || {}, on = !!c.present;
+  $("#nav-clevo").classList.toggle("hidden", !on); $("#nav-clevo-group").classList.toggle("hidden", !on);
+  if (!clevoTimer) clevoTimer = setInterval(clevoPoll, 2000);
+  const root = $("#clevo-root"); if (!root) return;
+  root.innerHTML = "";
+  if (!on) { $("#clevo-sub").textContent = ""; root.append(h("div", { class: "card" }, h("p", {}, t("No Control Center 3.0 / Clevo interface on this laptop.")))); return; }
+  const st = c.state || {}, kb = st.kb || {}, caps = c.caps || {}, locked = !c.writes;
+  $("#clevo-sub").replaceChildren(t("Separate module for laptops with Control Center 3.x · via {0}", c.transport === "windows-cc3-driver" ? t("the Control Center 3 driver") : c.transport === "uwcc-module" ? t("the uwcc kernel module") : c.transport),
+    c.ec_version ? ` · EC ${c.ec_version}` : "", h("span", { class: "clevo-exp" }, t("experimental")));
+  const sw = (checked, fn) => h("label", { class: "sw" }, h("input", { type: "checkbox", ...(checked ? { checked: true } : {}), onchange: e => fn(e.target.checked) }), h("span"));
+  // access
+  root.append(h("div", { class: "card warn" }, h("h3", {}, t("Experimental commands")),
+    h("p", { class: "muted" }, t("These functions talk to the firmware the way Control Center 3 does. They were written from the interface description and have not been tested on a Clevo laptop yet. The firmware does not report the current power mode, fan mode or backlight, so the values below are the ones last set here.")),
+    h("div", { class: "clevo-row" }, h("span", {}, t("Allow commands")), sw(c.writes, v => act(() => api("setting", { key: "clevo_writes", value: v })))),
+    h("div", { class: "clevo-row" }, h("span", {}, t("Send the saved settings at start")), sw(c.restore, v => act(() => api("setting", { key: "clevo_restore", value: v })))),
+    h("p", { class: "muted tiny" }, t("Close Control Center 3 while using this page: both programs would send commands. Its driver must stay installed (Windows)."))));
+  // power modes
+  if (caps.power_modes !== false) {
+    const box = h("div", { class: "choices clevo-cmd" });
+    for (const [id, name, desc] of CLEVO_POWER) box.append(h("div", { class: "choice" + (st.power_mode === id ? " on" : ""), onclick: () => clevoCmd({ action: "power_mode", mode: id }, t(name)) }, h("h4", {}, t(name)), h("p", {}, t(desc))));
+    root.append(h("div", { class: "card" + (locked ? " locked" : "") }, h("h3", {}, t("Power mode")), box));
+  }
+  // fans
+  const fc = h("div", { class: "card" + (locked ? " locked" : "") }, h("h3", {}, t("Fans")), clevoFans(c));
+  const seg = h("div", { class: "seg clevo-cmd" });
+  for (const m of c.fan_modes || []) seg.append(h("button", { class: st.fan_mode === m ? "on" : "", onclick: () => clevoCmd({ action: "fan_mode", mode: m }, t(CLEVO_FAN[m] || m)) }, t(CLEVO_FAN[m] || m)));
+  fc.append(h("div", { class: "clevo-row" }, h("span", {}, t("Fan mode")), seg));
+  if (caps.fan_offset !== false) {
+    const out = h("output", {}, `${st.fan_offset ?? 0}%`);
+    fc.append(h("div", { class: "clevo-row clevo-cmd" }, h("span", {}, t("Fan offset")),
+      h("input", { type: "range", min: 0, max: 100, step: 5, value: st.fan_offset ?? 0, oninput: e => { out.textContent = e.target.value + "%"; }, onchange: e => clevoCmd({ action: "fan_offset", value: +e.target.value }) }), out));
+  }
+  const tbl = (c.fan_table || {}).curves || {};
+  if ((c.fan_modes || []).includes("custom") && Object.keys(tbl).length) {
+    clevoCurve = clevoCurve || JSON.parse(JSON.stringify(st.curve || Object.fromEntries(Object.entries(tbl).map(([k, v]) => [k, v.slice(0, 3)]))));
+    const g = h("div", { class: "clevo-curve clevo-cmd" }, h("span"), ...[1, 2, 3].map(i => h("span", { class: "muted" }, t("Point {0}: °C / %", i))));
+    for (const fan of Object.keys(tbl)) {
+      const pts = clevoCurve[fan] || tbl[fan].slice(0, 3);
+      clevoCurve[fan] = pts;
+      g.append(h("span", {}, t(CLEVO_FAN_NAME[fan] || fan)));
+      pts.forEach((p, i) => g.append(h("span", {}, ...[0, 1].map(k => h("input", { type: "number", min: 0, max: k ? 100 : 99, value: p[k], disabled: i === 0, title: i === 0 ? t("Factory point") : "",
+        onchange: e => { pts[i][k] = +e.target.value; } })))));
+    }
+    fc.append(h("h4", {}, t("Custom curve")), h("p", { class: "muted tiny" }, t("The first point is the factory one; above the third point the fan rises to 100 % at 100 °C.")), g,
+      h("div", { class: "row clevo-cmd" }, h("button", { class: "btn", onclick: () => clevoCmd({ action: "curve", curves: clevoCurve }, t("Curve applied")) }, t("Apply curve")),
+        h("button", { class: "btn ghost", onclick: () => { clevoCurve = null; clevoCmd({ action: "fan_defaults" }, t("Factory curve")); } }, t("Factory curve"))));
+  }
+  if (caps.anti_dust) fc.append(h("div", { class: "row clevo-cmd", style: "margin-top:10px" }, h("button", { class: "btn ghost", onclick: () => clevoCmd({ action: "anti_dust" }, t("Anti-dust started")) }, t("Anti-dust cycle"))));
+  root.append(fc);
+  // keyboard
+  const kc = h("div", { class: "card" + (locked ? " locked" : "") }, h("h3", {}, t("Keyboard backlight")),
+    h("div", { class: "clevo-row clevo-cmd" }, h("span", {}, t("Backlight")), sw(kb.on !== false, v => clevoCmd({ action: "kb_power", on: v }))));
+  const cur = kb.color || [255, 255, 255], hex = "#" + cur.map(x => x.toString(16).padStart(2, "0")).join("");
+  const sws = h("div", { class: "swatches" });
+  for (const col of [[255, 0, 0], [255, 120, 0], [255, 255, 0], [0, 255, 0], [0, 255, 255], [0, 0, 255], [160, 0, 255], [255, 255, 255]])
+    sws.append(h("div", { class: "swatch" + (!kb.effect && cur.join() === col.join() ? " on" : ""), style: `background:rgb(${col})`, onclick: () => clevoCmd({ action: "kb_color", color: col }) }));
+  kc.append(h("div", { class: "clevo-row clevo-cmd" }, h("span", {}, t("Colour")), sws,
+    h("input", { type: "color", value: hex, onchange: e => clevoCmd({ action: "kb_color", color: e.target.value }) })));
+  const bo = h("output", {}, kb.brightness ?? "—");
+  kc.append(h("div", { class: "clevo-row clevo-cmd" }, h("span", {}, t("Brightness")),
+    h("input", { type: "range", min: 0, max: 255, step: 5, value: kb.brightness ?? 255, oninput: e => { bo.textContent = e.target.value; }, onchange: e => clevoCmd({ action: "kb_brightness", value: +e.target.value }) }), bo));
+  const fx = h("select", { onchange: e => e.target.value && clevoCmd({ action: "kb_effect", effect: e.target.value }) }, h("option", { value: "" }, t("— single colour —")));
+  for (const id of c.kb_effects || []) fx.append(h("option", { value: id, ...(kb.effect === id ? { selected: true } : {}) }, t(CLEVO_FX[id] || id)));
+  kc.append(h("div", { class: "clevo-row clevo-cmd" }, h("span", {}, t("Firmware effect")), fx));
+  const sl = h("select", { onchange: e => clevoCmd({ action: "kb_sleep", seconds: +e.target.value }) });
+  for (const [v, n] of CLEVO_SLEEP) sl.append(h("option", { value: v, ...((kb.sleep ?? 0) === v ? { selected: true } : {}) }, t(n)));
+  kc.append(h("div", { class: "clevo-row clevo-cmd" }, h("span", {}, t("Turn off after")), sl));
+  kc.append(h("div", { class: "clevo-row clevo-cmd" }, h("span", {}, t("Colour cycle at power-on")), sw(!kb.boot_effect_off, v => clevoCmd({ action: "boot_effect", off: !v }))));
+  root.append(kc);
+  // capabilities
+  const dl = h("dl", { class: "kv" });
+  for (const [k, v] of Object.entries(c.caps_raw || {})) dl.append(h("dt", {}, `DCHU ${k}`), h("dd", {}, "0x" + (v >>> 0).toString(16).toUpperCase().padStart(8, "0")));
+  dl.append(h("dt", {}, t("Capabilities")), h("dd", {}, Object.entries(caps).filter(([, v]) => v).map(([k]) => k).join(", ") || "—"));
+  root.append(h("div", { class: "card" }, h("h3", {}, t("Firmware capabilities")), dl,
+    h("p", { class: "muted tiny" }, t("A diagnostic report (Information) includes these values: it helps to test this module."))));
+}
+$(`#nav a[data-page="clevo"]`)?.addEventListener("click", () => setTimeout(clevoPoll, 50));
+
 function lbSet(body) { act(() => api("lightbar", { zone: lbZone, ...body })); }
 $("#lb-power").addEventListener("change", e => lbSet({ power: e.target.checked }));
 $("#lb-effect").addEventListener("change", e => lbSet({ effect: e.target.value }));
@@ -1520,6 +1631,7 @@ const REP_SECTIONS = [["system", "System, BIOS and EC versions"], ["platform", "
   ["acpi", "ACPI tables of the firmware (without the Windows licence tables)"],
   ["firmware", "EC interface devices (ACPI / WMI) and their drivers"],
   ["selfcheck", "Self-check, stage 1 (read only): what works on this laptop, a draft platform profile"],
+  ["clevo", "Control Center 3.0 / Clevo: interface, driver, Control Center 3 app, capability words and fan buffers (read only)"],
   ["oem_registry", "Settings and feature flags of the original Control Center (registry, Windows)"],
   ["oem_software", "Services, packages and versions of the original Control Center (Windows)"],
   ["oem_files", "Settings files, tables and logs of the original Control Center (Windows)"],
@@ -1845,9 +1957,11 @@ function renderEcBanner() {
   if (!show) return;
   const msg = { oem_missing: t("The OEM driver UWACPIDriver was not found — the program cannot reach the embedded controller (fans, modes, power limits, battery). Install the OEM driver (recommended) or switch to the open WMI implementation (beta)."),
     wmi_consent: t("The WMI path is selected, but its warning has not been accepted yet."),
-    wmi_failed: t("The WMI path could not be opened: {0}", a.wmi_error || "") }[a.reason] || t("No access to the embedded controller.");
+    wmi_failed: t("The WMI path could not be opened: {0}", a.wmi_error || ""),
+    clevo_only: t("This laptop has no Uniwill embedded controller interface but a Control Center 3.0 / Clevo one: modes, fans and backlight are on the Clevo (experimental) page; the Uniwill pages do not work here.") }[a.reason] || t("No access to the embedded controller.");
   b.replaceChildren(h("div", {}, h("b", {}, t("No access to the embedded controller")), h("p", {}, msg)),
-    h("button", { class: "btn", onclick: () => $(`#nav a[data-page="driver"]`)?.click() }, t("Open EC Manager")));
+    a.reason === "clevo_only" ? h("button", { class: "btn", onclick: () => $(`#nav a[data-page="clevo"]`)?.click() }, t("Open the Clevo page"))
+      : h("button", { class: "btn", onclick: () => $(`#nav a[data-page="driver"]`)?.click() }, t("Open EC Manager")));
 }
 $("#wmi-badge").addEventListener("click", () => $(`#nav a[data-page="driver"]`)?.click());
 $("#info-ec-open").addEventListener("click", () => $(`#nav a[data-page="driver"]`)?.click());
@@ -2383,6 +2497,7 @@ const HELP_PAGES = [
   { group: "Program" },
   { id: "features", name: "Features and how they work", en: "FEATURES.md", ru: "FEATURES.md" },
   { id: "lighting", name: "BetterRGB keyboard effects", en: "LIGHTING.md", ru: "LIGHTING.ru.md" },
+  { id: "clevo", name: "Control Center 3.0 / Clevo (experimental)", en: "CLEVO.md", ru: "CLEVO.ru.md" },
   { id: "cli", name: "Command line (uwccctl)", en: "CLI.md", ru: "CLI.ru.md" },
 ];
 var helpCur = null;                     // var: setLang() may run before this line

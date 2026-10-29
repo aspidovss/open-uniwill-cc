@@ -27,7 +27,7 @@ from . import regs as R
 
 log = logging.getLogger("uwccd.report")
 
-SECTIONS = ("system", "platform", "ec", "bios", "acpi", "firmware", "selfcheck", "oem_registry", "oem_software", "oem_files",
+SECTIONS = ("system", "platform", "ec", "bios", "acpi", "firmware", "selfcheck", "clevo", "oem_registry", "oem_software", "oem_files",
             "oem_files_full", "power", "lighting", "nvidia", "sensors", "original", "cooler", "log", "settings")
 DEFAULT_SECTIONS = tuple(s for s in SECTIONS if s != "oem_files_full")      # the complete OEM folders are large
 PRIVATE = ("serial", "uuid", "mac", "names", "apps")
@@ -310,7 +310,9 @@ def summary(svc):
             "project_id": f"0x{svc.pf.project_id:X}", "cpu": getattr(svc.monitor, "cpu_model", None),
             "os": platform_mod.platform(), "nvidia": svc.pf.nv_gpu,
             "keyboard": f"{kb.get('kind')} {dev.get('pid', '')} fw {dev.get('fw', '')}".strip(),
-            "fan_control": getattr(svc, "fan_control", None), "support": getattr(svc.pf, "support", None)}
+            "fan_control": getattr(svc, "fan_control", None), "support": getattr(svc.pf, "support", None),
+            "clevo": (f"Control Center 3.0 / Clevo via {svc.clevo.dchu.name}" if getattr(svc, "clevo", None)
+                      and svc.clevo.present else "no")}
 
 
 class Job:
@@ -393,8 +395,10 @@ def build(svc, sections=DEFAULT_SECTIONS, private=()):
         "nvidia": lambda: nvidia_info(svc, private), "sensors": lambda: sensors_info(svc),
         "original": original_info, "cooler": lambda: cooler_info(svc, private),
         "settings": lambda: settings_info(svc, private),
+        "clevo": lambda: clevo_diag.collect(svc),                       # Control Center 3.0 / Clevo, every laptop
     }
     from . import report_oem as O
+    from .clevo import diag as clevo_diag
     secrets_ = _secrets(private)
     extra = {}                                       # more files for the zip (ACPI tables, OEM files)
 
@@ -439,6 +443,14 @@ def build(svc, sections=DEFAULT_SECTIONS, private=()):
     txt = ["open-uniwill-cc diagnostic report", "=" * 34] + [f"{k:12} {v}" for k, v in s.items()]
     if "selfcheck" in sections:
         txt += selfcheck_text(data.get("selfcheck"))
+    cl = data.get("clevo")
+    if isinstance(cl, dict):
+        m = cl.get("module") or {}
+        txt += ["", "Control Center 3.0 / Clevo (experimental)", "-" * 41, f"  {cl.get('verdict')}"]
+        if m.get("caps_raw"):
+            txt.append("  capability words: " + ", ".join(f"{k}={v}" for k, v in m["caps_raw"].items()))
+        for f in m.get("fans") if isinstance(m.get("fans"), list) else []:
+            txt.append(f"  fan {f['fan']}: {f['rpm']} rpm, {f['duty']} %, {f['temp']} °C")
     txt += ["", f"sections:         {', '.join(sections)}",
             f"private included: {', '.join(private) or 'none'}", "", f"Send to: {CONTACT} or GitHub issues."]
     buf = io.BytesIO()

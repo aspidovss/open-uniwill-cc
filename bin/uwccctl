@@ -16,6 +16,7 @@ Overview
   battery [mode|limit|typec] ... battery protection mode, charge limits, Type-C priority
   kb [on|off|effects|effect|level] ...   keyboard backlight
   lb [hinge|base|logo] on|off|color|effect|light ...   light bar
+  clevo ...                      Control Center 3.0 / Clevo (experimental, separate module): see uwccctl help clevo
   get [KEY]  /  set KEY VALUE    switches and automation (see: uwccctl help set)
   apps [add|remove|enable|disable] ...   switch the mode when a program runs
   restore --yes                  factory profiles and fan tables
@@ -68,9 +69,10 @@ SETTINGS = {
     "bluetooth": "bool", "wifi": "bool", "webcam": "bool", "kb_timeout": "int", "osd": "bool",
     "lc_hwoc": "bool", "mem_oc": "bool", "super_performance": "bool", "history_record": "bool",
     "update_check": "bool", "kb_picture_modes": "bool", "tcc_extended": "bool", "debug": "bool",
+    "kb_fx_screen": "bool", "kb_unlock_effects": "bool",
     "alerts": "bool", "overheat_boost": "bool", "kb_off_on_battery": "bool", "ppd_sync": "bool",
     "cpu_alert": "int", "gpu_alert": "int", "mode_on_ac": "mode", "mode_on_battery": "mode", "lang": "str",
-    "fan_manager": "str",
+    "fan_manager": "str", "clevo_writes": "bool", "clevo_restore": "bool",
 }
 
 TEXT = {
@@ -164,6 +166,23 @@ HELP = {
         "uwccctl kb fx-calibrate start|cancel|reset | apply RRGGBB   white calibration (RRGGBB: the colour seen)\n"
         "  Example: uwccctl kb effect wave --speed 3 --multi\n"
         "           uwccctl kb fx rain density=4 color_count=2 colors=5080FF,FFFFFF"),
+    "clevo": (
+        "Control Center 3.0 / Clevo — experimental, separate module (laptops with Control Center 3.x)\n"
+        "uwccctl clevo                              status: interface, capabilities, fans, saved state\n"
+        "uwccctl clevo writes on|off                allow commands (off by default)\n"
+        "uwccctl clevo restore on|off               send the saved settings again when the service starts\n"
+        "uwccctl clevo power quiet|powersave|performance|entertainment\n"
+        "uwccctl clevo fan auto|max|maxq|custom      fan mode (custom: the saved curve)\n"
+        "uwccctl clevo fan offset 0-100              fan offset %\n"
+        "uwccctl clevo fan curve cpu|gpu1|gpu2 T,D T,D T,D   custom curve (first point = factory), then custom mode\n"
+        "uwccctl clevo fan defaults                 factory fan curve\n"
+        "uwccctl clevo antidust                     run the anti-dust cycle\n"
+        "uwccctl clevo kb on|off\n"
+        "uwccctl clevo kb color RRGGBB [ZONE 0-3]\n"
+        "uwccctl clevo kb brightness 0-255\n"
+        "uwccctl clevo kb effect random|breathe|cycle|wave|dance|tempo|flash\n"
+        "uwccctl clevo kb sleep SECONDS             0 = never\n"
+        "uwccctl clevo kb boot-effect on|off"),
     "lb": (
         "uwccctl lb [hinge|base|logo] on|off\n"
         "uwccctl lb [ZONE] color RRGGBB [EFFECT]\n"
@@ -949,6 +968,71 @@ def cmd_lb(a):
                        for z, v in d["zones"].items()])
 
 
+# -- Control Center 3.0 / Clevo (experimental) -------------------------------------------------------
+def clevo_text(c):
+    if not c.get("present"):
+        return f"Control Center 3.0 / Clevo: not found ({c.get('reason') or '-'})"
+    st = c.get("state") or {}
+    kb = st.get("kb") or {}
+    lines = [f"Control Center 3.0 / Clevo (experimental) via {c.get('transport')}"
+             + (f", EC {c['ec_version']}" if c.get("ec_version") else ""),
+             f"commands: {'allowed' if c.get('writes') else 'off (uwccctl clevo writes on)'}, "
+             f"restore at start: {'on' if c.get('restore') else 'off'}",
+             "capabilities: " + (", ".join(k for k, v in (c.get("caps") or {}).items() if v) or "-")]
+    for f in c.get("fans") or []:
+        lines.append(f"  {f['fan']:5} {f['rpm']:5} rpm  {f['duty']:3}%  {f['temp'] if f['temp'] is not None else '-'} °C")
+    lines.append(f"power mode: {st.get('power_mode', '-')}   fan mode: {st.get('fan_mode', '-')}"
+                 f"   offset: {st.get('fan_offset', '-')}   (as last set here: the firmware does not report them)")
+    for n, pts in (st.get("curve") or {}).items():
+        lines.append(f"  curve {n}: " + "  ".join(f"{t}°C {d}%" for t, d in pts))
+    if kb:
+        lines.append("keyboard: " + ", ".join(f"{k} {hexrgb(v) if isinstance(v, list) else v}" for k, v in kb.items()))
+    return lines
+
+
+def cmd_clevo(a):
+    op, rest = (a[0], a[1:]) if a else ("status", [])
+    act = None
+    if op in ("writes", "restore") and rest:
+        call("setting", {"key": f"clevo_{op}", "value": onoff(rest[0], "clevo")})
+    elif op == "power" and rest:
+        act = {"action": "power_mode", "mode": rest[0]}
+    elif op == "fan" and rest:
+        if rest[0] == "offset" and rest[1:]:
+            act = {"action": "fan_offset", "value": num(rest[1], "clevo")}
+        elif rest[0] == "defaults":
+            act = {"action": "fan_defaults"}
+        elif rest[0] == "curve" and len(rest) >= 5:
+            try:
+                pts = [[int(x) for x in p.split(",")] for p in rest[2:5]]
+            except ValueError:
+                usage("clevo")
+            act = {"action": "curve", "curves": {rest[1]: pts}}
+        else:
+            act = {"action": "fan_mode", "mode": rest[0]}
+    elif op == "antidust":
+        act = {"action": "anti_dust"}
+    elif op == "kb" and rest:
+        k, v = rest[0], rest[1:]
+        if k in ("on", "off"):
+            act = {"action": "kb_power", "on": k == "on"}
+        elif k == "color" and v:
+            act = {"action": "kb_color", "color": rgb(v[0], "clevo"), **({"zone": num(v[1], "clevo")} if v[1:] else {})}
+        elif k == "brightness" and v:
+            act = {"action": "kb_brightness", "value": num(v[0], "clevo")}
+        elif k == "effect" and v:
+            act = {"action": "kb_effect", "effect": v[0]}
+        elif k == "sleep" and v:
+            act = {"action": "kb_sleep", "seconds": num(v[0], "clevo")}
+        elif k == "boot-effect" and v:
+            act = {"action": "boot_effect", "off": not onoff(v[0], "clevo")}
+        else:
+            usage("clevo")
+    elif op != "status":
+        usage("clevo")
+    out(call("clevo", act) if act else call("clevo"), clevo_text)
+
+
 # -- settings, automation, app binding ------------------------------------------------------------
 def all_settings(s):
     d = dict(s["settings"])
@@ -1240,6 +1324,7 @@ def main(a):
         "battery": lambda: cmd_battery(rest),
         "kb": lambda: cmd_kb(rest),
         "lb": lambda: cmd_lb(rest),
+        "clevo": lambda: cmd_clevo(rest),
         "get": lambda: cmd_get(rest),
         "set": lambda: cmd_set(rest),
         "apps": lambda: cmd_apps(rest),

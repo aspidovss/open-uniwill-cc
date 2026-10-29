@@ -42,6 +42,7 @@ EC protocol: [PROTOCOL.md](PROTOCOL.md).
 | `uwccd/` | the service and the web UI |
 | `uwccd/win/` | Windows backends, tray app, service host |
 | `uwccd/lighting/` | keyboard lighting; `oem/` — code derived from the OEM program (proprietary) |
+| `uwccd/clevo/` | **Control Center 3.0 / Clevo** — separate experimental module: DCHU transport (`transport.py`: Windows Control Center 3 driver, Linux `/dev/uwcc`, simulation) and functions (`manager.py`) — [CLEVO.md](CLEVO.md) |
 | `uwccd/web/` | the interface: `index.html`, `app.js`, `app.css`, `i18n.js` (Russian strings), icons |
 | `bin/` | `uwcc` (window), `uwcc-agent` (Linux session agent), `uwccctl` (command line) |
 | `docs/CLI.md` | command line reference (`docs/CLI.ru.md` in Russian) |

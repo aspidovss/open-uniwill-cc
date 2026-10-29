@@ -42,6 +42,7 @@
 | `uwccd/` | служба и веб-интерфейс |
 | `uwccd/win/` | части для Windows, приложение в трее, хост службы |
 | `uwccd/lighting/` | подсветка клавиатуры; `oem/` — код на основе программы производителя (проприетарный) |
+| `uwccd/clevo/` | **Control Center 3.0 / Clevo** — отдельный экспериментальный модуль: транспорт DCHU (`transport.py`: драйвер Control Center 3 на Windows, `/dev/uwcc` на Linux, симуляция) и функции (`manager.py`) — [CLEVO.ru.md](CLEVO.ru.md) |
 | `uwccd/web/` | интерфейс: `index.html`, `app.js`, `app.css`, `i18n.js` (русские строки), значки |
 | `bin/` | `uwcc` (окно), `uwcc-agent` (агент сеанса Linux), `uwccctl` (командная строка) |
 | `docs/CLI.ru.md` | справочник командной строки (`docs/CLI.md` — английский) |

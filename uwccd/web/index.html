@@ -28,6 +28,8 @@
       <a data-page="lightbar" id="nav-lightbar" class="hidden"><i class="ico ico-lightbar"></i><span data-i>Laptop light bar</span></a>
       <div class="nav-group" data-i>Power</div>
       <a data-page="battery"><i class="ico ico-battery"></i><span data-i>Battery</span></a>
+      <div class="nav-group hidden" id="nav-clevo-group" data-i>Control Center 3.0 / Clevo</div>
+      <a data-page="clevo" id="nav-clevo" class="hidden"><i class="ico ico-chip"></i><span data-i>Clevo (experimental)</span></a>
       <div class="nav-group" data-i>Settings</div>
       <a data-page="switches"><i class="ico ico-switch"></i><span data-i>Switches</span></a>
       <a data-page="auto"><i class="ico ico-auto"></i><span data-i>Automation</span></a>
@@ -416,6 +418,8 @@
               <div class="row wrap hidden" id="fx-cal-run"><input type="color" id="fx-cal-color" value="#ffffff"><button class="btn" id="fx-cal-apply" data-i>Apply</button><button class="btn ghost" id="fx-cal-cancel" data-i>Cancel</button></div>
             </div>
           </div>
+          <label class="chk hidden" id="fx-screen-row"><input type="checkbox" id="fx-screen"> <span><span data-i>Allow Screen ambient</span>
+            <small class="muted" data-i> — Linux, X11 only: while the effect runs, the session agent reads a small picture of the screen (not stored). Off by default.</small></span></label>
           <div id="fx-bar-box">
             <h4 data-i>Top-row bar</h4>
             <p class="muted tiny" data-i>The keys of the top row show a level over the effect. A change of the volume shows the volume for 1.8 s.</p>
@@ -457,6 +461,12 @@
         </div>
       </div>
       <div id="lb-none" class="card hidden"><p data-i>No light bar found on this laptop.</p></div>
+    </section>
+
+    <!-- CONTROL CENTER 3.0 / CLEVO (experimental, separate module: uwccd/clevo) -->
+    <section class="page" id="page-clevo">
+      <header class="ph"><h1>Control Center 3.0 / Clevo</h1><p id="clevo-sub"></p></header>
+      <div id="clevo-root"></div>
     </section>
 
     <!-- BATTERY -->

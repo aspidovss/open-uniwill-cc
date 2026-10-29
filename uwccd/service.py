@@ -47,8 +47,12 @@ class Service:
         self.listeners = []
         self.llock = threading.Lock()
         self.busy = Busy(self.emit)              # long operations the window waits for (WMI: mode switches)
+        from .clevo import ClevoManager
+        self.clevo = ClevoManager(self.settings_store, self.emit, mock=mock)     # Control Center 3.0 / Clevo
+        self.clevo.start()
         from .ecaccess import open_backend
-        self.ec, self.ec_info = open_backend(self.settings_store, mock=mock, prefer=None if mock else backend)
+        self.ec, self.ec_info = open_backend(self.settings_store, mock=mock, prefer=None if mock else backend,
+                                             clevo=self.clevo.present)
         self.oem_driver = None
         self.pf = Platform(self.ec)
         if self.ec_info.get("active") not in ("none", None):
@@ -355,6 +359,7 @@ class Service:
             "automation": {k: auto_setting(self.settings_store, k) for k in AUTO_DEFAULTS},
             "info": self.monitor.info(),
             "ec_access": self.ec_access(),
+            "clevo": self.clevo.status() if self.clevo.present else {"present": False},
             "busy": self.busy.state(),
             "monitoring": self.monitor_level(),
         }

@@ -31,4 +31,18 @@ The MIT license above covers this repository EXCEPT:
   uwccd/lighting/oem/      Proprietary, all rights reserved by their owners
                            (see uwccd/lighting/oem/LICENSE)
 
+Code derived from other MIT-licensed projects (MIT as well, their copyright
+notices are kept):
+
+  uwccd/lighting/fx.py     BetterRGB keyboard effects, rewritten in Python from
+                           BetterRGB ITE8291 Adaptive 3.7.0, which derives from
+                           Better RGB for Tongfang/ITE8291:
+                             Copyright (c) 2026 TheYamo
+                             Copyright (c) 2026 ZavierChen and BetterRGB
+                             Adaptive contributors
+                           https://github.com/ZavierChen/BetterRGB-ITE8291-Adaptive
+                           https://github.com/EpicYamo/Better-RGB-for-Tongfang-ITE8291
+                           The full MIT notice of BetterRGB is in
+                           THIRD_PARTY_LICENSES.txt.
+
 See NOTICE.md for credits and third-party projects.

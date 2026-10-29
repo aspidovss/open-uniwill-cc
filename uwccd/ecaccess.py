@@ -198,8 +198,10 @@ def apply_installer_choice(settings):
         pass
 
 
-def open_backend(settings, mock=False, prefer=None):
-    """Returns (ec, info). info: backend setting, active path, reason when there is no EC access."""
+def open_backend(settings, mock=False, prefer=None, clevo=False):
+    """Returns (ec, info). info: backend setting, active path, reason when there is no EC access.
+    clevo: a Control Center 3.0 / Clevo interface was found — without a Uniwill EC the service runs with NullEC
+    (reason "clevo_only") instead of failing or offering the Uniwill paths."""
     apply_installer_choice(settings)
     setting = settings.get("ec_backend", "auto")
     if setting not in BACKENDS:
@@ -208,7 +210,16 @@ def open_backend(settings, mock=False, prefer=None):
     info = {"setting": setting, "active": None, "reason": None, "oem_present": None, "oem_error": None,
             "wmi_error": None, "consent": consent}
     if not IS_WIN and not mock:                       # Linux: kernel module / acpi_call, nothing to choose
-        ec = open_ec(prefer)
+        try:
+            ec = open_ec(prefer)
+            if clevo:
+                ec.read(0x740)                        # the module is loaded on Clevo too: is there a Uniwill EC?
+        except Exception as e:  # noqa: BLE001
+            if not clevo:
+                raise
+            log.info("no Uniwill EC (%s): Control Center 3.0 / Clevo only", e)
+            info.update(active="none", reason="clevo_only")
+            return NullEC(), info
         info.update(active="native", oem_present=None)
         return ec, info
 
@@ -243,6 +254,10 @@ def open_backend(settings, mock=False, prefer=None):
         except Exception as e:  # noqa: BLE001
             info.update(oem_present=False, oem_error=str(e))
             log.warning("OEM driver UWACPIDriver not available: %s", e)
+    if clevo and setting == "auto":
+        info.update(active="none", reason="clevo_only")
+        log.info("no Uniwill OEM driver: Control Center 3.0 / Clevo only")
+        return NullEC(), info
     if setting == "oem" or (setting == "auto" and not consent):
         info.update(active="none", reason="oem_missing")
         return NullEC(), info

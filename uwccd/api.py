@@ -269,6 +269,8 @@ class Handler(BaseHTTPRequestHandler):
                 from . import platformdb
                 return self._json(200, {**platformdb.summary(s.pf.project_raw),
                                         "profile": platformdb.export(s.pf.project_raw)})
+            if u.path == "/api/clevo":                    # Control Center 3.0 / Clevo (experimental)
+                return self._json(200, s.clevo.status())
             if u.path == "/api/selfcheck":
                 return self._json(200, {**s.selfcheck.summary(), "result": s.selfcheck.last})
             if u.path == "/api/selfcheck/export":
@@ -440,6 +442,8 @@ class Handler(BaseHTTPRequestHandler):
                 r = s.keyboard.fx_calibrate(str(b.get("action", "")), b.get("observed"))
                 s.emit("keyboard", s.keyboard.status())
                 return self._json(200, r)
+            elif path == "/api/clevo":                    # Control Center 3.0 / Clevo (experimental)
+                return self._json(200, s.clevo.command(b))
             elif path == "/api/appbinding":
                 rules = [{"process": str(r["process"])[:64], "mode": int(r["mode"]),
                           "enabled": bool(r.get("enabled", True))} for r in b.get("rules", [])]
@@ -623,6 +627,11 @@ class Handler(BaseHTTPRequestHandler):
             s.settings_store.set("history_record", bool(value))
         elif key == "update_check":
             s.settings_store.set("update_check", bool(value))
+        elif key == "kb_fx_screen":                  # Linux: allow BetterRGB Screen ambient (off by default)
+            s.keyboard.set_screen_fx(bool(value))
+        elif key in ("clevo_writes", "clevo_restore"):     # Control Center 3.0 / Clevo (experimental)
+            s.settings_store.set(key, bool(value))
+            s.emit("clevo", {})
         elif key in ("kb_unlock_effects", "kb_untested_no_ask"):   # untested keyboard effects (no admin: lighting only)
             s.settings_store.set(key, bool(value))
             if key == "kb_unlock_effects" and not value:

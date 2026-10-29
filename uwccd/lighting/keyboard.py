@@ -1,5 +1,6 @@
 """Keyboard backlight manager: ITE RGB (KeyboardType '1') or EC single colour ('2')."""
 import logging
+import sys
 import threading
 import time
 
@@ -8,6 +9,7 @@ from ..hw import SINGLE_COLOR_EC_IDS
 from . import fx, ite
 
 log = logging.getLogger("uwccd.kb")
+SCREEN_FX = 115                 # BetterRGB "Screen ambient"
 
 
 class SingleColor:
@@ -203,6 +205,8 @@ class KeyboardManager:
         code = ite.EFFECTS.get(kw.get("idx"), (None, None))[1]
         zone_soft = bool(self.rgb.four_zone() and code in ite.FOUR_ZONE_SOFT)     # drawn zone by zone
         if fx.is_fx(kw.get("idx")):
+            if kw.get("idx") == SCREEN_FX and not self.screen_fx_allowed():
+                raise ValueError("Screen ambient is off on Linux — turn it on in Keyboard backlight → BetterRGB engine")
             kw = {k: kw[k] for k in ("idx", "light", "fx", "force") if k in kw}
         elif blocked and not zone_soft and (kw.get("idx") in (14, 15) or code in ite.AP_EFFECTS) and not kw.get("untested"):
             raise ValueError("this keyboard does not support per-key / gaming modes (see Settings to try anyway)")
@@ -211,6 +215,17 @@ class KeyboardManager:
             self.rgb.set_effect(**kw)
             self.st.set("kb_effect", self.rgb.saved)
             self.st.set("kb_power", True)
+
+    # -- Screen ambient on Linux: off by default (the session agent would capture the X11 screen) --------
+    def screen_fx_allowed(self):
+        return sys.platform == "win32" or bool(self.st.get("kb_fx_screen"))
+
+    def set_screen_fx(self, on):
+        self.st.set("kb_fx_screen", bool(on))
+        e = self.engine()
+        if not on and e and e.idx == SCREEN_FX and sys.platform != "win32":
+            light = (self.rgb.saved or {}).get("light", 4)
+            self.set_effect(idx=0, light=light, colors=[(255, 255, 255)])     # back to a plain colour
 
     # -- untested effects: tried by the user, with feedback ------------------------------------------
     def keyboard_id(self):
@@ -315,6 +330,7 @@ class KeyboardManager:
              "untested_ask": not self.st.get("kb_untested_no_ask"),
              "keyboard_id": self.keyboard_id(),
              "feedback": (self.st.get("kb_effect_feedback") or {}).get(self.keyboard_id() or "", {}),
+             "fx_screen_allowed": self.screen_fx_allowed(), "fx_screen_switch": sys.platform != "win32",
              "fx_effects": fx.catalog(), "fx_config": self.fx_config(), "fx_transitions": fx.TRANSITIONS,
              "fx_bar_modes": fx.BAR_MODES, "fx_bar_directions": fx.BAR_DIRECTIONS,
              "fx": self.engine().info() if self.engine() else None}

@@ -48,6 +48,12 @@ class MockService(unittest.TestCase):
         cls.proc.terminate()
         cls.proc.wait(5)
 
+    def test_clevo_absent(self):                       # Control Center 3.0 / Clevo module without the interface
+        self.assertFalse(self.get("state")["clevo"]["present"])
+        self.assertFalse(self.get("clevo")["present"])
+        code, r = self.post("clevo", {"action": "power_mode", "mode": "quiet"})
+        self.assertEqual(code, 409)
+
     @classmethod
     def get(cls, path):
         r = urllib.request.Request(f"http://127.0.0.1:{cls.port}/api/{path}", headers={"X-UWCC-Token": TOKEN})
@@ -65,6 +71,17 @@ class MockService(unittest.TestCase):
         return self.get(f"ec/{addr:x}")["value"]
 
     # -- tests ------------------------------------------------------------------
+    def test_screen_ambient_off_on_linux(self):
+        k = self.get("state")["keyboard"]
+        self.assertEqual((k["fx_screen_allowed"], k["fx_screen_switch"]), (False, True))
+        self.assertEqual(self.post("keyboard/effect", {"effect": 115})[0], 400)
+        self.post("setting", {"key": "kb_fx_screen", "value": True})
+        self.assertEqual(self.post("keyboard/effect", {"effect": 115})[0], 200)
+        self.assertEqual(self.get("state")["keyboard"]["fx"]["name"], "Screen ambient")
+        self.post("setting", {"key": "kb_fx_screen", "value": False})        # switched off while it runs
+        k = self.get("state")["keyboard"]
+        self.assertEqual((k["fx"], k["effect"]["idx"]), (None, 0))
+
     def test_untested_effects(self):
         k = self.get("state")["keyboard"]
         self.assertIn(21, k["untested_effects"])                     # Star hitting: light bar only, may be tried
@@ -933,6 +950,10 @@ class CustomModeService(MockService):
         self.assertTrue(all(n.startswith(("report.", "uwccd.log", "acpi/", "oem/", "selfcheck.json")) for n in z.namelist()))
         rep = json.loads(z.read("report.json"))
         self.assertEqual(rep["private_included"], ["mac"])
+        # 1.6.6: Control Center 3.0 / Clevo diagnostics are part of the report by default (on every laptop)
+        self.assertIn("clevo", rep["sections"])
+        self.assertFalse(rep["clevo"]["module"]["present"])
+        self.assertIn("Control Center 3.0 / Clevo", z.read("report.txt").decode())
         # 1.6.4: self-check stage 1 (read only) is part of the report by default
         self.assertEqual(rep["selfcheck"]["stage"], 1, rep["selfcheck"])
         self.assertTrue(rep["selfcheck"]["items"])
@@ -1477,6 +1498,121 @@ class DetectUnit(unittest.TestCase):
             k.firmware_version = lambda: (0x11, 5, 0, 0)
             k._detect()
             self.assertEqual(k.kb_type, want, hex(up))
+
+
+class ClevoUnit(unittest.TestCase):
+    """Control Center 3.0 / Clevo (experimental, uwccd/clevo)."""
+
+    class Store(dict):
+        def get(self, k, d=None):
+            return dict.get(self, k, d)
+
+        def set(self, k, v):
+            self[k] = v
+
+    def manager(self, writes=False):
+        from uwccd.clevo import ClevoManager
+        os.environ["UWCC_MOCK_CLEVO"] = "1"
+        try:
+            st = self.Store(clevo_writes=writes, clevo_restore=False)
+            m = ClevoManager(st, lambda *a: None, mock=True)
+            self.assertTrue(m.start())
+            return m, st
+        finally:
+            del os.environ["UWCC_MOCK_CLEVO"]
+
+    def test_windows_ioctl_layout(self):
+        import struct
+        import uuid
+        from uwccd.clevo import transport as T
+        req = T.win_request(0x79, bytes([2, 0, 0, 0x19]))
+        self.assertEqual(len(req), 0x420)
+        self.assertEqual(uuid.UUID(bytes_le=req[:16]), uuid.UUID("93f224e4-fbdc-4bbf-add6-db71bdc0afad"))
+        self.assertEqual(req[0x14:0x18], b"_DSM")
+        self.assertEqual(struct.unpack_from("<IHHH", req, 0x18), (0x79, 0x104, 2, 0x100))
+        self.assertEqual(req[0x1E + 4:0x1E + 8], bytes([2, 0, 0, 0x19]))
+        out = struct.pack("<III", 0x426F6541, 0, 1) + struct.pack("<HHI", 0, 4, 1234)
+        self.assertEqual(T.win_reply(out).value, 1234)
+        out = struct.pack("<III", 0x426F6541, 0, 1) + struct.pack("<HH", 2, 3) + b"abc"
+        self.assertEqual(T.win_reply(out).data, b"abc")
+        self.assertEqual(T.LinuxDchu.IOC & 0xFFFF, (ord("u") << 8) | 5)
+        self.assertEqual((T.LinuxDchu.IOC >> 16) & 0x3FFF, 532)
+
+    def test_commands_need_permission_and_encode(self):
+        m, st = self.manager()
+        with self.assertRaises(LookupError):
+            m.set_power_mode("performance")
+        st["clevo_writes"] = True
+        m.set_power_mode("performance")
+        m.kb_color([255, 0, 16])
+        m.kb_brightness(128)
+        m.set_fan_offset(20)
+        log = m.dchu.log[-4:]
+        self.assertEqual(log[0], (0x79, bytes([2, 0, 0, 0x19])))
+        self.assertEqual(log[1], (0x67, bytes([0, 255, 16, 0xF0])))       # G, R, B, F0 as Control Center 3
+        self.assertEqual(log[2], (0x67, bytes([128, 0, 0, 0xF4])))
+        self.assertEqual(log[3], (0x79, bytes([51, 0, 0, 0x0E])))
+        self.assertEqual(st["clevo_state"]["power_mode"], "performance")
+        with self.assertRaises(ValueError):
+            m.set_fan_offset(150)
+
+    def test_fans_and_curve(self):
+        import struct
+        from uwccd.clevo import manager as M
+        m, st = self.manager(writes=True)
+        fans = m.fans()
+        self.assertEqual([f["fan"] for f in fans], ["cpu", "gpu1"])
+        self.assertTrue(3000 < fans[0]["rpm"] < 3400)
+        self.assertEqual(fans[0]["temp"], 58)
+        self.assertIn("custom", m.fan_modes())
+        m.set_curve({"cpu": [[0, 0], [55, 40], [75, 80]]})
+        cmd, buf = m.dchu.log[-2]
+        self.assertEqual(cmd, 0x0E)
+        self.assertEqual(list(buf[2:6]), [55, M.pct2raw(40), 75, M.pct2raw(80)])   # CPU points 2 and 3
+        self.assertEqual(list(buf[6:10]), [60, M.pct2raw(35), 78, M.pct2raw(70)])  # GPU: the factory curve
+        self.assertEqual(struct.unpack_from(">H", buf, 14)[0], M.slope(0, 40, 30, 55))  # factory first point kept
+        self.assertEqual(m.dchu.log[-1], (0x79, bytes([6, 0, 0, 1])))
+        self.assertEqual(st["clevo_state"]["curve"]["cpu"][0], [30, 0])
+        with self.assertRaises(ValueError):
+            m.set_curve({"cpu": [[30, 0], [80, 40], [60, 80]]})
+
+    def test_restore_and_report(self):
+        m, st = self.manager(writes=True)
+        m.set_power_mode("quiet")
+        m.kb_effect("wave")
+        n = len(m.dchu.log)
+        m.restore()
+        sent = m.dchu.log[n:]
+        self.assertIn((0x79, bytes([0, 0, 0, 0x19])), sent)
+        self.assertIn((0x67, bytes([0, 0, 0, 0xB0])), sent)
+        d = m.diagnostics()
+        self.assertTrue(d["present"])
+        self.assertIn("0x10", d["caps_raw"])
+        self.assertTrue(d["buf_0x0C"].startswith("00 00"))
+
+    def test_report_section(self):
+        from uwccd.clevo import diag
+        m, st = self.manager(writes=True)
+
+        class Svc:
+            clevo = m
+        r = diag.collect(Svc())
+        self.assertTrue(r["module"]["present"])
+        self.assertEqual(r["module"]["fans"][0]["fan"], "cpu")
+        self.assertTrue(r["verdict"].startswith("interface found via mock"))
+        self.assertIn("sys_vendor", r["dmi"])
+        r = diag.verdict({"module": {"present": False, "reason": "x"}, "acpi_clv0001": [{"device": "CLV0001:00"}],
+                          "modules": []})
+        self.assertIn("uwcc module is not loaded", r)
+
+    def test_clevo_only_backend(self):
+        from uwccd import ecaccess
+        os.environ["UWCC_MOCK_OEM"] = "0"
+        try:
+            ec, info = ecaccess.open_backend(self.Store(), mock=True, clevo=True)
+        finally:
+            del os.environ["UWCC_MOCK_OEM"]
+        self.assertEqual((info["active"], info["reason"]), ("none", "clevo_only"))
 
 
 if __name__ == "__main__":

@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.6.6 (in progress)
+
+- **Control Center 3.0 / Clevo — experimental, separate module** (`uwccd/clevo/`) for laptops with Control Center 3.x,
+  which have no Uniwill EC. Its own page (*Control Center 3.0 / Clevo → Clevo (experimental)*), `uwccctl clevo`, API
+  `/api/clevo` and report section. Clevo DCHU commands (ACPI `_DSM` of `CLV0001`, or WMI `ABBC0F6D` on older
+  firmware): power modes, fan mode / offset / custom curve / factory curve / anti-dust, fan speeds and temperatures,
+  keyboard on/off, colour, brightness, firmware effects, sleep timer and boot effect, EC version, capability bits.
+  - Windows: the Control Center 3 driver is opened directly (device interface `{86994C74-…}`, IOCTL `0x322400`);
+    no vendor DLL is used or shipped.
+  - Linux: kernel module `uwcc` gets ioctl `UWCC_IOC_CLEVO` and loads on `CLV0001` too (reinstall to rebuild).
+  - Commands are off until allowed (*Allow commands*, `uwccctl clevo writes on`); the settings set here are kept and
+    sent again at start (`clevo_restore`). Without a Uniwill EC the service runs in "Clevo only" mode with a banner.
+  - **Diagnostic report:** new section *Control Center 3.0 / Clevo*, on by default and collected on every laptop
+    (read only): what the module found, capability words, fan buffers, EC version; DMI; Windows — Control Center 3
+    Store packages, `CLV0001` / Clevo / Insyde devices, drivers, services, `CLEVO_*` WMI classes, the CC3 driver
+    interface; Linux — `CLV0001`, WMI `ABBC0F6x`, loaded modules. `report.txt` gets a one-line verdict.
+  - Not tested on a Clevo laptop yet — reports welcome. Docs: [docs/CLEVO.md](docs/CLEVO.md).
+- **BetterRGB *Screen ambient* is off by default on Linux** — the session agent would read the X11 screen while the
+  effect runs. The tile is greyed until *Keyboard backlight → BetterRGB engine → Allow Screen ambient* is ticked
+  (`uwccctl set kb_fx_screen on`); unticking it while the effect runs switches the keyboard to a plain colour.
+  Windows is unchanged.
+
 ## 1.6.5
 
 - **Fix — CPU power on Windows was too high:** the Energy Meter counters have one instance per RAPL domain

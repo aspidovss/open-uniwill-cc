@@ -253,6 +253,42 @@ FanBoost: оба вентилятора на максимуме.
 .TP
 .B lighting
 Устройства клавиатуры и световой полосы (диагностика).
+.SS Control Center 3.0 / Clevo (экспериментально)
+Отдельный модуль для ноутбуков с Control Center 3.x (интерфейс Clevo «DCHU»); см. docs/CLEVO.ru.md.
+Команды отклоняются, пока не включено
+.BR "clevo writes on" .
+.TP
+.B clevo
+Интерфейс, возможности, вентиляторы и настройки, заданные здесь последними (прошивка их не сообщает).
+.TP
+.BR "clevo writes" | restore " " on | off
+Разрешить команды; отправлять сохранённые настройки при запуске службы.
+.TP
+.BR "clevo power " quiet | powersave | performance | entertainment
+.TP
+.BR "clevo fan " auto | max | maxq | custom
+.TP
+.BI "clevo fan offset " 0..100
+.TP
+.BI "clevo fan curve " "ВЕНТИЛЯТОР T,D T,D T,D"
+Своя кривая
+.BR cpu ", " gpu1 " или " gpu2
+(первая точка остаётся заводской), затем пользовательский режим.
+.TP
+.BR "clevo fan defaults" ", " "clevo antidust"
+Заводская кривая; цикл очистки от пыли.
+.TP
+.BR "clevo kb " on | off
+.TP
+.BI "clevo kb color " RRGGBB " \fR[\fIЗОНА\fR]"
+.TP
+.BI "clevo kb brightness " 0..255
+.TP
+.BR "clevo kb effect " random | breathe | cycle | wave | dance | tempo | flash
+.TP
+.BI "clevo kb sleep " СЕКУНДЫ
+.TP
+.BR "clevo kb boot\-effect " on | off
 .SS Переключатели и автоматизация
 .TP
 .BR "get " [\fIКЛЮЧ\fR]

@@ -10,6 +10,10 @@
  *       limit table (PL1/PL2/PL4/TCC/cTGP/Dynamic Boost), UWACPIDriver IOCTL 0x9C40A500.
  *   ioctl UWCC_IOC_PWUP : evaluates \_SB.INOU.PWUP(level) — the OC power level for liquid cooling
  *       (GCUService LiquidHWOC.SetOCLevel, UWACPIDriver IOCTL 0x9C40A504 with the name "PUWP").
+ *   ioctl UWCC_IOC_CLEVO : Clevo "DCHU" command (laptops with Control Center 3.x): evaluates
+ *       _DSM(93f224e4-fbdc-4bbf-add6-db71bdc0afad, 0, cmd, Package{Buffer}) of ACPI device CLV0001,
+ *       or the WMI method ABBC0F6D-8EA1-11D1-00A0-C90629100000 (method id = cmd) on older firmware —
+ *       the same interface the Windows Control Center 3 driver and TUXEDO clevo_acpi/clevo_wmi use.
  *   read()/poll() : 32-bit event codes from the WMI event "AcpiTest_EventULong"
  *       (0xB0 mode key, 0xA7 fan boost, 0x40/0x41 Win-lock, 0xB8 Fn-lock, ...).
  */
@@ -28,6 +32,8 @@
 #include <linux/wmi.h>
 
 #define UWCC_HID "INOU0000"
+#define CLEVO_HID "CLV0001"
+#define CLEVO_WMI_GUID "ABBC0F6D-8EA1-11D1-00A0-C90629100000"
 
 struct uwcc_ec {
 	__u16 addr;
@@ -43,6 +49,24 @@ struct uwcc_smrw {
 #define UWCC_IOC_WRITE _IOW('u', 2, struct uwcc_ec)
 #define UWCC_IOC_SMRW  _IOWR('u', 3, struct uwcc_smrw)
 #define UWCC_IOC_PWUP  _IOW('u', 4, __u32)
+
+/* ret_type: 0 integer (ret_int), 2 buffer (out, ret_len bytes), 0xff nothing returned */
+struct uwcc_clevo {
+	__u32 cmd;
+	__u32 len;		/* bytes of in[] passed (1..256) */
+	__u32 ret_type;
+	__u32 ret_int;
+	__u32 ret_len;
+	__u8 in[256];
+	__u8 out[256];
+};
+
+#define UWCC_IOC_CLEVO _IOWR('u', 5, struct uwcc_clevo)
+
+static const guid_t clevo_dsm_guid = GUID_INIT(0x93f224e4, 0xfbdc, 0x4bbf,
+					       0xad, 0xd6, 0xdb, 0x71, 0xbd, 0xc0, 0xaf, 0xad);
+static acpi_handle clevo_handle;
+static bool clevo_wmi;
 
 static acpi_handle inou_handle;
 static DEFINE_MUTEX(ec_lock);
@@ -137,6 +161,65 @@ static int uwcc_pwup(u32 level)
 	st = acpi_evaluate_object(inou_handle, "PWUP", &args, NULL);
 	mutex_unlock(&ec_lock);
 	return ACPI_FAILURE(st) ? -EIO : 0;
+}
+
+static void uwcc_clevo_result(union acpi_object *obj, struct uwcc_clevo *c)
+{
+	if (obj && obj->type == ACPI_TYPE_PACKAGE && obj->package.count)
+		obj = &obj->package.elements[0];
+	c->ret_type = 0xff;
+	c->ret_len = 0;
+	if (!obj)
+		return;
+	if (obj->type == ACPI_TYPE_INTEGER) {
+		c->ret_type = 0;
+		c->ret_int = (u32)obj->integer.value;
+	} else if (obj->type == ACPI_TYPE_BUFFER) {
+		c->ret_type = 2;
+		c->ret_len = min_t(u32, obj->buffer.length, sizeof(c->out));
+		memcpy(c->out, obj->buffer.pointer, c->ret_len);
+	}
+}
+
+static int uwcc_clevo(struct uwcc_clevo *c)
+{
+	union acpi_object buf, pkg, *obj;
+	u32 len = clamp_t(u32, c->len, 1, sizeof(c->in));
+
+	if (c->cmd > 0xff)
+		return -EINVAL;
+	memset(c->out, 0, sizeof(c->out));
+	if (clevo_handle) {
+		buf.type = ACPI_TYPE_BUFFER;
+		buf.buffer.length = len;
+		buf.buffer.pointer = c->in;
+		pkg.type = ACPI_TYPE_PACKAGE;
+		pkg.package.count = 1;
+		pkg.package.elements = &buf;
+		mutex_lock(&ec_lock);
+		obj = acpi_evaluate_dsm(clevo_handle, &clevo_dsm_guid, 0, c->cmd, &pkg);
+		mutex_unlock(&ec_lock);
+		if (!obj)
+			return -EIO;
+		uwcc_clevo_result(obj, c);
+		ACPI_FREE(obj);
+		return 0;
+	}
+	if (clevo_wmi) {
+		struct acpi_buffer in = { len, c->in };
+		struct acpi_buffer out = { ACPI_ALLOCATE_BUFFER, NULL };
+		acpi_status st;
+
+		mutex_lock(&ec_lock);
+		st = wmi_evaluate_method(CLEVO_WMI_GUID, 0, c->cmd, &in, &out);
+		mutex_unlock(&ec_lock);
+		if (ACPI_FAILURE(st))
+			return -EIO;
+		uwcc_clevo_result(out.pointer, c);
+		kfree(out.pointer);
+		return 0;
+	}
+	return -ENODEV;
 }
 
 static acpi_status uwcc_find_cb(acpi_handle handle, u32 level, void *ctx, void **ret)
@@ -259,6 +342,20 @@ static long uwcc_ioctl(struct file *f, unsigned int cmd, unsigned long arg)
 			return ret;
 		return copy_to_user((void __user *)arg, &sm, sizeof(sm)) ? -EFAULT : 0;
 	}
+	if (cmd == UWCC_IOC_CLEVO) {
+		struct uwcc_clevo *c = kzalloc(sizeof(*c), GFP_KERNEL);
+
+		if (!c)
+			return -ENOMEM;
+		if (copy_from_user(c, (void __user *)arg, sizeof(*c)))
+			ret = -EFAULT;
+		else
+			ret = uwcc_clevo(c);
+		if (!ret && copy_to_user((void __user *)arg, c, sizeof(*c)))
+			ret = -EFAULT;
+		kfree(c);
+		return ret;
+	}
 	if (cmd == UWCC_IOC_PWUP) {
 		u32 level;
 
@@ -312,6 +409,14 @@ static int __init uwcc_init(void)
 		pr_warn("%s has no ECRR/ECRW — EC access disabled\n", UWCC_HID);
 		inou_handle = NULL;
 	}
+	h = NULL;
+	acpi_get_devices(CLEVO_HID, uwcc_find_cb, NULL, &h);
+	if (h && acpi_has_method(h, "_DSM"))
+		clevo_handle = h;
+	else
+		clevo_wmi = wmi_has_guid(CLEVO_WMI_GUID);
+	if (clevo_handle || clevo_wmi)
+		pr_info("Clevo DCHU interface: %s\n", clevo_handle ? CLEVO_HID " _DSM" : "WMI " CLEVO_WMI_GUID);
 	ret = misc_register(&uwcc_misc);
 	if (ret)
 		return ret;
@@ -320,7 +425,8 @@ static int __init uwcc_init(void)
 		pr_warn("WMI driver registration failed (%d) — no hot-key events\n", ret);
 	else
 		wmi_registered = true;
-	pr_info("loaded (EC %s)\n", inou_handle ? "ok" : "unavailable");
+	pr_info("loaded (EC %s, Clevo %s)\n", inou_handle ? "ok" : "unavailable",
+		clevo_handle || clevo_wmi ? "ok" : "no");
 	return 0;
 }
 
@@ -335,6 +441,7 @@ module_init(uwcc_init);
 module_exit(uwcc_exit);
 
 MODULE_AUTHOR("Control Center for Linux");
-MODULE_DESCRIPTION("Uniwill/Tongfang EC access and WMI hot-key events");
+MODULE_DESCRIPTION("Uniwill/Tongfang EC access and WMI hot-key events; Clevo DCHU commands");
 MODULE_LICENSE("GPL");
 MODULE_ALIAS("acpi*:" UWCC_HID ":*");
+MODULE_ALIAS("acpi*:" CLEVO_HID ":*");

@@ -10,14 +10,14 @@ _uwccctl() {
     local w=() i
     for ((i = 1; i < cword; i++)); do [[ ${words[i]} == --json ]] || w+=("${words[i]}"); done
     local cmd=${w[0]} sub=${w[1]} n=${#w[@]}
-    local commands="status monitor mode profile boost super ramoc fan battery kb lb get set apps restore lc
+    local commands="status monitor mode profile boost super ramoc fan battery kb lb clevo get set apps restore lc
         history export import report lang debug version update restart resume lighting nvram ec ec-direct release help driver"
     local onoff="on off"
     local modes="office gaming turbo custom"
     local keys="winkey_lock fn_lock usb_charger touchpad_toggle touchpad_enabled ac_recovery dgpu_direct
         lightbar_trigger bluetooth wifi webcam kb_timeout osd lc_hwoc mem_oc super_performance history_record
         update_check kb_picture_modes tcc_extended debug alerts overheat_boost kb_off_on_battery ppd_sync
-        cpu_alert gpu_alert mode_on_ac mode_on_battery lang fan_manager"
+        cpu_alert gpu_alert mode_on_ac mode_on_battery lang fan_manager clevo_writes clevo_restore"
     local tables="current M1T1 M1T2 M1T3 M1T4 M1T5 M2T1 M2T2 M2T3 M2T4 M2T5 M3T1 M3T2 M3T3 M3T4 M3T5 M4T1 M4T2 M4T3 M4T4 M4T5"
     local targets="office gaming turbo custom office:0 office:1 gaming:0 gaming:1 turbo:0 turbo:1 custom:0 custom:1 custom:2 custom:3 custom:4"
 
@@ -82,6 +82,21 @@ _uwccctl() {
             elif ((n == z + 1)) && [[ $op == effect ]]; then
                 COMPREPLY=($(compgen -W "static breathing breathing_multi wave cycle rainbow colorbreath colorwave" -- "$cur"))
             elif ((n == z + 1)) && [[ $op == light ]]; then COMPREPLY=($(compgen -W "0 1 2 3 4" -- "$cur"))
+            fi ;;
+        clevo)
+            local a2=${w[2]}
+            if ((n == 1)); then COMPREPLY=($(compgen -W "writes restore power fan antidust kb" -- "$cur"))
+            elif ((n == 2)); then
+                case $sub in
+                    writes | restore) COMPREPLY=($(compgen -W "$onoff" -- "$cur")) ;;
+                    power) COMPREPLY=($(compgen -W "quiet powersave performance entertainment" -- "$cur")) ;;
+                    fan) COMPREPLY=($(compgen -W "auto max maxq custom offset curve defaults" -- "$cur")) ;;
+                    kb) COMPREPLY=($(compgen -W "on off color brightness effect sleep boot-effect" -- "$cur")) ;;
+                esac
+            elif ((n == 3)) && [[ $sub == fan && $a2 == curve ]]; then COMPREPLY=($(compgen -W "cpu gpu1 gpu2" -- "$cur"))
+            elif ((n == 3)) && [[ $sub == kb && $a2 == effect ]]; then
+                COMPREPLY=($(compgen -W "random breathe cycle wave dance tempo flash" -- "$cur"))
+            elif ((n == 3)) && [[ $sub == kb && $a2 == boot-effect ]]; then COMPREPLY=($(compgen -W "$onoff" -- "$cur"))
             fi ;;
         get) ((n == 1)) && COMPREPLY=($(compgen -W "$keys" -- "$cur")) ;;
         set)

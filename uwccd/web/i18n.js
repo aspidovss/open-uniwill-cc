@@ -774,3 +774,40 @@ Object.assign(RU, {
   "Untested effects unlocked": "Непроверенные эффекты разблокированы",
   "Untested effects locked again": "Непроверенные эффекты снова заблокированы",
 });
+
+// Screen ambient on Linux (1.6.6)
+Object.assign(RU, {
+  "Off on Linux by default — turn it on below in BetterRGB engine": "На Linux по умолчанию выключен — включите ниже в «Движок BetterRGB»",
+  "Screen ambient is off on Linux — turn it on in BetterRGB engine": "«Цвета экрана» на Linux выключены — включите их в «Движок BetterRGB»",
+  "Allow Screen ambient": "Разрешить «Цвета экрана»",
+  " — Linux, X11 only: while the effect runs, the session agent reads a small picture of the screen (not stored). Off by default.":
+    " — Linux, только X11: пока работает эффект, агент сеанса читает маленькую картинку экрана (не сохраняется). По умолчанию выключено.",
+  // Control Center 3.0 / Clevo (experimental, separate module)
+  "Control Center 3.0 / Clevo": "Control Center 3.0 / Clevo", "Clevo (experimental)": "Clevo (экспериментально)",
+  "No Control Center 3.0 / Clevo interface on this laptop.": "На этом ноутбуке нет интерфейса Control Center 3.0 / Clevo.",
+  "Separate module for laptops with Control Center 3.x · via {0}": "Отдельный модуль для ноутбуков с Control Center 3.x · через {0}",
+  "the Control Center 3 driver": "драйвер Control Center 3", "the uwcc kernel module": "модуль ядра uwcc",
+  "experimental": "экспериментально", "Experimental commands": "Экспериментальные команды",
+  "These functions talk to the firmware the way Control Center 3 does. They were written from the interface description and have not been tested on a Clevo laptop yet. The firmware does not report the current power mode, fan mode or backlight, so the values below are the ones last set here.":
+    "Эти функции обращаются к прошивке так же, как Control Center 3. Они написаны по описанию интерфейса и ещё не проверялись на ноутбуке Clevo. Прошивка не сообщает текущий режим питания, режим вентиляторов и подсветку, поэтому ниже показаны значения, заданные здесь последними.",
+  "Allow commands": "Разрешить команды", "Send the saved settings at start": "Отправлять сохранённые настройки при запуске",
+  "Close Control Center 3 while using this page: both programs would send commands. Its driver must stay installed (Windows).":
+    "Закройте Control Center 3, пока пользуетесь этой страницей: иначе команды будут отправлять обе программы. Его драйвер должен оставаться установленным (Windows).",
+  "Power mode": "Режим питания", "Silent": "Тихий", "Low noise, lower performance": "Тише, но медленнее",
+  "Power saving": "Энергосбережение", "Longest battery time": "Дольше от батареи", "Highest performance": "Максимальная производительность",
+  "Entertainment": "Развлечения", "Balanced": "Сбалансированный", "Max-Q": "Max-Q", "Fan mode": "Режим вентиляторов",
+  "Fan offset": "Смещение вентиляторов", "Point {0}: °C / %": "Точка {0}: °C / %", "Factory point": "Заводская точка",
+  "Custom curve": "Своя кривая", "The first point is the factory one; above the third point the fan rises to 100 % at 100 °C.":
+    "Первая точка заводская; выше третьей точки вентилятор растёт до 100 % при 100 °C.",
+  "Apply curve": "Применить кривую", "Curve applied": "Кривая применена", "Factory curve": "Заводская кривая",
+  "Anti-dust cycle": "Цикл очистки от пыли", "Anti-dust started": "Очистка от пыли запущена", "Graphics card fan 2": "Вентилятор видеокарты 2",
+  "Backlight": "Подсветка", "Colour": "Цвет", "— single colour —": "— один цвет —", "Firmware effect": "Эффект прошивки",
+  "Random": "Случайный", "Cycle": "Цикл", "Dance": "Танец", "Tempo": "Темп", "Flashing": "Вспышки",
+  "Turn off after": "Выключать через", "15 s": "15 с", "30 s": "30 с", "1 min": "1 мин", "3 min": "3 мин", "5 min": "5 мин", "10 min": "10 мин",
+  "Colour cycle at power-on": "Перелив цветов при включении", "Firmware capabilities": "Возможности прошивки", "Capabilities": "Возможности",
+  "A diagnostic report (Information) includes these values: it helps to test this module.": "Диагностический отчёт (Информация) содержит эти значения — он поможет проверить модуль.",
+  "Open the Clevo page": "Открыть страницу Clevo", "Control Center 3.0 / Clevo (experimental)": "Control Center 3.0 / Clevo (экспериментально)",
+  "This laptop has no Uniwill embedded controller interface but a Control Center 3.0 / Clevo one: modes, fans and backlight are on the Clevo (experimental) page; the Uniwill pages do not work here.":
+    "У этого ноутбука нет интерфейса встроенного контроллера Uniwill, но есть интерфейс Control Center 3.0 / Clevo: режимы, вентиляторы и подсветка — на странице «Clevo (экспериментально)»; страницы Uniwill здесь не работают.",
+  "Control Center 3.0 / Clevo: interface, driver, Control Center 3 app, capability words and fan buffers (read only)": "Control Center 3.0 / Clevo: интерфейс, драйвер, приложение Control Center 3, слова возможностей и буферы вентиляторов (только чтение)",
+});

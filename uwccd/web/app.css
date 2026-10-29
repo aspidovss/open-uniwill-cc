@@ -325,3 +325,15 @@ pre.code{margin:0;padding:10px 12px;background:var(--bg0);border:1px solid var(-
 .unlock-row{margin-top:12px}
 .kb-feedback{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px;padding:10px 12px;border:1px solid var(--acc);border-radius:10px;background:rgba(50,219,190,.07)}
 .ask-card{max-width:560px}
+/* Control Center 3.0 / Clevo (experimental) */
+.clevo-exp{display:inline-block;font-size:11px;padding:2px 8px;border-radius:99px;background:var(--warn,#f5a524);color:#2b1d00;font-weight:700;margin-left:8px;vertical-align:middle}
+.clevo-fans{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin:8px 0 14px}
+.clevo-fan{background:var(--bg1);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.clevo-fan b{font-size:20px}.clevo-fan small{color:var(--muted);display:block}
+.clevo-curve{display:grid;grid-template-columns:auto repeat(3,minmax(90px,1fr));gap:6px 10px;align-items:center;margin:10px 0}
+.clevo-curve input{width:64px}.clevo-curve .muted{font-size:12px}
+.clevo-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:8px 0}
+.clevo-row > span:first-child{min-width:170px;color:var(--muted)}
+#page-clevo .card.locked .clevo-cmd{opacity:.45;pointer-events:none}
+.clevo-row input[type=range]{flex:1;min-width:180px;max-width:420px;width:auto;margin:0}
+.clevo-row output{min-width:44px}

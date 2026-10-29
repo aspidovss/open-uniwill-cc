@@ -96,6 +96,13 @@ The automatic tiers start at 8 V: on some units the flow does not hold at 7 V an
 **Cooler firmware.** open-uniwill-cc shows the cooler firmware version but does not flash it: a failed DFU update can
 leave the cooler unusable. Use the vendor tool or nRF Connect with the right package if you really need an update.
 
+## Control Center 3.0 / Clevo (experimental, separate module)
+
+Laptops with Control Center 3.x have no Uniwill EC; the module `uwccd/clevo/` drives them with Clevo DCHU commands
+(ACPI `_DSM` of `CLV0001`): power modes, fan modes / offset / custom curve / anti-dust, fan monitoring, keyboard
+colour / brightness / effects / sleep timer / boot effect. Windows: the Control Center 3 driver; Linux: the `uwcc`
+module. Not tested on a Clevo laptop yet; commands are off until allowed — [CLEVO.md](CLEVO.md).
+
 ## What was ported
 
 ✅ works · ❌ not available · ➖ not needed / not applicable. Linux and Windows run the same service code; only the access

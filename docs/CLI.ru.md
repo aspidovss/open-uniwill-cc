@@ -127,6 +127,8 @@ uwccctl kb fx-config transition=ripple_center bar=battery
 
 Эффекты BetterRGB: [LIGHTING.ru.md](LIGHTING.ru.md).
 
+Control Center 3.0 / Clevo (экспериментально): `uwccctl clevo …` — см. [CLEVO.ru.md](CLEVO.ru.md).
+
 ## Переключатели и автоматизация
 
 `uwccctl get [КЛЮЧ]`, `uwccctl set КЛЮЧ ЗНАЧЕНИЕ` (логические: `on` / `off`).

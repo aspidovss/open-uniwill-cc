@@ -251,6 +251,43 @@ Light bar zones; the default zone is
 .TP
 .B lighting
 Keyboard and light bar devices (diagnostics).
+.SS Control Center 3.0 / Clevo (experimental)
+Separate module for laptops with Control Center 3.x (Clevo "DCHU" interface); see docs/CLEVO.md.
+Commands are refused until
+.B clevo writes on
+is set.
+.TP
+.B clevo
+Interface, capabilities, fans and the settings last set here (the firmware does not report them).
+.TP
+.BR "clevo writes" | restore " " on | off
+Allow commands; send the saved settings again when the service starts.
+.TP
+.BR "clevo power " quiet | powersave | performance | entertainment
+.TP
+.BR "clevo fan " auto | max | maxq | custom
+.TP
+.BI "clevo fan offset " 0..100
+.TP
+.BI "clevo fan curve " "FAN T,D T,D T,D"
+Custom curve of
+.BR cpu ", " gpu1 " or " gpu2
+(the first point stays the factory one), then custom mode.
+.TP
+.BR "clevo fan defaults" ", " "clevo antidust"
+Factory fan curve; anti-dust cycle.
+.TP
+.BR "clevo kb " on | off
+.TP
+.BI "clevo kb color " RRGGBB " \fR[\fIZONE\fR]"
+.TP
+.BI "clevo kb brightness " 0..255
+.TP
+.BR "clevo kb effect " random | breathe | cycle | wave | dance | tempo | flash
+.TP
+.BI "clevo kb sleep " SECONDS
+.TP
+.BR "clevo kb boot\-effect " on | off
 .SS Switches and automation
 .TP
 .BR "get " [\fIKEY\fR]
