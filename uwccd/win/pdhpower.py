@@ -20,6 +20,19 @@ class PDH_FMT_COUNTERVALUE_ITEM_W(ctypes.Structure):
     _fields_ = [("szName", wintypes.LPWSTR), ("FmtValue", PDH_FMT_COUNTERVALUE)]
 
 
+SUBDOMAINS = ("pp0", "pp1", "dram", "psys", "_total")
+
+
+def package_mw(vals):
+    """CPU package power from the Energy Meter instances {name: mW}. Only the package domain counts: the instances
+    rapl_package0_pp0 (cores), _pp1 (integrated graphics), _dram and _psys are parts of it or other domains — summing
+    them doubled the value up to 1.6.4 (pkg 40.8 W + pp0 27.4 W shown as 68 W). Several sockets: their packages add up."""
+    pkg = [v for k, v in vals.items() if k.endswith("_pkg")]
+    if not pkg:                      # other naming: "package" without a sub-domain
+        pkg = [v for k, v in vals.items() if "package" in k and not any(d in k for d in SUBDOMAINS)]
+    return sum(pkg) if pkg else None
+
+
 class EnergyMeterPower:
     PATH = r"\Energy Meter(*)\Power"
 
@@ -63,10 +76,10 @@ class EnergyMeterPower:
             vals = self._values()
         except OSError:
             return None
-        pkg = [v for k, v in vals.items() if "pkg" in k or "package" in k]
-        if not pkg:
+        w = package_mw(vals)
+        if w is None:
             return None
-        w = sum(pkg) / 1000.0               # the counter is documented in milliwatts
+        w /= 1000.0                         # the counter is documented in milliwatts
         while w > 1000:                     # some drivers report µW / pW: a laptop CPU package is < 1 kW
             w /= 1000.0
         return round(w, 1)

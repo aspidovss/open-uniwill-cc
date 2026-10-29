@@ -1208,6 +1208,21 @@ class PlatformDbUnit(unittest.TestCase):
             platformdb.validate({"id": "Bad Id", "match": {"project": ["0x22"]}})
 
 
+class EnergyMeterUnit(unittest.TestCase):
+    def test_package_power_only(self):
+        """1.6.5: the Energy Meter pp0 / pp1 / dram instances are not added to the package (it was pkg + pp0)"""
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("pdhpower", os.path.join(ROOT, "uwccd", "win", "pdhpower.py"))
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        vals = {"rapl_package0_dram": 0.0, "rapl_package0_pkg": 40768.2, "rapl_package0_pp0": 27373.9,
+                "rapl_package0_pp1": 0.0, "_total": 0.0}
+        self.assertAlmostEqual(m.package_mw(vals), 40768.2)
+        self.assertAlmostEqual(m.package_mw({"rapl_package0": 30000.0, "rapl_package0_pp0": 20000.0}), 30000.0)
+        self.assertAlmostEqual(m.package_mw({"rapl_package0_pkg": 30000.0, "rapl_package1_pkg": 20000.0}), 50000.0)
+        self.assertIsNone(m.package_mw({"rapl_package0_pp0": 1.0, "_total": 0.0}))
+
+
 class SingleColorKeyboardUnit(unittest.TestCase):
     def test_project_0x1a_uses_ec_single_colour(self):
         """MECHREVO Kuangshi / Jiguang B2 (Aurora X): no ITE device, EC 0x78C single-colour backlight"""

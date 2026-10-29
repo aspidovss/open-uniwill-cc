@@ -46,6 +46,11 @@ WhisperMode.
 
 * **History** on the Monitor page (1 min … 24 h, a point can be pinned for details, CSV / JSON export): temperatures,
   load, clocks, CPU package power and power limits, GPU power, CPU + GPU and battery power, fans, cooler.
+* **What the CPU values mean** (compared with OCCT, HWiNFO …): *power draw* is the RAPL **package** domain (Linux
+  powercap `package-0`, Windows Energy Meter `rapl_package0_pkg`); the *clock* is the clock of the busy cores, as
+  *Speed* in Task Manager (nominal × `% Processor Performance` on Windows, `scaling_cur_freq` on Linux) — not the
+  "effective" clock of OCCT / HWiNFO, which averages in the time the cores sleep and is much lower at light load;
+  the *temperature* is the EC sensor, the values are sampled every 2 s.
 * **Discrete GPU** card on the Information page: whether the NVIDIA GPU sleeps and which programs keep it awake.
   The monitor no longer calls `nvidia-smi` while the GPU is in runtime suspend (that used to wake it every 2 s and drain the battery).
 * **Fan curve presets** (Factory / Quiet = factory × 0.8, the OEM rule for its quiet table / Maximum) — loaded into the editor, saved with *Save*.

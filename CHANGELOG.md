@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.6.5
+
+- **Fix — CPU power on Windows was too high:** the Energy Meter counters have one instance per RAPL domain
+  (`rapl_package0_pkg`, `_pp0` cores, `_pp1` integrated graphics, `_dram`), and all instances with "package" in the
+  name were added up — the cores were counted twice (e.g. 68 W shown, 41 W real, as OCCT shows). Now only the
+  package domain counts. Linux was not affected.
+- Help (*Features*): what the CPU values mean next to OCCT / HWiNFO — the clock is the clock of the busy cores like
+  *Speed* in Task Manager, not the lower "effective" clock.
+
 ## 1.6.4
 
 - **Diagnostic report: self-check stage 1 by default** — the report runs the read-only stage 1 and adds its table
