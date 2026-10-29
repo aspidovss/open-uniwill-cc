@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.6.6 (in progress)
+## 1.6.6
 
 - **Control Center 3.0 / Clevo — experimental, separate module** (`uwccd/clevo/`) for laptops with Control Center 3.x,
   which have no Uniwill EC. Its own page (*Control Center 3.0 / Clevo → Clevo (experimental)*), `uwccctl clevo`, API
