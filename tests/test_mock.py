@@ -1335,11 +1335,41 @@ class PlatformSupportUnit(unittest.TestCase):
         self.assertEqual((p.support, p.project_name, p.display_name), ("tested", "0x10", "MAIBENBEN Tsunami"))
         p = self._pf(0x1A)
         self.assertEqual((p.support, p.project_name), ("experimental", "0x1A"))
-        self.assertIn("Kuangshi", p.display_name)
+        from uwccd import hw
+        orig = hw.dmi
+        hw.dmi = lambda f: {"sys_vendor": "MECHREVO", "product_name": "YAOSHI Series"}.get(f, "")
+        try:
+            self.assertEqual(self._pf(0x1A).display_name, "MECHREVO YAOSHI Series")     # 0x1A: name from DMI
+            hw.dmi = lambda f: ""
+            self.assertEqual(self._pf(0x1A).display_name, "MECHREVO (project 0x1A)")
+        finally:
+            hw.dmi = orig
         self.assertEqual(self._pf(0x99).support, "experimental")
         from uwccd import hw
         known = next(k for k in hw.PROJECT_NAMES if k not in hw.TESTED_IDS)
         self.assertEqual(self._pf(known).support, "known")
+
+
+class DraftLimitsUnit(unittest.TestCase):
+    def test_hx_limits_and_out_of_range_value(self):
+        from uwccd import platformdb
+        v = {"PL1": 210, "PL2": 210, "PL4": 210, "TccOffset": 10, "ConfigurableTGP": 70, "DynamicBoost": 25,
+             "TargetTemperature": 87, "DefaultTGP": 80, "DynamicBoostCpuTdp": 255}       # SMRW of a Yaoshi, 275HX
+        self.assertEqual(platformdb.check_limits(v), v)          # Core Ultra 9 275HX laptops
+        with self.assertRaises(ValueError):
+            platformdb.check_limits({"PL1": 251})
+
+
+class ReportStage2Unit(unittest.TestCase):
+    def test_kept_stage2_in_text(self):
+        from uwccd.report import selfcheck_text
+        r = {"stage": 1, "path": "oem", "items": [], "stage2": {"stage": 2, "path": "oem", "time": 0,
+             "items": [{"group": "write", "name": "Fn Lock", "status": "ok", "detail": "wrote 0x11"}],
+             "features": {"modes": "on"}}}
+        txt = "\n".join(selfcheck_text(r))
+        self.assertIn("stage 2 (with writes) kept", txt)
+        self.assertIn("Fn Lock", txt)
+        self.assertIn("features (stage 2): modes=on", txt)
 
 
 class KeyboardTimingUnit(unittest.TestCase):
@@ -1498,6 +1528,20 @@ class DetectUnit(unittest.TestCase):
             k.firmware_version = lambda: (0x11, 5, 0, 0)
             k._detect()
             self.assertEqual(k.kb_type, want, hex(up))
+
+    def test_600b_picks_ff03(self):
+        """048D:600B (Mechrevo Yaoshi): the per-key collection FF03, not FF89 on MI_00."""
+        from uwccd.lighting import ite
+        self.assertIn(0x600B, ite.KB_PIDS)
+        devs = [{"node": "mi00", "pid": 0x600B, "usage_page": 0xFF89}, {"node": "mi01", "pid": 0x600B, "usage_page": 0xFF03}]
+        opened = []
+        orig_find, orig_kb = ite.find_devices, ite.ITEKeyboard
+        ite.find_devices = lambda pids: list(devs)
+        ite.ITEKeyboard = lambda ec, d: opened.append(d["node"]) or d
+        try:
+            self.assertEqual(ite.open_keyboard(None)["node"], "mi01")
+        finally:
+            ite.find_devices, ite.ITEKeyboard = orig_find, orig_kb
 
 
 class ClevoUnit(unittest.TestCase):

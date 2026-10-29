@@ -137,7 +137,7 @@ OEM-драйвером — уровень мощности с СЖО (`PWUP`) и
 | PHxT | `0x12`–`0x16` | PH4TRX1, PH4TUX1, PH4TQx1, PH6TRX1, PH6TQxx | известен |
 | PHxA | `0x17`, `0x1701`–`0x1707` | PH4ARxx, PH4AUxx, PH4AXxx, PH6AQxx, PH6ARxx, PH6AGxx, PH4AUxf | известен |
 | PHxP | `0x18`, `0x1801`–`0x180D` | PH4PRxx, PH4PUxx, PH4PGx1, PH4PGx2, PH6PRxx, PH6PGEx, PH6PG0x, PH6PG3x, PH6PG7x (и версии 150 W), PH4AQE3 | известен |
-| служба 1.2 | `0x1A` | MECHREVO Kuangshi / Jiguang B2 (Jiguang X / Aurora X) | экспериментальный (работает по отчёту пользователя, см. ниже) |
+| служба 1.2 | `0x1A` | MECHREVO Kuangshi / Jiguang B2 (Jiguang X / Aurora X), MECHREVO Yaoshi (X6AR55xY) | экспериментальный (работает по отчётам пользователей, см. ниже) |
 | любой другой проект Uniwill с RamFan 1.5 | — | | экспериментальный |
 
 *Проверен* — проверен с этой программой; *известен* — есть в таблицах платформ официальной службы, здесь не
@@ -156,6 +156,7 @@ OEM-драйвером — уровень мощности с СЖО (`PWUP`) и
 |---|---|---|---|---|---|
 | MAIBENBEN Tsunami Series | i9-12900HX / NVIDIA | `0x10` | N.1.23A14 / 1.13 | ✅ Ubuntu 24.04 | ✅ Windows 11 24H2 |
 | MECHREVO Aurora X (Kuangshi / Jiguang B2) — отчёт пользователя | i7-13700HX / RTX 5060 | `0x1A` | N.1.25MRO33 / 1.31 | — | ✅ Windows 11 (OEM-драйвер): режимы, вентиляторы, пределы, мониторинг; одноцветная подсветка с 1.6.4; функции из переменных BIOS пока нет |
+| MECHREVO Yaoshi (X6AR55xY) — отчёт пользователя | Core Ultra 9 275HX / RTX 5080 | `0x1A` | N.1.13MRO16 / 2.6 | — | ✅ Windows 10 (OEM-драйвер): самопроверка ступени 2 — всё OK (режимы, Fan Boost, пределы, cTGP, батарея, таблицы вентиляторов), водяное охлаждение LCT22002; RGB-клавиатура с подсветкой каждой клавиши ITE `600B` распознаётся с 1.6.7 (ещё не проверено) |
 
 Проверили на своём? Пожалуйста, оставьте [отчёт о модели](https://github.com/aspidovss/open-uniwill-cc/issues/new?template=model_report.yml).
 

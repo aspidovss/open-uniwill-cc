@@ -133,7 +133,7 @@ projects; only `0x10` has been checked on real hardware. The level is shown in t
 | PHxT | `0x12`–`0x16` | PH4TRX1, PH4TUX1, PH4TQx1, PH6TRX1, PH6TQxx | known |
 | PHxA | `0x17`, `0x1701`–`0x1707` | PH4ARxx, PH4AUxx, PH4AXxx, PH6AQxx, PH6ARxx, PH6AGxx, PH4AUxf | known |
 | PHxP | `0x18`, `0x1801`–`0x180D` | PH4PRxx, PH4PUxx, PH4PGx1, PH4PGx2, PH6PRxx, PH6PGEx, PH6PG0x, PH6PG3x, PH6PG7x (also 150 W), PH4AQE3 | known |
-| service 1.2 | `0x1A` | MECHREVO Kuangshi / Jiguang B2 (Jiguang X / Aurora X) | experimental (works by a user report, see below) |
+| service 1.2 | `0x1A` | MECHREVO Kuangshi / Jiguang B2 (Jiguang X / Aurora X), MECHREVO Yaoshi (X6AR55xY) | experimental (works by user reports, see below) |
 | any other Uniwill project with RamFan 1.5 | — | | experimental |
 
 *tested* — checked with this program; *known* — in the platform tables of the official service, not checked here;
@@ -152,6 +152,7 @@ Clevo laptops with Control Center 3.x: only the experimental *Control Center 3.0
 |---|---|---|---|---|---|
 | MAIBENBEN Tsunami Series | i9-12900HX / NVIDIA | `0x10` | N.1.23A14 / 1.13 | ✅ Ubuntu 24.04 | ✅ Windows 11 24H2 |
 | MECHREVO Aurora X (Kuangshi / Jiguang B2) — user report | i7-13700HX / RTX 5060 | `0x1A` | N.1.25MRO33 / 1.31 | — | ✅ Windows 11 (OEM driver): modes, fans, limits, monitoring; single-colour backlight from 1.6.4; BIOS-variable features not yet |
+| MECHREVO Yaoshi (X6AR55xY) — user report | Core Ultra 9 275HX / RTX 5080 | `0x1A` | N.1.13MRO16 / 2.6 | — | ✅ Windows 10 (OEM driver): self-check stage 2 all OK (modes, Fan Boost, limits, cTGP, battery, fan tables), liquid cooler LCT22002; per-key RGB keyboard ITE `600B` recognised from 1.6.7 (not checked yet) |
 
 Tested yours? Please open a [model report](https://github.com/aspidovss/open-uniwill-cc/issues/new?template=model_report.yml).
 

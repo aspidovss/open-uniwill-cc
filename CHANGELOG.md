@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.6.7 (in progress)
+
+- **Project 0x1A: Mechrevo Yaoshi (X6AR55xY, Core Ultra 9 275HX, RTX 5080)** — a second model of this project (user
+  report, OEM driver): self-check stage 2 passed completely. The window now names 0x1A laptops by vendor + model
+  from DMI (the project is shared by several models) instead of "Kuangshi / Jiguang B2".
+- **Fix — keyboard backlight did nothing on the Mechrevo Yaoshi:** its keyboard is a per-key ITE 8291 with USB id
+  `048D:600B` (the one BetterRGB is made for), which is not in the tables of the original service, so the program
+  fell back to the single-colour EC backlight of the Aurora X (`0x78C`) — and toggles and sliders had no effect.
+  `600B` is now a keyboard; of its two vendor collections the per-key one (usage page `FF03`) is used, not `FF89`.
+- **Fix — the self-check draft dropped all power limits** when one firmware value was above the program's hard cap:
+  this laptop reports PL1 210 W and cTGP +70 W. The caps are now PL1 250 W, cTGP 100 W, DynamicBoostCpuTdp 255
+  (the firmware's "no value"), and a value out of range drops only that value.
+- **Diagnostic report:** a stage 2 self-check kept in EC Manager is now included (`selfcheck.json` and `report.txt`
+  show its write tests and features) next to the fresh stage 1, and its draft profile is the one exported.
+
 ## 1.6.6
 
 - **Control Center 3.0 / Clevo — experimental, separate module** (`uwccd/clevo/`) for laptops with Control Center 3.x,

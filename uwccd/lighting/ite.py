@@ -29,7 +29,12 @@ except ImportError:                    # repository without lighting/oem: no col
 log = logging.getLogger("uwccd.ite")
 
 VID = 0x048D
-KB_PIDS = [0xCE00, 0x6000, 0x6001, 0x6002, 0x6003, 0x6004, 0x6006, 0x6007, 0x600A]
+# 0x600B is not in the tables of GCUService 1.0.2.70: the per-key ITE 8291 of newer Tongfang / Uniwill chassis (the
+# keyboard BetterRGB is written for; MECHREVO Yaoshi X6AR55xY, project 0x1A, 1.6.6 report). Its vendor collection
+# FF03 takes the same 08h / 12h / 14h feature reports and 65-byte picture rows; MI_00 (usage page FF89) is not it.
+KB_PIDS = [0xCE00, 0x6000, 0x6001, 0x6002, 0x6003, 0x6004, 0x6006, 0x6007, 0x600A, 0x600B]
+# vendor collections of the keyboard controller, best first (GCUService: FF02, FF12, FF03)
+KB_USAGE_PAGES = (0xFF03, 0xFF12, 0xFF02)
 LB_PIDS = [0x7000, 0x6005, 0x6008, 0x6010]
 
 # LightingModel.RGBKB_Effect -> ITE effect code (Translate_ITE_EffectIndex)
@@ -820,8 +825,9 @@ def open_keyboard(ec, mock=False):
     if mock:
         return MockITE(ec)
     devs = find_devices(KB_PIDS)
-    # GCUService enumerates PIDs and takes the vendor collection (usage page 0xFFxx)
-    devs.sort(key=lambda d: 0 if (d["usage_page"] or 0) >= 0xFF00 else 1)
+    # GCUService enumerates PIDs and takes the vendor collection (usage page 0xFFxx); the known keyboard pages first
+    # (048D:600B also has a collection FF89 on MI_00 that does not drive the LEDs)
+    devs.sort(key=lambda d: (0 if (d["usage_page"] or 0) in KB_USAGE_PAGES else 1 if (d["usage_page"] or 0) >= 0xFF00 else 2))
     for d in devs:
         if (d["usage_page"] or 0) < 0xFF00:
             continue
