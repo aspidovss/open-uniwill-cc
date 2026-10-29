@@ -237,9 +237,13 @@ HELP = {
         "uwccctl lc scan                          find coolers nearby\n"
         "uwccctl lc connect ADDR                  connect and remember\n"
         "uwccctl lc disconnect [--forget]\n"
-        "uwccctl lc mode auto|laptop|ec|low|medium|high|off\n"
+        "uwccctl lc mode auto|laptop|ec|manual|high|medium|low|off\n"
         "uwccctl lc manual FAN% PUMP_V            pump 7/8/11/12 V, 0 = off\n"
-        "uwccctl lc tiers BELOW:FAN:PUMP ...      auto mode, e.g. 55:25:8 70:50:8 85:75:11 999:90:11\n"
+        "uwccctl lc curve [common|office|gaming|turbo|custom]   show a curve (common: Automatic + Follow the laptop)\n"
+        "uwccctl lc curve KEY fan T:D ... [pump T:V ...]       set it, e.g. fan 40:25 60:45 80:80 95:100 pump 0:8 70:11\n"
+        "uwccctl lc curve KEY flat FAN% [PUMP_V]   a flat curve;  uwccctl lc curve MODE off   use the common curve\n"
+        "uwccctl lc profile [list|apply ID|save ID|copy NAME|remove ID|rename ID NAME]   cooler profiles\n"
+        "uwccctl lc tiers BELOW:FAN:PUMP ...      old tier form, becomes the common curve\n"
         "uwccctl lc set KEY VALUE                 temp_source max|cpu|gpu, delay_up/delay_down 0..300 s,\n"
         "                                         smooth, notify_flow, flow_guard, boost_fan, boost_pump on|off\n"
         "uwccctl lc idle on|off [off_below=50 off_after=60 on_above=55 on_after=10 min_run=120]\n"
@@ -1122,6 +1126,10 @@ def cmd_lc(a):
                 usage("lc")
             tiers.append({"below": below, "fan": fan, "pump": pump})
         call("lc/config", {"tiers": tiers})
+    elif op == "curve":
+        return lc_curve(a[1:])
+    elif op == "profile":
+        return lc_profile(a[1:])
     elif op == "set" and len(a) == 3:
         k, v = a[1], a[2]
         if k in LC_BOOL:
@@ -1157,6 +1165,75 @@ def cmd_lc(a):
         usage("lc")
     lc = call("state")["liquid"]
     out(lc, lambda d: T("lc") + " " + lc_line(d))
+
+
+CURVE_KEYS = ("common", "office", "gaming", "turbo", "custom")
+
+
+def curve_text(key, cs, used=None):
+    if not cs:
+        return f"{key:7} -> common curve"
+    mark = " (in use)" if used == key else ""
+    return (f"{key:7} fan  " + "  ".join(f"{t}°C {d}%" for t, d in cs["fan"]) + mark + "\n"
+            + f"{'':7} pump " + "  ".join(f"{'from ' + str(t) + '°C' if i else 'base'} {v} V" for i, (t, v) in enumerate(cs["pump"])))
+
+
+def lc_curve(a):
+    lc = call("state")["liquid"]
+    curves = lc["curves"]
+    if not a or (len(a) == 1 and a[0] in CURVE_KEYS):
+        keys = a or list(CURVE_KEYS)
+        return out({k: curves.get(k) for k in keys}, lambda d: [curve_text(k, v, lc.get("curve_key")) for k, v in d.items()])
+    key = a[0]
+    if key not in CURVE_KEYS:
+        usage("lc")
+    rest = a[1:]
+    if rest == ["off"]:
+        if key == "common":
+            fail("the common curve cannot be switched off", 2)
+        body = None
+    elif rest[:1] == ["flat"] and rest[1:]:
+        f = num(rest[1], "lc")
+        pv = num(rest[2], "lc") if rest[2:] else 11
+        body = {"fan": [[20, f], [100, f]], "pump": [[0, pv]]}
+    else:
+        cur = curves.get(key) or curves["common"]
+        body = {"fan": cur["fan"], "pump": cur["pump"]}
+        part = None
+        for x in rest:
+            if x in ("fan", "pump"):
+                part = x
+                body[part] = []
+                continue
+            try:
+                t, v = (int(y) for y in x.split(":"))
+            except ValueError:
+                usage("lc")
+            if part is None:
+                usage("lc")
+            body[part].append([t, v])
+    lc = call("lc/config", {"curves": {key: body}})
+    lc = call("state")["liquid"]
+    out({key: lc["curves"].get(key)}, lambda d: curve_text(key, d[key], lc.get("curve_key")))
+
+
+def lc_profile(a):
+    op = a[0] if a else "list"
+    if op == "list":
+        lc = call("state")["liquid"]
+        return out({"profile": lc["profile"], "modified": lc["profile_modified"], "profiles": lc["profiles"]},
+                   lambda d: [f"{'*' if p['id'] == d['profile'] else ' '} {p['id']:14} {p['name']}{'  (built-in)' if p['builtin'] else ''}"
+                              for p in d["profiles"]] + ([] if not d["modified"] else ["  (curves changed since the profile was applied)"]))
+    if op in ("apply", "save", "remove") and a[1:]:
+        body = {"action": op, "id": a[1]}
+    elif op == "copy" and a[1:]:
+        body = {"action": "copy", "name": " ".join(a[1:])}
+    elif op == "rename" and a[2:]:
+        body = {"action": "rename", "id": a[1], "name": " ".join(a[2:])}
+    else:
+        usage("lc")
+    r = call("lc/profile", body)
+    out(r, lambda d: f"{op}: {d['id']}")
 
 
 # -- the rest -------------------------------------------------------------------------------------

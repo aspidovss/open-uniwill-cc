@@ -488,6 +488,8 @@ class Handler(BaseHTTPRequestHandler):
             lc.prime(stop=bool(b.get("stop")))
         elif op == "suspend":
             lc.suspend()
+        elif op == "profile":                      # cooler profiles: apply / save / copy / remove / rename
+            return {"id": lc.profile(b), "status": lc.status()}
         else:
             raise KeyError(op)
         return None

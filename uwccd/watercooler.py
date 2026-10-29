@@ -18,6 +18,7 @@ import re
 import threading
 import time
 
+from . import lc_curves as LCV
 from . import regs as R
 from . import store
 
@@ -53,6 +54,8 @@ SMOOTH_WINDOW = 10.0    # s of temperature samples averaged
 EMERGENCY_T = 95        # °C (average): step up at once
 EMERGENCY_OVER = 8      # °C above the current tier's threshold: step up at once
 FAN_STEP = 10           # % per control step (3 s) when ramping
+FAN_DEADBAND = 3        # % — a curve change smaller than this is not sent (no hunting around a point)
+EMERGENCY_JUMP = 25     # % — the curve asks this much more at once: no waiting
 TEMP_SOURCES = ("max", "cpu", "gpu")
 PUMP_IDLE = {"enabled": False, "off_below": 50, "off_after": 60, "on_above": 55, "on_after": 10, "min_run": 120}
 METER_INTERVAL = 15.0
@@ -72,6 +75,9 @@ DEFAULTS = {
     "temp_source": "max",          # max | cpu | gpu (GPU falls back to the CPU while the GPU sleeps)
     "delay_up": 10, "delay_down": 30, "smooth": True,
     "pump_idle": PUMP_IDLE,
+    "curves": None,                # 1.6.8: fan curve + pump steps, common and per laptop mode (lc_curves.py)
+    "profile": None,               # cooler profile the curves came from
+    "profiles": [],                # own cooler profiles
 }
 
 
@@ -195,8 +201,15 @@ class LiquidCooler:
         self.mock = mock
         self.path = store.path("liquid.json")
         self.cfg = copy.deepcopy(DEFAULTS)
-        self.cfg.update(store.load_json(self.path, {}) or {})
+        saved = store.load_json(self.path, {}) or {}
+        self.cfg.update(saved)
         self.cfg["pump_idle"] = {**PUMP_IDLE, **(self.cfg.get("pump_idle") or {})}
+        if LCV.migrate(self.cfg, DEFAULT_TIERS, stored=bool(saved)):     # 1.6.7 and older: tiers -> curves
+            log.info("liquid cooler: temperature tiers converted to curves")
+            try:
+                store.save_json(self.path, self.cfg)
+            except OSError:
+                pass
         self.lock = threading.Lock()
         self.factory = MockLink if mock else BleakLink
         self.reason = None
@@ -229,6 +242,8 @@ class LiquidCooler:
         self.flow_deadline = 0.0
         self.priming = None
         self.tier = None
+        self.curve_key = None          # which curve set drives the cooler now (common / office / ...)
+        self.curve_raw = None          # what the curve asks for at the averaged temperature
         self.temp = None
         self.ec_target = None
         self.guard = False
@@ -601,6 +616,37 @@ class LiquidCooler:
                 pump = VOLTAGES[i + (1 if j > i else -1)]
         return fan, pump
 
+    def _curve_for(self, mode, laptop_mode):
+        curves = self.cfg.get("curves")
+        if mode == "laptop":
+            return LCV.for_mode(curves, laptop_mode)
+        return "common", LCV.full(curves)["common"]
+
+    def _curve_target(self, cs, avg):
+        """(fan, pump) from the curve set at the averaged temperature, with deadband, hysteresis for the pump
+        steps and the up / down delays."""
+        cur = self._settled
+        if avg is None:                           # no temperature yet: keep what runs, or the curve at 60 °C
+            if cur is None:
+                self._settled = (LCV.fan_at(cs, 60), cs["pump"][LCV.pump_index(cs, 60)][1])
+            return self._settled
+        raw_f = LCV.fan_at(cs, avg)
+        raw_p = cs["pump"][LCV.pump_index(cs, avg)][1]
+        if cur is not None and self._vidx(raw_p) < self._vidx(cur[1]):      # a pump step down needs HYSTERESIS
+            raw_p = max(raw_p, cs["pump"][LCV.pump_index(cs, avg + HYSTERESIS)][1], key=self._vidx)
+        self.curve_raw = (raw_f, raw_p)
+        if cur is not None and raw_p == cur[1] and abs(raw_f - cur[0]) < FAN_DEADBAND:
+            self._pending = None
+            return cur
+        if cur is None:
+            self._settled = (raw_f, raw_p)
+            return self._settled
+        up = raw_f > cur[0] or self._vidx(raw_p) > self._vidx(cur[1])
+        urgent = up and (avg >= EMERGENCY_T or raw_f - cur[0] >= EMERGENCY_JUMP)
+        if self._wait("up" if up else "down", urgent):
+            self._settled = (raw_f, raw_p)
+        return self._settled
+
     def _tier_index(self, t, tiers):
         for i, tr in enumerate(tiers):
             if t < tr["below"]:
@@ -617,16 +663,18 @@ class LiquidCooler:
         calm = False
         if self.guard and laptop_mode != self._guard_mode:    # the laptop's mode changed -> guard ends
             self.guard = False
+        if m not in ("auto", "laptop", "ec"):
+            self.curve_key = self.curve_raw = None
         if m == "off":
             fan, pump = 0, 0
-        elif m == "laptop":
-            fan, pump = LAPTOP_MODE_FAN.get(laptop_mode, 60), LAPTOP_MODE_PUMP
         elif m in PRESETS:
             fan, pump = PRESETS[m]
         elif m == "manual":
             fan, pump = int(c["fan"]), int(c["pump"])
-        elif m == "auto" and self.no_temps():          # no temperatures: a fixed preset instead of the tiers
-            fan, pump = PRESETS[NO_TEMPS_PRESET]
+        elif m in ("auto", "laptop") and self.no_temps():   # no temperatures: a flat curve, otherwise a preset
+            key, cs = self._curve_for(m, laptop_mode)
+            self.curve_key, self.curve_raw = key, None
+            fan, pump = ((cs["fan"][0][1], cs["pump"][0][1]) if LCV.is_flat(cs) else PRESETS[NO_TEMPS_PRESET])
         else:
             fan = pump = None
             calm = True
@@ -635,18 +683,14 @@ class LiquidCooler:
                 f, p = self.ec.read(R.LC_EC_FAN), self.ec.read(R.LC_EC_PUMP)
                 if f & 0x80 and p & 0x80 and (p & 0x7F) in (0, *VOLTAGES):
                     self.ec_target = (min(100, f & 0x7F), p & 0x7F)
+                    if self.curve_key is not None:
+                        self._settled, self.curve_key, self.curve_raw = None, None, None
                     fan, pump = self._settle_pair(self.ec_target, avg)
-            if fan is None:                       # "auto", or the EC publishes nothing
-                tiers = c["tiers"]
-                if avg is None:
-                    i = self.tier if self.tier is not None else min(1, len(tiers) - 1)
-                else:
-                    i = self._tier_index(avg, tiers)
-                    if self.tier is not None and i < self.tier:
-                        i = max(i, self._tier_index(avg + HYSTERESIS, tiers))
-                    i = self._settle_tier(i, avg, tiers)
-                self.tier = i
-                fan, pump = tiers[i]["fan"], tiers[i]["pump"]
+            if fan is None:                       # "auto", "laptop", or the EC publishes nothing: the curves
+                key, cs = self._curve_for(m, laptop_mode)
+                if key != self.curve_key:         # another curve set (laptop mode changed): no waiting
+                    self._settled, self._pending, self.curve_key = None, None, key
+                fan, pump = self._curve_target(cs, avg)
             pump = self._pump_idle(pump, avg)
         if calm and c.get("smooth", True) and not self._emergency and not self.guard:
             fan, pump = self._ramp(fan, pump)
@@ -780,8 +824,12 @@ class LiquidCooler:
             if p not in (0, *VOLTAGES):
                 raise ValueError("pump voltage 0/7/8/11/12")
             c["pump"] = p
-        if "tiers" in b:
+        if "tiers" in b:                          # 1.6.7 and older: tiers become the common curve
             c["tiers"] = self._check_tiers(b["tiers"])
+            c["curves"] = LCV.full(c.get("curves"))
+            c["curves"]["common"] = LCV.from_tiers(c["tiers"])
+        if "curves" in b:
+            c["curves"] = LCV.check_curves(b["curves"], c.get("curves"))
         if "temp_source" in b:
             if b["temp_source"] not in TEMP_SOURCES:
                 raise ValueError("temperature source: max / cpu / gpu")
@@ -827,6 +875,17 @@ class LiquidCooler:
                 self.call(self._apply_rgb(), timeout=10)
             self._wake_up()
         self._changed()
+
+    def profile(self, b):
+        """Cooler profiles: apply / save / copy / remove / rename."""
+        with self.lock:
+            c = copy.deepcopy(self.cfg)
+            pid = LCV.profile_action(c, b)
+            self.cfg = c
+            self._save()
+        self._wake_up()
+        self._changed()
+        return pid
 
     @staticmethod
     def _check_idle(pi):
@@ -918,4 +977,10 @@ class LiquidCooler:
             "presets": {k: {"fan": v[0], "pump": v[1]} for k, v in PRESETS.items()},
             "rgb_modes": list(RGB_MODES), "mk2_only": list(MK2_ONLY), "voltages": list(VOLTAGES),
             "default_tiers": DEFAULT_TIERS,
+            "curve_key": self.curve_key, "curve_raw": self.curve_raw,
+            "curves": LCV.full(c.get("curves")), "curve_keys": list(LCV.CURVE_KEYS),
+            "pump_levels": list(LCV.PUMP_LEVELS), "max_fan_points": LCV.MAX_FAN_POINTS,
+            "max_pump_steps": LCV.MAX_PUMP_STEPS,
+            "profiles": [{"id": p["id"], "name": p["name"], "builtin": p["builtin"]} for p in LCV.profiles(c)],
+            "profile": c.get("profile"), "profile_modified": LCV.modified(c),
         }

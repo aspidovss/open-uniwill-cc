@@ -312,12 +312,21 @@
           </div>
         </div>
 
-        <div class="card" id="lc-tiers-card">
-          <div class="row between"><h3 data-i>Automatic mode: temperature tiers</h3>
-            <div class="row"><button class="btn ghost" id="lc-tiers-reset" data-i>Default</button><button class="btn" id="lc-tiers-save" data-i>Save</button></div></div>
-          <p class="muted tiny" data-i>Switching to a lower tier also waits for the temperature to drop 3 °C below the threshold. In the Controller mode the table is used when the EC publishes no targets; the settings below apply to both modes.</p>
-          <div class="table-wrap"><table class="pts" id="lc-tiers"></table></div>
+        <div class="card" id="lc-curves-card">
+          <div class="row between wrap"><h3 id="lc-curves-title" data-i>Curves</h3>
+            <div class="row wrap lc-prof"><select id="lc-prof"></select>
+              <button class="btn ghost" id="lc-prof-apply" data-i>Apply</button>
+              <button class="btn ghost" id="lc-prof-save" data-i>Save</button>
+              <button class="btn ghost" id="lc-prof-copy" data-i>Copy</button>
+              <button class="btn ghost" id="lc-prof-remove" data-i>Remove</button></div></div>
+          <p class="muted tiny" id="lc-curves-hint"></p>
+          <div class="seg sm hidden" id="lc-curve-tabs"></div>
+          <label class="chk hidden" id="lc-own-row"><input type="checkbox" id="lc-own"> <span id="lc-own-label"></span></label>
+          <div class="lc-editors" id="lc-editors"></div>
+          <div class="row wrap" style="margin-top:6px"><button class="btn ghost" id="lc-flat" data-i>Flat line…</button>
+            <span class="muted tiny" data-i>Drag the points. Double-click on the chart: add a point; double-click on a point: remove it.</span></div>
           <div class="lc-calm" id="lc-calm"></div>
+          <div class="row" style="justify-content:flex-end;margin-top:8px"><button class="btn ghost" id="lc-calm-reset" data-i>Default</button><button class="btn" id="lc-calm-save" data-i>Save</button></div>
         </div>
 
         <div class="card">

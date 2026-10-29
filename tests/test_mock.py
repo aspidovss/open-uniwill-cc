@@ -357,6 +357,16 @@ class CliService(MockService):
         self.cli("apps", "remove", "steam", code=1)
         c = self.j("lc", "tiers", "50:20:7", "65:40:8", "999:80:12")["config"]
         self.assertEqual([t["below"] for t in c["tiers"]], [50, 65, 999])
+        self.assertEqual(self.j("lc", "curve", "gaming", "fan", "40:30", "80:90", "pump", "0:8", "75:11")["gaming"]["fan"],
+                         [[40, 30], [80, 90]])
+        self.assertIsNone(self.j("lc", "curve", "gaming", "off")["gaming"])
+        self.assertEqual(self.j("lc", "curve", "turbo", "flat", "70")["turbo"]["fan"], [[20, 70], [100, 70]])
+        self.cli("lc", "curve", "common", "off", code=2)
+        self.cli("lc", "curve", "common", "fan", "40:50", "60:30", code=1)
+        self.assertEqual(self.j("lc", "profile", "copy", "Test", "one")["id"], "test-one")
+        self.assertIn("test-one", [p["id"] for p in self.j("lc", "profile")["profiles"]])
+        self.j("lc", "profile", "apply", "quiet")
+        self.cli("lc", "profile", "remove", "quiet", code=1)
         self.assertEqual(self.j("lc", "set", "temp_source", "gpu")["config"]["temp_source"], "gpu")
         self.assertEqual(self.j("lc", "set", "delay_up", "20")["config"]["delay_up"], 20)
         self.assertFalse(self.j("lc", "set", "smooth", "off")["config"]["smooth"])
@@ -656,20 +666,24 @@ class LiquidCoolerUnit(unittest.TestCase):
         s = self.sent()
         self.assertEqual(self.W.MockLink.last.sent[0], b"sw")
         self.assertIn("fe1e0100800000ef", s)         # RGB static, OEM default green
-        self.assertIn("fe1b0119000000ef", s)         # fan 25 % (tier 1 at 50 °C)
+        self.assertIn("fe1b011c000000ef", s)         # fan 28 % (Balanced curve at 50 °C)
         self.assertIn("fe1c013c030000ef", s)         # pump duty 60, 8 V selector 3
         self.assertTrue(self.ec.read(0x7C7) & 0x02)
         self.lc.disconnect()
         self.assertFalse(self.ec.read(0x7C7) & 0x02)
 
-    def test_tiers_with_hysteresis(self):
-        lc = self.lc
-        for t, want in ((80, (75, 11)), (69, (75, 11)), (66, (50, 8)), (90, (90, 11)), (40, (25, 8))):
+    def _curve(self, fan, pump, key="common"):
+        self.lc.configure({"curves": {key: {"fan": fan, "pump": pump}}})
+
+    def test_curve_and_pump_hysteresis(self):
+        self._curve([[40, 20], [80, 100]], [[0, 8], [70, 11]])
+        for t, want in ((60, (60, 8)), (75, (90, 11)), (69, (78, 11)), (66, (72, 8)), (90, (100, 11)), (30, (20, 8))):
             self.temp[0] = t
-            lc._wake_up()
+            self.lc._wake_up()
             time.sleep(0.3)
-            st = lc.status()
+            st = self.lc.status()
             self.assertEqual((st["fan"], st["pump"]), want, f"at {t} °C")
+        self.assertEqual(self.lc.status()["curve_key"], "common")
 
     def _step(self, t=None, advance=0):
         if t is not None:
@@ -684,33 +698,37 @@ class LiquidCoolerUnit(unittest.TestCase):
         self.clock = [time.monotonic() + 1]
         self.lc._now = lambda: self.clock[0]
 
-    def test_tier_delays(self):
+    def test_curve_delays_deadband_urgent(self):
         self._fake_clock()
+        self._curve([[50, 20], [60, 40], [70, 60]], [[0, 8]])
         self.lc.configure({"delay_up": 10, "delay_down": 30})
-        self.assertEqual(self._step(50), (25, 8))
-        self.assertEqual(self._step(60), (25, 8))                 # a short peak does not switch
+        self.assertEqual(self._step(50), (20, 8))
+        self.assertEqual(self._step(55), (20, 8))                 # a short peak does not switch
         self.assertEqual(self.lc.status()["pending"]["dir"], "up")
-        self.assertEqual(self._step(50, 3), (25, 8))              # back down before the delay -> nothing
+        self.assertEqual(self._step(51, 3), (20, 8))              # back within the deadband -> nothing pending
         self.assertIsNone(self.lc.status()["pending"])
-        self._step(60)
-        self.assertEqual(self._step(60, 10), (50, 8))             # held 10 s -> next tier
-        self.assertEqual(self._step(50), (50, 8))                 # going down waits 30 s
-        self.assertEqual(self._step(50, 29), (50, 8))
-        self.assertEqual(self._step(50, 2), (25, 8))
-        self.assertEqual(self._step(64), (50, 8))                 # 8 °C over the tier threshold: at once
-        self.assertEqual(self._step(97), (90, 11))                # 95 °C: at once
+        self._step(55)
+        self.assertEqual(self._step(55, 10), (30, 8))             # held 10 s -> the curve value
+        self.assertEqual(self._step(52), (30, 8))                 # going down waits 30 s
+        self.assertEqual(self._step(52, 29), (30, 8))
+        self.assertEqual(self._step(52, 2), (24, 8))
+        self.assertEqual(self._step(68), (56, 8))                 # the curve asks 25 % more: at once
+        self.assertEqual(self._step(97), (60, 8))                 # 95 °C: at once
 
     def test_smoothing_and_ramp(self):
         self._fake_clock()
+        self._curve([[50, 25], [60, 45]], [[0, 8]])
         self.lc.configure({"smooth": True})
         self._step(50)
-        self.assertEqual(self._step(60, 11)[0], 35)               # old samples left the 10 s window; 25 -> 50 % in steps
-        self.assertEqual([self._step(60, 1)[0] for _ in range(2)], [45, 50])
-        self.lc.configure({"tiers": [{"below": 55, "fan": 25, "pump": 7}, {"below": 999, "fan": 50, "pump": 12}]})
+        self.assertEqual(self._step(60, 11)[0], 35)               # old samples left the 10 s window; 25 -> 45 % in steps
+        self.assertEqual([self._step(60, 1)[0] for _ in range(2)], [45, 45])
+        self._curve([[50, 50], [60, 50]], [[0, 7]])
+        self.assertEqual(self._step(60, 1)[1], 7)
+        self._curve([[50, 50], [60, 50]], [[0, 11]])
         pumps = [self._step(60, 1)[1] for _ in range(3)]
-        self.assertEqual(pumps, [11, 12, 12])                     # one voltage step at a time (8 -> 11 -> 12)
+        self.assertEqual(pumps, [8, 11, 11])                      # one voltage step at a time (7 -> 8 -> 11)
 
-    def test_pump_idle_and_tier_pump_off(self):
+    def test_pump_idle(self):
         self._fake_clock()
         self.lc.configure({"pump_idle": {"enabled": True, "off_below": 50, "off_after": 60, "on_above": 55,
                                          "on_after": 10, "min_run": 0}})
@@ -725,8 +743,65 @@ class LiquidCoolerUnit(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.lc.configure({"temp_source": "ram"})
         self.lc.configure({"pump_idle": {"enabled": False}, "temp_source": "gpu",
-                           "tiers": [{"below": 50, "fan": 0, "pump": 0}, {"below": 999, "fan": 60, "pump": 8}]})
-        self.assertEqual(self._step(45), (0, 0))
+                           "curves": {"common": {"fan": [[20, 0], [100, 0]], "pump": [[0, 7]]}}})
+        self.assertEqual(self._step(45), (0, 7))
+
+    def test_follow_laptop_own_curves(self):
+        mode = [1]
+        self.lc.mode_fn = lambda: mode[0]
+        self._curve([[40, 40], [80, 40]], [[0, 8]])               # common: 40 % / 8 V
+        self.lc.configure({"mode": "laptop", "curves": {"gaming": None, "turbo": {"fan": [[40, 70], [80, 90]],
+                                                                                  "pump": [[0, 11]]}}})
+        time.sleep(0.4)
+        st = self.lc.status()
+        self.assertEqual((st["fan"], st["pump"], st["curve_key"]), (40, 8, "common"))    # gaming: no own curve
+        mode[0] = 2
+        self.lc.configure({"delay_up": 300})                      # a mode change does not wait for the delay
+        self.lc._wake_up()
+        time.sleep(0.4)
+        st = self.lc.status()
+        self.assertEqual((st["fan"], st["pump"], st["curve_key"]), (75, 11, "turbo"))
+        with self.assertRaises(ValueError):
+            self.lc.configure({"curves": {"common": None}})
+        with self.assertRaises(ValueError):
+            self._curve([[40, 50], [60, 30]], [[0, 8]])           # duty may not fall
+        with self.assertRaises(ValueError):
+            self._curve([[40, 50], [60, 60]], [[0, 12]])          # no 12 V on a curve
+
+    def test_cooler_profiles(self):
+        lc = self.lc
+        self.assertEqual(lc.status()["profile"], "balanced")
+        self.assertFalse(lc.status()["profile_modified"])
+        lc.profile({"action": "apply", "id": "performance"})
+        self.assertEqual(lc.status()["curves"]["common"]["pump"], [[0, 11]])
+        self._curve([[40, 50], [60, 60]], [[0, 11]])
+        self.assertTrue(lc.status()["profile_modified"])
+        with self.assertRaises(ValueError):
+            lc.profile({"action": "save", "id": "performance"})   # built-in: copy it
+        pid = lc.profile({"action": "copy", "name": "My silent"})
+        self.assertEqual(pid, "my-silent")
+        self.assertFalse(lc.status()["profile_modified"])
+        lc.profile({"action": "apply", "id": "quiet"})
+        lc.profile({"action": "apply", "id": "my-silent"})
+        self.assertEqual(lc.status()["curves"]["common"]["fan"], [[40, 50], [60, 60]])
+        lc.profile({"action": "rename", "id": "my-silent", "name": "Night"})
+        lc.profile({"action": "remove", "id": "my-silent"})
+        self.assertNotIn("my-silent", [p["id"] for p in lc.status()["profiles"]])
+        self.assertIsNone(lc.status()["profile"])
+
+    def test_migration_from_tiers(self):
+        from uwccd import lc_curves as LCV
+        cfg = {"tiers": [{"below": 50, "fan": 20, "pump": 7}, {"below": 999, "fan": 80, "pump": 12}]}
+        self.assertTrue(LCV.migrate(cfg, self.W.DEFAULT_TIERS, stored=True))
+        cs = cfg["curves"]["common"]
+        self.assertEqual((LCV.fan_at(cs, 49), LCV.fan_at(cs, 50)), (20, 80))
+        self.assertEqual(cs["pump"], [[20, 7], [50, 11]])           # 12 V -> 11 V
+        self.assertEqual(cfg["curves"]["office"], LCV.flat(40, 11))     # old "Follow the laptop" duties kept
+        self.assertIsNone(cfg["profile"])
+        self.assertFalse(LCV.migrate(cfg, self.W.DEFAULT_TIERS))
+        fresh = {"tiers": self.W.DEFAULT_TIERS}
+        LCV.migrate(fresh, self.W.DEFAULT_TIERS, stored=False)      # a new install: no per-mode curves
+        self.assertEqual((fresh["profile"], fresh["curves"]["office"]), ("balanced", None))
 
     def test_ec_targets(self):
         self.ec.write(0x7E6, 0x80 | 70)
@@ -735,7 +810,7 @@ class LiquidCoolerUnit(unittest.TestCase):
         time.sleep(0.4)
         st = self.lc.status()
         self.assertEqual((st["fan"], st["pump"], st["ec_target"]), (70, 11, (70, 11)))
-        self.ec.write(0x7E7, 0x00)                  # EC publishes nothing -> temperature tiers
+        self.ec.write(0x7E7, 0x00)                  # EC publishes nothing -> the common curve
         self.lc._wake_up()
         time.sleep(0.4)
         self.assertEqual(self.lc.status()["pump"], 8)
@@ -755,7 +830,8 @@ class LiquidCoolerUnit(unittest.TestCase):
     def test_flow_guard_and_laptop_mode(self):
         mode = [1]
         self.lc.mode_fn = lambda: mode[0]
-        self.lc.configure({"mode": "laptop"})
+        from uwccd import lc_curves as LCV
+        self.lc.configure({"mode": "laptop", "curves": {"gaming": LCV.flat(60), "office": LCV.flat(40)}})
         time.sleep(0.4)
         self.assertEqual((self.lc.status()["fan"], self.lc.status()["pump"]), (60, 11))
         mode[0] = 0

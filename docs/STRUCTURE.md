@@ -106,7 +106,8 @@ EC protocol: [PROTOCOL.md](PROTOCOL.md).
 | `lighting/ite.py` | ITE 829x per-key RGB controller over USB HID |
 | `lighting/fx.py` | BetterRGB effects drawn by the service: frames, transitions, white calibration, top-row bar, frame pacing (from BetterRGB, MIT) |
 | `lighting/oem/` | hardware and software effects ported from the OEM program |
-| `watercooler.py` | liquid cooler over Bluetooth LE: XMG Oasis Mk1 / Mk2 and twins, tiers, flow guard |
+| `watercooler.py` | liquid cooler over Bluetooth LE: XMG Oasis Mk1 / Mk2 and twins, control loop, flow guard |
+| `lc_curves.py` | liquid cooler curves: fan curve + pump steps, common and per laptop mode, cooler profiles, migration of the old tiers |
 | `monitor.py` | temperatures, load, clocks, fans, power, drives, battery |
 | `automation.py` | mode per power source, overheating alerts, history (1 min … 24 h) |
 | `backup.py` | export / import of settings |

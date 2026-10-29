@@ -101,7 +101,7 @@ Super / XMG NEO 16 (E23); on other models every function stays off until the sel
 - **Control Center 3.0 / Clevo** (new in 1.6.6, experimental, separate module): power modes, fan modes and curve,
   keyboard colour and effects on laptops with Control Center 3.x — [docs/CLEVO.md](docs/CLEVO.md)
 - **Liquid cooler** XMG Oasis (LCT21001 Mk1 / LCT22002 Mk2), Eluktronics Liquid Pad Pro, PCS Liquid Series,
-  TUXEDO Aquaris: automatic temperature tiers, follow-the-laptop mode, lighting, coolant flow guard, filling cycle
+  TUXEDO Aquaris: fan and pump curves (common and per laptop mode), cooler profiles, lighting, coolant flow guard, filling cycle
 - **English and Russian** interface; tray app with notifications on Windows; desktop notifications on Linux
 - **Backup and transfer**: export / import of fan curves (one or all), full backup, import from the original Control Center
 - **Update check** against the GitHub releases (once a day, can be switched off); on Windows download, checksum check and
@@ -251,7 +251,7 @@ uwccctl battery limit 80 60      charge limits
 uwccctl kb effect wave --speed 3 --multi
 uwccctl set fn_lock on           any switch or automation setting (uwccctl get lists them)
 uwccctl apps add steam gaming    mode while a program runs
-uwccctl lc tiers 55:25:8 70:50:8 999:90:11   liquid cooler steps
+uwccctl lc curve common fan 40:25 70:60 90:100   liquid cooler fan curve
 uwccctl export all backup.json   fan curves, profiles and settings to a file
 uwccctl report                   diagnostic report (zip) for bug reports and new laptops
 uwccctl --json status            any command as JSON, for scripts
@@ -270,7 +270,7 @@ Everything the window changes is available from the console. Full reference: [do
 
 - Only the EC registers the original service writes, written the same way. If the EC does not report RamFan 1.5,
   modes and fan curves stay disabled.
-- Fan curves and cooler tiers are validated before writing; risky settings ask for confirmation.
+- Fan curves and cooler curves are validated before writing; risky settings ask for confirmation.
 - The UEFI variable `UniWillVariable` is written only after its layout has been verified.
 - The service listens on `127.0.0.1` only and requires a token readable by local users / group `uwcc`.
   See [SECURITY.md](SECURITY.md).

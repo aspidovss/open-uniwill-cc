@@ -153,9 +153,13 @@ Control Center 3.0 / Clevo (экспериментально): `uwccctl clevo �
 |---|---|
 | `lc [status]` / `lc scan` | состояние / поиск |
 | `lc connect АДРЕС` / `lc disconnect [--forget]` | подключить и запомнить / отключить |
-| `lc mode auto\|laptop\|ec\|low\|medium\|high\|off` | режим |
+| `lc mode auto\|laptop\|ec\|manual\|high\|medium\|low\|off` | режим |
 | `lc manual ВЕНТ ПОМПА` | вентилятор 0..100 %, помпа 7/8/11/12 В (0 = выкл) |
-| `lc tiers НИЖЕ:ВЕНТ:ПОМПА ...` | 1..8 ступеней автоматического режима |
+| `lc curve [КЛЮЧ]` | показать кривые; КЛЮЧ `common` (автоматический режим и по умолчанию «следовать за ноутбуком») или `office` `gaming` `turbo` `custom` |
+| `lc curve КЛЮЧ fan T:D ... [pump T:V ...]` | задать кривую: вентилятор 2..17 точек (°C:%), помпа 1..4 ступени (с °C:В, 7/8/11 В) |
+| `lc curve КЛЮЧ flat ВЕНТ [ПОМПА]` / `lc curve РЕЖИМ off` | ровная кривая / режим берёт общую кривую |
+| `lc profile [list\|apply ID\|save ID\|copy ИМЯ\|remove ID\|rename ID ИМЯ]` | профили охладителя (встроенные: quiet, balanced, performance) |
+| `lc tiers НИЖЕ:ВЕНТ:ПОМПА ...` | старая форма ступеней (1.6.7), превращается в общую кривую |
 | `lc set КЛЮЧ ЗНАЧЕНИЕ` | `temp_source max\|cpu\|gpu`, `delay_up`/`delay_down` 0..300 с, `smooth` `notify_flow` `flow_guard` `boost_fan` `boost_pump` on/off |
 | `lc idle on\|off [off_below= off_after= on_above= on_after= min_run=]` | останавливать помпу при низкой температуре |
 | `lc rgb RRGGBB [РЕЖИМ]` / `lc rgb off` | static, breathe, rainbow, breathe_rainbow, spiral, rotating_rainbow, color_wave |

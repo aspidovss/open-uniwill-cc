@@ -152,9 +152,13 @@ App binding: `apps`, `apps add PROCESS MODE`, `apps remove PROCESS`, `apps enabl
 |---|---|
 | `lc [status]` / `lc scan` | state / find coolers |
 | `lc connect ADDR` / `lc disconnect [--forget]` | connect and remember / disconnect |
-| `lc mode auto\|laptop\|ec\|low\|medium\|high\|off` | mode |
+| `lc mode auto\|laptop\|ec\|manual\|high\|medium\|low\|off` | mode |
 | `lc manual FAN PUMP` | fan 0..100 %, pump 7/8/11/12 V (0 = off) |
-| `lc tiers BELOW:FAN:PUMP ...` | 1..8 steps of the auto mode |
+| `lc curve [KEY]` | show the curves; KEY `common` (Automatic, and Follow the laptop by default) or `office` `gaming` `turbo` `custom` |
+| `lc curve KEY fan T:D ... [pump T:V ...]` | set a curve: fan 2..17 points (°C:%), pump 1..4 steps (from °C:V, 7/8/11 V) |
+| `lc curve KEY flat FAN [PUMP]` / `lc curve MODE off` | a flat curve / the mode uses the common curve |
+| `lc profile [list\|apply ID\|save ID\|copy NAME\|remove ID\|rename ID NAME]` | cooler profiles (built-in: quiet, balanced, performance) |
+| `lc tiers BELOW:FAN:PUMP ...` | old tier form (1.6.7), becomes the common curve |
 | `lc set KEY VALUE` | `temp_source max\|cpu\|gpu`, `delay_up`/`delay_down` 0..300 s, `smooth` `notify_flow` `flow_guard` `boost_fan` `boost_pump` on/off |
 | `lc idle on\|off [off_below= off_after= on_above= on_after= min_run=]` | stop the pump when cool |
 | `lc rgb RRGGBB [MODE]` / `lc rgb off` | static, breathe, rainbow, breathe_rainbow, spiral, rotating_rainbow, color_wave |

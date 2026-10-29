@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.6.8 (in progress)
+
+- **Liquid cooling: curves instead of temperature tiers.**
+  - **Modes in two rows:** Automatic, Follow the laptop, Controller, Manual / High, Medium, Low, Off.
+  - **Automatic** follows a **fan curve** (2..17 points, linear between them) and **pump steps** (7 / 8 / 11 V; a step
+    down waits until 3 °C below it). Both are edited by dragging the points (double-click adds / removes a point);
+    a crosshair shows the current temperature and the value the curve asks for. *Flat line…* makes a fixed duty.
+  - **Follow the laptop** uses the same **common** curve, or **its own curve** for each laptop mode (tabs Common /
+    Office / Gaming / Turbo / Custom, *Own curve for this mode*). A mode change switches the curve at once; the fan
+    still ramps. The Controller mode falls back to the common curve when the EC publishes no targets.
+  - Kept: temperature averaging, up / down delays, ramping, flow guard, emergency rise (95 °C, or the curve asking
+    25 % more at once), pump stop when cool. A curve has no 12 V and never stops the pump.
+  - **Cooler profiles:** Quiet, Balanced, Performance and your own — Apply / Save / Copy / Remove (a profile holds the
+    common and the per-mode curves); `uwccctl lc profile …`.
+  - `uwccctl lc curve [KEY] [fan T:D … pump T:V …]`, `lc curve KEY flat N`, `lc curve MODE off`; `lc tiers` still
+    works and becomes the common curve.
+  - **Update:** the tiers of 1.6.7 become a common curve with the same behaviour, and the old fixed duties of Follow
+    the laptop (40 / 60 / 90 / 90 %, pump 11 V) become flat curves of those modes. A new install starts with Balanced.
+
 ## 1.6.7
 
 - **Project 0x1A: Mechrevo Yaoshi (X6AR55xY, Core Ultra 9 275HX, RTX 5080)** — a second model of this project (user

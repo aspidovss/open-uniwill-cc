@@ -117,10 +117,12 @@ _uwccctl() {
             fi ;;
         lc)
             if ((n == 1)); then
-                COMPREPLY=($(compgen -W "status scan connect disconnect mode manual tiers set idle rgb prime suspend" -- "$cur"))
+                COMPREPLY=($(compgen -W "status scan connect disconnect mode manual curve profile tiers set idle rgb prime suspend" -- "$cur"))
             elif ((n == 2)); then
                 case $sub in
-                    mode) COMPREPLY=($(compgen -W "auto laptop ec low medium high off" -- "$cur")) ;;
+                    mode) COMPREPLY=($(compgen -W "auto laptop ec manual high medium low off" -- "$cur")) ;;
+                    curve) COMPREPLY=($(compgen -W "common office gaming turbo custom" -- "$cur")) ;;
+                    profile) COMPREPLY=($(compgen -W "list apply save copy remove rename" -- "$cur")) ;;
                     set) COMPREPLY=($(compgen -W "temp_source delay_up delay_down smooth notify_flow flow_guard boost_fan boost_pump" -- "$cur")) ;;
                     idle) COMPREPLY=($(compgen -W "$onoff" -- "$cur")) ;;
                     rgb) COMPREPLY=($(compgen -W "off" -- "$cur")) ;;
@@ -129,6 +131,7 @@ _uwccctl() {
                 esac
             elif ((n == 3)); then
                 case $sub in
+                    curve) COMPREPLY=($(compgen -W "fan pump flat off" -- "$cur")) ;;
                     set) case ${w[2]} in
                             temp_source) COMPREPLY=($(compgen -W "max cpu gpu" -- "$cur")) ;;
                             delay_up | delay_down) ;;

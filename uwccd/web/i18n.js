@@ -810,4 +810,23 @@ Object.assign(RU, {
   "This laptop has no Uniwill embedded controller interface but a Control Center 3.0 / Clevo one: modes, fans and backlight are on the Clevo (experimental) page; the Uniwill pages do not work here.":
     "У этого ноутбука нет интерфейса встроенного контроллера Uniwill, но есть интерфейс Control Center 3.0 / Clevo: режимы, вентиляторы и подсветка — на странице «Clevo (экспериментально)»; страницы Uniwill здесь не работают.",
   "Control Center 3.0 / Clevo: interface, driver, Control Center 3 app, capability words and fan buffers (read only)": "Control Center 3.0 / Clevo: интерфейс, драйвер, приложение Control Center 3, слова возможностей и буферы вентиляторов (только чтение)",
+  // 1.6.8 — liquid cooler curves and profiles
+  "Fan and pump follow the curves by the CPU/GPU temperature.": "Вентилятор и помпа следуют кривым по температуре ЦП/ГП.",
+  "The common curve or the own curve of the laptop's mode (Office, Gaming, Turbo, Custom).": "Общая кривая или своя кривая режима ноутбука (Офисный, Игровой, Турбо, Пользовательский).",
+  "Common": "Общая", "Temperature (curve)": "Температура (кривая)", "— own settings —": "— свои настройки —", "changed": "изменён",
+  "Own curve for the mode “{0}” (otherwise the common curve)": "Своя кривая для режима «{0}» (иначе — общая кривая)",
+  "Curves — Follow the laptop": "Кривые — следовать за ноутбуком", "Curves — used when the EC publishes no targets": "Кривые — когда EC не публикует цели",
+  "Curves — Automatic": "Кривые — автоматический режим", "Curves": "Кривые",
+  "The cooler uses the curve of the laptop's current mode (●) if it has its own (✎), otherwise the common curve. The common curve is also the curve of the Automatic mode.":
+    "Охладитель берёт кривую текущего режима ноутбука (●), если у режима есть своя (✎), иначе — общую. Общая кривая — это и кривая автоматического режима.",
+  "The fan follows the curve between its points; the pump switches at the temperature of each step and goes down only 3 °C below it.":
+    "Вентилятор следует кривой между точками; помпа переключается на температуре каждой ступени, а вниз — только на 3 °C ниже неё.",
+  "Fan duty for the whole curve, %": "Скорость вентилятора для всей кривой, %", "Cooler fan, %": "Вентилятор охладителя, %",
+  "Temperature, °C": "Температура, °C", "At most {0} points": "Не больше {0} точек", "At most {0} steps": "Не больше {0} ступеней",
+  "from the start": "с начала", "Profile applied": "Профиль применён", "Name of the new cooler profile": "Имя нового профиля охладителя",
+  "Profile saved": "Профиль сохранён", "Remove this cooler profile?": "Удалить этот профиль охладителя?", "Removed": "Удалено",
+  "Copy": "Копировать", "Remove": "Удалить", "Flat line…": "Ровная линия…",
+  "Drag the points. Double-click on the chart: add a point; double-click on a point: remove it.": "Перетаскивайте точки. Двойной щелчок по графику — добавить точку, по точке — удалить её.",
+  "at once from 95 °C or when the curve asks 25 % more": "сразу при 95 °C или когда кривая требует на 25 % больше",
+  "Stop the pump at low load (the cooler fan keeps following the curve)": "Останавливать помпу при низкой нагрузке (вентилятор охладителя продолжает следовать кривой)",
 });

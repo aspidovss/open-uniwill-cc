@@ -348,13 +348,27 @@ mode_on_battery
 .TP
 .BR "lc disconnect " [ \-\-forget ]
 .TP
-.BR "lc mode " auto | laptop | ec | low | medium | high | off
+.BR "lc mode " auto | laptop | ec | manual | high | medium | low | off
 .TP
 .BI "lc manual " "ВЕНТ ПОМПА"
 Вентилятор 0..100 %, помпа 7, 8, 11 или 12 В (0 = выкл).
 .TP
+.BR "lc curve " [ common | office | gaming | turbo | custom ]
+Показать кривые: общую (автоматический режим и «следовать за ноутбуком» для режимов без своей) и по режимам ноутбука.
+.TP
+.BI "lc curve " "КЛЮЧ " "fan " T:D " ... [pump " T:V " ...]"
+Задать кривую: вентилятор 2..17 точек, помпа 1..4 ступени 7, 8 или 11 В.
+.TP
+.BI "lc curve " "КЛЮЧ " "flat " "ВЕНТ \fR[\fIПОМПА\fR]"
+Ровная кривая;
+.BI "lc curve " "РЕЖИМ " off
+— режим берёт общую кривую.
+.TP
+.BR "lc profile " [ list | apply | save | copy | remove | rename ]
+Профили охладителя: quiet, balanced, performance и свои.
+.TP
 .BI "lc tiers " НИЖЕ : ВЕНТ : ПОМПА " ..."
-Ступени автоматического режима, 1..8; последняя действует при любой большей температуре.
+Форма ступеней из 1.6.7; превращается в общую кривую.
 .TP
 .BI "lc set " "КЛЮЧ ЗНАЧЕНИЕ"
 .B temp_source

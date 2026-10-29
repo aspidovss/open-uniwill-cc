@@ -226,11 +226,11 @@ function renderMonLc() {
     h("span", { class: "muted tiny" }, mode ? t(mode.name) : "")));
   const dl = h("dl", { class: "kv" });
   const temp = c.mode === "ec" && L.ec_target ? t("EC targets")
-    : L.temp != null ? `${L.temp_avg ?? L.temp}°C${L.tier != null && ["auto", "ec"].includes(c.mode) ? ` · ${t("tier")} ${L.tier + 1}` : ""}` : "—";
+    : L.temp != null ? `${L.temp_avg ?? L.temp}°C${L.curve_key && ["auto", "laptop", "ec"].includes(c.mode) ? ` · ${t(LC_CURVE_NAME[L.curve_key] || L.curve_key)}` : ""}` : "—";
   for (const [k, v, cls] of [[t("Pump"), L.pump != null ? (L.pump ? `${L.pump} V` : t("off")) : "—"],
                               [t("Cooler fan"), L.fan != null ? `${L.fan}%` : "—"],
                               [t("Coolant flow"), t(FLOW[L.flow] || L.flow || "—") + (L.guard ? " · " + t("guard 11 V") : ""), "flow-" + L.flow],
-                              [t("Temperature (tier)"), temp]])
+                              [t("Temperature (curve)"), temp]])
     dl.append(h("dt", {}, k), h("dd", { class: cls || "" }, v));
   box.append(dl);
   if (["auto", "ec"].includes(c.mode) && (L.pending || L.pump_idle))
@@ -1088,21 +1088,24 @@ function renderInfo() {
 
 
 // ---------------------------------------------------------------- liquid cooling
+// first row: modes that compute the speeds; second row: fixed presets (from high to off)
 const LC_MODES = [
-  { id: "auto", name: "Automatic", desc: "Fan and pump follow the CPU/GPU temperature." },
-  { id: "laptop", name: "Follow the laptop", desc: "Office 40 %, Gaming 60 %, Turbo and Custom 90 %; pump 11 V." },
-  { id: "ec", name: "Controller", desc: "Targets published by the laptop's EC (as in the original software)." },
-  { id: "low", name: "Low", desc: "Fan 25 %, pump 7 V. Quiet." },
-  { id: "medium", name: "Medium", desc: "Fan 50 %, pump 8 V." },
-  { id: "high", name: "High", desc: "Fan 90 %, pump 11 V. Maximum cooling." },
-  { id: "manual", name: "Manual", desc: "Set fan speed and pump voltage yourself." },
-  { id: "off", name: "Off", desc: "Fan and pump stopped, lighting stays." },
+  { id: "auto", row: 1, name: "Automatic", desc: "Fan and pump follow the curves by the CPU/GPU temperature." },
+  { id: "laptop", row: 1, name: "Follow the laptop", desc: "The common curve or the own curve of the laptop's mode (Office, Gaming, Turbo, Custom)." },
+  { id: "ec", row: 1, name: "Controller", desc: "Targets published by the laptop's EC (as in the original software)." },
+  { id: "manual", row: 1, name: "Manual", desc: "Set fan speed and pump voltage yourself." },
+  { id: "high", row: 2, name: "High", desc: "Fan 90 %, pump 11 V. Maximum cooling." },
+  { id: "medium", row: 2, name: "Medium", desc: "Fan 50 %, pump 8 V." },
+  { id: "low", row: 2, name: "Low", desc: "Fan 25 %, pump 7 V. Quiet." },
+  { id: "off", row: 2, name: "Off", desc: "Fan and pump stopped, lighting stays." },
 ];
+const LC_CURVE_NAME = { common: "Common", office: "Office", gaming: "Gaming", turbo: "Turbo", custom: "Custom" };
+const LC_PROFILE_NAME = { quiet: "Quiet", balanced: "Balanced", performance: "Performance" };
 const LC_FX = { static: "Static", breathe: "Breathe", rainbow: "Rainbow", breathe_rainbow: "Breathing rainbow",
   spiral: "Spiral", rotating_rainbow: "Rotating rainbow", color_wave: "Colour wave" };
 const LC_COLORS = [[255, 0, 0], [255, 96, 0], [255, 200, 0], [0, 255, 0], [0, 128, 0], [0, 255, 255], [0, 80, 255], [160, 0, 255], [255, 0, 160], [255, 255, 255]];
 const FLOW = { ok: "Normal", fault: "No flow!", starting: "Starting…", unknown: "Unknown", idle: "Pump stopped", priming: "Filling…" };
-let lcTiers = null, lcScanning = false;
+let lcScanning = false, lcTab = "common", lcDrag = null;
 function rgbHex(c) { return "#" + c.map(x => x.toString(16).padStart(2, "0")).join(""); }
 function lcPost(op, body, ok) { return act(() => api("lc/" + op, body || {}), ok); }
 
@@ -1152,9 +1155,9 @@ function renderLiquid() {
   live.append(kpi(t("Cooler fan"), L.connected && L.fan != null ? `${L.fan}%` : "—"),
     kpi(t("Pump"), L.connected && L.pump != null ? (L.pump ? `${L.pump} V` : t("off")) : "—"),
     kpi(t("Coolant flow"), L.connected ? t(FLOW[L.flow] || L.flow) + (L.guard ? " · " + t("guard 11 V") : "") : "—", L.connected ? "flow-" + L.flow : ""),
-    kpi(c.mode === "ec" && L.ec_target ? t("Source") : t("Temperature (tier)"),
-      c.mode === "ec" && L.ec_target ? t("EC targets") : L.temp != null ? `${L.temp_avg ?? L.temp}°C${L.tier != null && ["auto", "ec"].includes(c.mode) ? ` (${L.tier + 1})` : ""}` : "—"));
-  if (L.connected && ["auto", "ec"].includes(c.mode) && (L.pending || L.pump_idle))
+    kpi(c.mode === "ec" && L.ec_target ? t("Source") : t("Temperature (curve)"),
+      c.mode === "ec" && L.ec_target ? t("EC targets") : L.temp != null ? `${L.temp_avg ?? L.temp}°C${L.curve_key && ["auto", "laptop", "ec"].includes(c.mode) ? ` · ${t(LC_CURVE_NAME[L.curve_key] || L.curve_key)}` : ""}` : "—"));
+  if (L.connected && ["auto", "laptop", "ec"].includes(c.mode) && (L.pending || L.pump_idle))
     live.append(h("p", { class: "muted tiny", style: "grid-column:1/-1;margin:0" },
       [L.pending ? t(L.pending.dir === "up" ? "Faster in {0} s if the temperature holds" : "Slower in {0} s if the temperature holds", L.pending.left) : "",
        L.pump_idle ? t("Pump stopped: cool") : ""].filter(Boolean).join(" · ")));
@@ -1162,15 +1165,15 @@ function renderLiquid() {
   const mb = $("#lc-modes"); mb.innerHTML = "";
   for (const m of LC_MODES) {
     if (m.id === "ec" && !L.ec_table) continue;
-    mb.append(h("div", { class: "choice" + (c.mode === m.id ? " on" : ""), onclick: () => lcPost("config", { mode: m.id }) }, h("h4", {}, t(m.name)), h("p", {}, t(m.desc))));
+    mb.append(h("div", { class: "choice" + (c.mode === m.id ? " on" : ""), style: `grid-row:${m.row}`, onclick: () => lcPost("config", { mode: m.id }) }, h("h4", {}, t(m.name)), h("p", {}, t(m.desc))));
   }
   $("#lc-manual").classList.toggle("hidden", c.mode !== "manual");
   $("#lc-fan").value = c.fan; $("#lc-fan").nextElementSibling.textContent = c.fan + "%";
   $("#lc-pump").value = c.pump;
-  // tiers
-  $("#lc-tiers-card").classList.toggle("hidden", !["auto", "ec"].includes(c.mode));
-  if (!lcTiers) lcTiers = JSON.parse(JSON.stringify(c.tiers));
-  if (!$("#lc-tiers-card").contains(document.activeElement) || document.activeElement.tagName === "BUTTON") drawTiers(L);   // not while typing
+  // curves (Automatic, Follow the laptop; Controller falls back to the common curve)
+  $("#lc-curves-card").classList.toggle("hidden", !["auto", "laptop", "ec"].includes(c.mode));
+  if (!lcDrag) drawCurves(L);
+  if (!$("#lc-calm").contains(document.activeElement)) drawCalm(L);
   // lighting
   $("#lc-rgb-on").checked = !!c.rgb.on;
   const fx = $("#lc-fx"); fx.innerHTML = "";
@@ -1201,18 +1204,176 @@ function renderLiquid() {
     : reason;
   $("#lc-notify").checked = !!c.notify_flow; $("#lc-bfan").checked = !!c.boost_fan; $("#lc-bpump").checked = !!c.boost_pump;
 }
-function drawTiers(L) {
-  const tb = $("#lc-tiers"); tb.innerHTML = "";
-  const n = lcTiers.length;
-  const head = h("tr", {}, h("th", {}, t("Tier")), ...lcTiers.map((_, i) => h("th", { class: L && L.tier === i && ["auto", "ec"].includes(L.config.mode) && L.connected ? "cur" : "" }, i + 1)));
-  const row = (label, key, build) => h("tr", {}, h("th", {}, label), ...lcTiers.map((tr, i) => h("td", {}, build(tr, i))));
-  const num = (tr, key, min, max) => { const e = h("input", { type: "number", min, max, value: tr[key] }); e.addEventListener("change", () => { tr[key] = +e.value; }); return e; };
-  tb.append(head,
-    row(t("Below, °C"), "below", (tr, i) => i === n - 1 ? h("span", { class: "muted" }, "∞") : num(tr, "below", 20, 110)),
-    row(t("Fan, %"), "fan", tr => num(tr, "fan", 0, 100)),
-    row(t("Pump, V"), "pump", tr => { const e = h("select", {}, ...[0, 7, 8, 11, 12].map(v => { const o = h("option", { value: v }, v ? v : t("Off")); if (tr.pump === v) o.selected = true; return o; })); e.addEventListener("change", () => { tr.pump = +e.value; }); return e; }));
-  drawCalm(L);
+// ---- curve editors: fan curve (points, linear) and pump steps (7 / 8 / 11 V)
+const LCX0 = 20, LCX1 = 100;                                   // temperature axis, °C
+function lcCurrentLaptopKey() { return ({ 0: "office", 1: "gaming", 2: "turbo", 3: "custom" })[S.power && S.power.mode]; }
+function lcSet(L, key) { const cs = L.curves[key]; return cs || L.curves.common; }
+function lcPostCurve(key, set) { return act(() => api("lc/config", { curves: { [key]: set } })); }
+function drawCurves(L) {
+  const c = L.config, laptop = c.mode === "laptop";
+  if (!laptop || !L.curve_keys.includes(lcTab)) lcTab = laptop ? lcTab : "common";
+  // profile row
+  const sel = $("#lc-prof"); sel.innerHTML = "";
+  if (!L.profile) sel.append(h("option", { value: "" }, t("— own settings —")));
+  for (const p of L.profiles) {
+    const nm = p.builtin ? t(LC_PROFILE_NAME[p.id] || p.name) : p.name;
+    const o = h("option", { value: p.id }, nm + (p.id === L.profile && L.profile_modified ? " · " + t("changed") : ""));
+    if (p.id === L.profile) o.selected = true; sel.append(o);
+  }
+  const cur = L.profiles.find(p => p.id === sel.value);
+  $("#lc-prof-save").disabled = !cur || cur.builtin; $("#lc-prof-remove").disabled = !cur || cur.builtin;
+  $("#lc-prof-apply").disabled = !cur;
+  // tabs (Follow the laptop)
+  const tabs = $("#lc-curve-tabs"); tabs.classList.toggle("hidden", !laptop); tabs.innerHTML = "";
+  const now = lcCurrentLaptopKey();
+  if (laptop) for (const k of L.curve_keys) tabs.append(h("button", { class: k === lcTab ? "on" : "", onclick: () => { lcTab = k; drawCurves(S.liquid); } },
+    t(LC_CURVE_NAME[k]) + (k === now ? " ●" : "") + (k !== "common" && L.curves[k] ? " ✎" : "")));
+  const own = laptop && lcTab !== "common";
+  $("#lc-own-row").classList.toggle("hidden", !own);
+  $("#lc-own").checked = own && !!L.curves[lcTab];
+  $("#lc-own-label").textContent = t("Own curve for the mode “{0}” (otherwise the common curve)", t(LC_CURVE_NAME[lcTab] || lcTab));
+  $("#lc-curves-title").textContent = laptop ? t("Curves — Follow the laptop") : c.mode === "ec" ? t("Curves — used when the EC publishes no targets") : t("Curves — Automatic");
+  $("#lc-curves-hint").textContent = laptop ? t("The cooler uses the curve of the laptop's current mode (●) if it has its own (✎), otherwise the common curve. The common curve is also the curve of the Automatic mode.")
+    : t("The fan follows the curve between its points; the pump switches at the temperature of each step and goes down only 3 °C below it.");
+  const key = own && L.curves[lcTab] ? lcTab : "common";
+  const set = JSON.parse(JSON.stringify(lcSet(L, key)));
+  const readonly = own && !L.curves[lcTab];
+  const active = L.connected && ["auto", "laptop", "ec"].includes(c.mode) && L.curve_key === key ? L : null;
+  const ed = $("#lc-editors"); ed.innerHTML = "";
+  ed.append(lcFanEditor(set, key, readonly, active), lcPumpEditor(set, key, readonly, active));
+  $("#lc-flat").disabled = readonly;
+  $("#lc-flat").onclick = () => {
+    const v = prompt(t("Fan duty for the whole curve, %"), String(set.fan[set.fan.length - 1][1]));
+    if (v === null) return; const n = Math.max(0, Math.min(100, parseInt(v, 10) || 0));
+    lcPostCurve(key, { fan: [[LCX0, n], [LCX1, n]], pump: set.pump });
+  };
 }
+$("#lc-own").addEventListener("change", e => {
+  const L = S.liquid; lcPostCurve(lcTab, e.target.checked ? JSON.parse(JSON.stringify(L.curves.common)) : null);
+});
+function lcSvg(w, hgt) { const e = document.createElementNS("http://www.w3.org/2000/svg", "svg"); e.setAttribute("viewBox", `0 0 ${w} ${hgt}`); e.setAttribute("class", "lc-curve"); return e; }
+function lcEl(tag, attrs, text) { const e = document.createElementNS("http://www.w3.org/2000/svg", tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); if (text != null) e.textContent = text; return e; }
+function lcAxes(svg, P, yTicks, yLabel, xLabel) {
+  for (let x = LCX0; x <= LCX1; x += 10) {
+    const px = P.x(x); svg.append(lcEl("line", { x1: px, x2: px, y1: P.top, y2: P.bot, class: "grid" }), lcEl("text", { x: px, y: P.bot + 16, class: "tick", "text-anchor": "middle" }, `${x}°`));
+  }
+  for (const [v, lab] of yTicks) { const py = P.y(v); svg.append(lcEl("line", { x1: P.left, x2: P.right, y1: py, y2: py, class: "grid" }), lcEl("text", { x: P.left - 6, y: py + 4, class: "tick", "text-anchor": "end" }, lab)); }
+  svg.append(lcEl("text", { x: P.left, y: P.top - 8, class: "ttl" }, yLabel));
+  svg.append(lcEl("text", { x: P.right, y: P.bot + 32, class: "tick", "text-anchor": "end" }, xLabel));
+}
+function lcCross(svg, P, temp, yv, label) {
+  if (temp == null) return;
+  const px = P.x(Math.max(LCX0, Math.min(LCX1, temp)));
+  svg.append(lcEl("line", { x1: px, x2: px, y1: P.top, y2: P.bot, class: "cross" }));
+  if (yv != null) { const py = P.y(yv); svg.append(lcEl("line", { x1: P.left, x2: P.right, y1: py, y2: py, class: "cross" }), lcEl("circle", { cx: px, cy: py, r: 4, class: "crossdot" })); }
+  svg.append(lcEl("text", { x: px + 4, y: P.top + 12, class: "crosslbl" }, label));
+}
+function lcPlot(w, hgt, ymin, ymax) {
+  const P = { left: 46, right: w - 14, top: 26, bot: hgt - 38 };
+  P.x = tc => P.left + (tc - LCX0) / (LCX1 - LCX0) * (P.right - P.left);
+  P.y = v => P.bot - (v - ymin) / (ymax - ymin) * (P.bot - P.top);
+  P.tx = px => Math.round(LCX0 + (px - P.left) / (P.right - P.left) * (LCX1 - LCX0));
+  P.vy = py => ymin + (P.bot - py) / (P.bot - P.top) * (ymax - ymin);
+  return P;
+}
+function lcPointer(svg, e) { const r = svg.getBoundingClientRect(), vb = svg.viewBox.baseVal; return [(e.clientX - r.left) / r.width * vb.width, (e.clientY - r.top) / r.height * vb.height]; }
+function lcFanEditor(set, key, readonly, L) {
+  const W = 900, H = 260, P = lcPlot(W, H, 0, 100), svg = lcSvg(W, H), pts = set.fan;
+  lcAxes(svg, P, [[0, "0%"], [25, "25%"], [50, "50%"], [75, "75%"], [100, "100%"]], t("Cooler fan, %"), t("Temperature, °C"));
+  const path = lcEl("polyline", { class: "curve" + (readonly ? " ro" : "") }); svg.append(path);
+  const dots = lcEl("g", {}); svg.append(dots);
+  const redraw = () => {
+    const xs = [[LCX0, pts[0][1]], ...pts.map(p => [Math.max(LCX0, p[0]), p[1]]), [LCX1, pts[pts.length - 1][1]]];
+    path.setAttribute("points", xs.map(([a, b]) => `${P.x(a)},${P.y(b)}`).join(" "));
+    dots.innerHTML = "";
+    pts.forEach((p, i) => {
+      const d = lcEl("circle", { cx: P.x(Math.max(LCX0, p[0])), cy: P.y(p[1]), r: 6, class: "pt" + (readonly ? " ro" : "") });
+      d.append(lcEl("title", {}, `${p[0]} °C · ${p[1]} %`));
+      if (!readonly) {
+        d.addEventListener("pointerdown", ev => { ev.preventDefault(); d.setPointerCapture(ev.pointerId); lcDrag = { i }; });
+        d.addEventListener("pointermove", ev => {
+          if (!lcDrag || lcDrag.i !== i) return;
+          const [mx, my] = lcPointer(svg, ev);
+          const lo = i ? pts[i - 1][0] + 1 : LCX0, hi = i < pts.length - 1 ? pts[i + 1][0] - 1 : LCX1;
+          const dlo = i ? pts[i - 1][1] : 0, dhi = i < pts.length - 1 ? pts[i + 1][1] : 100;
+          p[0] = Math.max(lo, Math.min(hi, P.tx(mx))); p[1] = Math.max(dlo, Math.min(dhi, Math.round(P.vy(my))));
+          redraw();
+        });
+        d.addEventListener("pointerup", () => { if (lcDrag) { lcDrag = null; lcPostCurve(key, set); } });
+        d.addEventListener("dblclick", ev => { ev.stopPropagation(); if (pts.length > 2) { pts.splice(i, 1); lcPostCurve(key, set); } });
+      }
+      dots.append(d);
+    });
+  };
+  redraw();
+  if (!readonly) svg.addEventListener("dblclick", ev => {
+    if (pts.length >= S.liquid.max_fan_points) return toast(t("At most {0} points", S.liquid.max_fan_points), true);
+    const [mx] = lcPointer(svg, ev); const tc = Math.max(LCX0, Math.min(LCX1, P.tx(mx)));
+    if (pts.some(p => p[0] === tc)) return;
+    const k = pts.findIndex(p => p[0] > tc), ins = k < 0 ? pts.length : k;
+    const prev = pts[ins - 1], next = pts[ins];
+    const duty = prev && next ? Math.round(prev[1] + (next[1] - prev[1]) * (tc - prev[0]) / (next[0] - prev[0])) : (prev || next)[1];
+    pts.splice(ins, 0, [tc, duty]); lcPostCurve(key, set);
+  });
+  if (L && L.temp_avg != null) lcCross(svg, P, L.temp_avg, L.curve_raw ? L.curve_raw[0] : L.fan, `${L.temp_avg}°C · ${L.curve_raw ? L.curve_raw[0] : L.fan}%`);
+  return h("div", { class: "lc-ed" }, svg);
+}
+function lcPumpEditor(set, key, readonly, L) {
+  const W = 900, H = 180, lv = S.liquid.pump_levels, P = lcPlot(W, H, 0, lv.length - 1), svg = lcSvg(W, H), st = set.pump;
+  const yi = v => lv.indexOf(v);
+  lcAxes(svg, P, lv.map((v, i) => [i, `${v} V`]), t("Pump, V"), t("Temperature, °C"));
+  const path = lcEl("polyline", { class: "curve pump" + (readonly ? " ro" : "") }); svg.append(path);
+  const dots = lcEl("g", {}); svg.append(dots);
+  const redraw = () => {
+    const xs = [];
+    st.forEach((s0, i) => {
+      const x0 = i === 0 ? LCX0 : Math.max(LCX0, s0[0]), x1 = i < st.length - 1 ? Math.max(LCX0, st[i + 1][0]) : LCX1;
+      if (i) xs.push([x0, yi(st[i - 1][1])]);
+      xs.push([x0, yi(s0[1])], [x1, yi(s0[1])]);
+    });
+    path.setAttribute("points", xs.map(([a, b]) => `${P.x(a)},${P.y(b)}`).join(" "));
+    dots.innerHTML = "";
+    st.forEach((s0, i) => {
+      const d = lcEl("circle", { cx: P.x(i === 0 ? LCX0 : Math.max(LCX0, s0[0])), cy: P.y(yi(s0[1])), r: 6, class: "pt" + (readonly ? " ro" : "") });
+      d.append(lcEl("title", {}, i === 0 ? `${t("from the start")} · ${s0[1]} V` : `${t("from")} ${s0[0]} °C · ${s0[1]} V`));
+      if (i) dots.append(lcEl("text", { x: P.x(Math.max(LCX0, s0[0])) - 4, y: P.y(yi(s0[1])) - 9, class: "tick", "text-anchor": "end" }, `${s0[0]}°`));
+      if (!readonly) {
+        d.addEventListener("pointerdown", ev => { ev.preventDefault(); d.setPointerCapture(ev.pointerId); lcDrag = { i }; });
+        d.addEventListener("pointermove", ev => {
+          if (!lcDrag || lcDrag.i !== i) return;
+          const [mx, my] = lcPointer(svg, ev);
+          if (i) { const lo = st[i - 1][0] + 1, hi = i < st.length - 1 ? st[i + 1][0] - 1 : LCX1; s0[0] = Math.max(lo, Math.min(hi, P.tx(mx))); }
+          const vlo = i ? yi(st[i - 1][1]) : 0, vhi = i < st.length - 1 ? yi(st[i + 1][1]) : lv.length - 1;
+          s0[1] = lv[Math.max(vlo, Math.min(vhi, Math.round(P.vy(my))))];
+          redraw();
+        });
+        d.addEventListener("pointerup", () => { if (lcDrag) { lcDrag = null; lcPostCurve(key, set); } });
+        d.addEventListener("dblclick", ev => { ev.stopPropagation(); if (i && st.length > 1) { st.splice(i, 1); lcPostCurve(key, set); } });
+      }
+      dots.append(d);
+    });
+  };
+  redraw();
+  if (!readonly) svg.addEventListener("dblclick", ev => {
+    if (st.length >= S.liquid.max_pump_steps) return toast(t("At most {0} steps", S.liquid.max_pump_steps), true);
+    const [mx] = lcPointer(svg, ev); const tc = Math.max(LCX0 + 1, Math.min(LCX1, P.tx(mx)));
+    if (st.some(s0 => s0[0] === tc)) return;
+    const k = st.findIndex(s0 => s0[0] > tc), ins = k < 0 ? st.length : k;
+    const prevV = st[ins - 1][1], nextV = st[ins] ? st[ins][1] : lv[lv.length - 1];
+    const v = lv[Math.min(yi(nextV), yi(prevV) + 1)];
+    st.splice(ins, 0, [tc, v]); lcPostCurve(key, set);
+  });
+  if (L && L.temp_avg != null) lcCross(svg, P, L.temp_avg, L.pump ? yi(L.pump) : null, `${L.temp_avg}°C · ${L.pump ? L.pump + " V" : t("off")}`);
+  return h("div", { class: "lc-ed" }, svg);
+}
+$("#lc-prof").addEventListener("change", () => drawCurves(S.liquid));
+const lcProf = (action, extra, ok) => lcPost("profile", { action, id: $("#lc-prof").value, ...(extra || {}) }, ok);
+$("#lc-prof-apply").addEventListener("click", () => lcProf("apply", {}, t("Profile applied")));
+$("#lc-prof-save").addEventListener("click", () => lcProf("save", {}, t("Saved")));
+$("#lc-prof-copy").addEventListener("click", () => {
+  const n = prompt(t("Name of the new cooler profile"), ""); if (n && n.trim()) lcProf("copy", { name: n.trim() }, t("Profile saved"));
+});
+$("#lc-prof-remove").addEventListener("click", () => { if (confirm(t("Remove this cooler profile?"))) lcProf("remove", {}, t("Removed")); });
 // delays, smoothing, temperature source, pump stop when cool (auto / Controller modes)
 let lcCalm = null;
 function drawCalm(L) {
@@ -1237,11 +1398,11 @@ function drawCalm(L) {
   box.append(
     h("h4", {}, t("Behaviour")),
     line(t("Temperature"), src, h("span", { class: "muted tiny" }, t("GPU only: while the graphics card sleeps, the CPU is used"))),
-    line(t("Raise the speed after"), num(k, "delay_up", 0, 300, t("s")), h("span", { class: "muted tiny" }, t("at once from 95 °C or 8 °C above the tier"))),
+    line(t("Raise the speed after"), num(k, "delay_up", 0, 300, t("s")), h("span", { class: "muted tiny" }, t("at once from 95 °C or when the curve asks 25 % more"))),
     line(t("Lower the speed after"), num(k, "delay_down", 0, 300, t("s"))),
     chk(k, "smooth", t("Smooth: average the temperature over 10 s, change the fan by 10 % and the pump by one voltage step at a time")),
     h("h4", {}, t("Stop the pump when it is cool")),
-    chk(pi, "enabled", t("Stop the pump at low load (the cooler fan keeps following the tiers)"), () => drawCalm(L)));
+    chk(pi, "enabled", t("Stop the pump at low load (the cooler fan keeps following the curve)"), () => drawCalm(L)));
   if (pi.enabled) box.append(
     line(t("Stop below"), num(pi, "off_below", 30, 85, "°C"), h("span", { class: "muted" }, t("for")), num(pi, "off_after", 10, 900, t("s"))),
     line(t("Start again above"), num(pi, "on_above", 32, 95, "°C"), h("span", { class: "muted" }, t("for")), num(pi, "on_after", 0, 120, t("s"))),
@@ -1263,13 +1424,12 @@ $("#lc-pump").addEventListener("change", e => {
   if (v === 0 && !confirm(t("Stop the pump? The coolant will not circulate."))) { e.target.value = S.liquid.config.pump; return; }
   lcPost("config", { mode: "manual", pump: v });
 });
-$("#lc-tiers-save").addEventListener("click", () => act(async () => {
-  await api("lc/config", { tiers: lcTiers, ...(lcCalm || {}) }); lcTiers = null; lcCalm = null;
+$("#lc-calm-save").addEventListener("click", () => act(async () => {
+  await api("lc/config", { ...(lcCalm || {}) }); lcCalm = null;
 }, t("Saved")));
-$("#lc-tiers-reset").addEventListener("click", () => {
-  lcTiers = JSON.parse(JSON.stringify(S.liquid.default_tiers));
+$("#lc-calm-reset").addEventListener("click", () => {
   lcCalm = { temp_source: "max", delay_up: 10, delay_down: 30, smooth: true, pump_idle: { ...(S.liquid.config.pump_idle || {}), enabled: false } };
-  drawTiers(S.liquid);
+  drawCalm(S.liquid);
 });
 $("#lc-rgb-on").addEventListener("change", e => lcPost("config", { rgb: { on: e.target.checked } }));
 $("#lc-color").addEventListener("change", e => lcPost("config", { rgb: { on: true, color: hex2rgb(e.target.value) } }));

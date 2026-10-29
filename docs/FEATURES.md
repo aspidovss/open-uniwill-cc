@@ -72,26 +72,34 @@ the system sleeps the cooler is put to sleep. Needs `python3-bleak` (installed b
 
 | Feature | How |
 |---|---|
-| Modes: Automatic (CPU/GPU temperature tiers with 3 °C hysteresis), Controller (EC targets), Low 25 %/7 V, Medium 50 %/8 V, High 90 %/11 V, Manual, Off | fan `0x1B`, pump `0x1C` |
-| Editable temperature tiers (default <55 °C 25 %/7 V, <70 °C 50 %/8 V, <85 °C 75 %/11 V, above 90 %/11 V) | |
+| Modes, first row: **Automatic** (curves by CPU/GPU temperature), **Follow the laptop** (curve of the laptop's mode), **Controller** (EC targets), **Manual**; second row: High 90 %/11 V, Medium 50 %/8 V, Low 25 %/7 V, Off | fan `0x1B`, pump `0x1C` |
+| **Curves** (1.6.8): a fan curve (2..17 points, linear between them) and pump steps (7 / 8 / 11 V, down only 3 °C below a step), edited by dragging; the current temperature and value are shown as a crosshair. One **common** curve (Automatic, and Follow the laptop for modes without their own); in Follow the laptop each mode — Office, Gaming, Turbo, Custom — can have **its own curve**; a change of the laptop's mode switches the curve at once (the fan still ramps) | |
+| **Cooler profiles**: Quiet, Balanced, Performance and your own (Apply / Save / Copy / Remove) — a profile holds the common and the per-mode curves | |
 | Lighting: static, breathing, rainbow, breathing rainbow; Mk2 also spiral, rotating rainbow, colour wave | `0x1E` / `0x33` |
 | Coolant flow check every 15 s with a desktop alert when the pump runs but nothing circulates | `0x32` |
 | Coolant filling cycle (8 pump pulses, ~70 s) | `0x19` |
 | Fn cooler boost keys (fan ≥ 60 %, pump ≥ 8 V); EC told that a cooler is attached (`0x7C7` bit 1) on laptops that declare support | WMI `0xCD`/`0xCE` |
-| **Follow the laptop** mode: Office 40 %, Gaming 60 %, Turbo/Custom 90 %, pump 11 V | |
 | **Flow guard:** with no coolant flow the pump goes to 11 V and the fan to ≥ 60 % until the laptop's mode changes or you pick a setting | |
 
 ```bash
 uwccctl lc scan                      # find coolers
 uwccctl lc connect C0:FF:EE:..:..:.. # connect and remember
-uwccctl lc mode auto                 # auto | ec | low | medium | high | off
+uwccctl lc mode auto                 # auto | laptop | ec | manual | high | medium | low | off
 uwccctl lc manual 60 8               # fan 60 %, pump 8 V
+uwccctl lc curve common fan 40:25 60:45 80:80 95:100 pump 0:8 70:11
+uwccctl lc curve turbo flat 90       # Follow the laptop: Turbo at 90 %;  uwccctl lc curve turbo off
+uwccctl lc profile apply quiet       # cooler profiles: list | apply | save | copy NAME | remove | rename
 uwccctl lc rgb 00ffff breathe        # colour and effect;  uwccctl lc rgb off
 uwccctl lc prime                     # filling cycle
 ```
 
-The automatic tiers start at 8 V: on some units the flow does not hold at 7 V and the cooler switches itself off
-(the OEM service never goes below 8 V either). Low (7 V) is still available by hand.
+The built-in curves start at 8 V: on some units the flow does not hold at 7 V and the cooler switches itself off
+(the OEM service never goes below 8 V either). 7 V is still available on a curve and by hand. A curve never stops the
+pump and has no 12 V: the pump stops only with *Stop the pump when it is cool* (with its minimum run time).
+
+**Update from 1.6.7 or older:** the temperature tiers become the common curve with the same behaviour, and the old
+fixed duties of *Follow the laptop* (Office 40 %, Gaming 60 %, Turbo / Custom 90 %, pump 11 V) become flat curves of
+those modes. A new install starts with the Balanced profile and no per-mode curves.
 
 **Cooler firmware.** open-uniwill-cc shows the cooler firmware version but does not flash it: a failed DFU update can
 leave the cooler unusable. Use the vendor tool or nRF Connect with the right package if you really need an update.

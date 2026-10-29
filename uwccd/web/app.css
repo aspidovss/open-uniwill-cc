@@ -337,3 +337,20 @@ pre.code{margin:0;padding:10px 12px;background:var(--bg0);border:1px solid var(-
 #page-clevo .card.locked .clevo-cmd{opacity:.45;pointer-events:none}
 .clevo-row input[type=range]{flex:1;min-width:180px;max-width:420px;width:auto;margin:0}
 .clevo-row output{min-width:44px}
+/* liquid cooler curves (1.6.8) */
+.lc-editors{display:grid;grid-template-columns:1fr;gap:8px;margin-top:8px}
+.lc-ed{background:var(--bg1);border:1px solid var(--line);border-radius:10px;padding:4px}
+svg.lc-curve{width:100%;height:auto;display:block;touch-action:none;user-select:none}
+svg.lc-curve .grid{stroke:var(--line);stroke-width:1}
+svg.lc-curve .tick{fill:var(--muted);font-size:11px}
+svg.lc-curve .ttl{fill:var(--muted);font-size:12px;font-weight:600}
+svg.lc-curve .curve{fill:none;stroke:var(--acc);stroke-width:2.5}
+svg.lc-curve .curve.pump{stroke:#5aa9ff}
+svg.lc-curve .curve.ro{stroke:var(--muted);stroke-dasharray:5 4}
+svg.lc-curve .pt{fill:#e8eef3;stroke:var(--acc);stroke-width:2;cursor:grab}
+svg.lc-curve .pt.ro{cursor:default;stroke:var(--muted)}
+svg.lc-curve .cross{stroke:#ff6b4a;stroke-width:1.2;stroke-dasharray:4 3}
+svg.lc-curve .crossdot{fill:#ff6b4a}
+svg.lc-curve .crosslbl{fill:#ff6b4a;font-size:11px;font-weight:600}
+.lc-prof select{min-width:180px}
+#lc-curve-tabs{margin:8px 0 4px}
