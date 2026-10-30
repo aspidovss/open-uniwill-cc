@@ -806,6 +806,8 @@ def fx_val(v):
     if isinstance(v, bool):
         return "on" if v else "off"
     if isinstance(v, list):
+        if v and isinstance(v[0], dict) and "temp" in v[0]:
+            return ",".join(f"{p['temp']}:{hexrgb(p['color'])}" for p in v)
         return ",".join(hexrgb(c) for c in v)
     return str(v)
 
@@ -839,6 +841,14 @@ def fx_params(spec, pairs):
             if val not in q["options"]:
                 fail(f"{T('error')}: {key}: {' | '.join(q['options'])}", 2)
             out[key] = val
+        elif q["kind"] == "temperature_points":
+            points = []
+            for item in val.split(","):
+                if ":" not in item:
+                    fail(f"{T('error')}: {key}: TEMP:RRGGBB,...", 2)
+                temp, color = item.split(":", 1)
+                points.append({"temp": num(temp, "kb"), "color": rgb(color, "kb")})
+            out[key] = points
         else:
             out[key] = [rgb(c, "kb") for c in val.split(",")]
     return out
@@ -848,6 +858,7 @@ def fx_text(k):
     lines = []
     for i, e in (k.get("fx_effects") or {}).items():
         ps = " ".join(f"{q['key']}=" + ("|".join(q["options"]) if q["kind"] == "choice" else
+                                        "TEMP:RRGGBB,..." if q["kind"] == "temperature_points" else
                                         "on|off" if q["kind"] == "bool" else "RRGGBB,..." if q["kind"] == "colors" else
                                         f"{q['min']}-{q['max']}") for q in e["params"])
         needs = f"  [needs {', '.join(e['needs'])}]" if e["needs"] else ""

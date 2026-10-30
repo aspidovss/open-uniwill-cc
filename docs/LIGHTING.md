@@ -49,8 +49,44 @@ colours flowing over the zones.
 | Current | speed, width, three colours | |
 | Reactive current | speed, width, three colours | key presses |
 | Screen ambient | blur, response | the screen |
+| CPU / GPU temperature | left sensor, colour curves with 2–15 points per sensor, colour smoothing | monitoring |
 
 Brightness is the usual *Brightness* slider (0–4).
+
+### CPU / GPU temperature
+
+The left and right halves each show one solid colour for their sensor. Choose **CPU** or **GPU** for the left
+half; the other sensor goes on the right. Per-key keyboards split after column 10 of the controller's 21-column
+grid (the physical key positions vary by model). Four-zone keyboards show the usual zone averages, so a zone
+crossing the split blends both sensors.
+
+CPU and GPU have separate curve cards. Each curve has **2–15 points**, each with a temperature (integer °C,
+0–120) and any RGB colour. Drag a point horizontally, or select it and edit its temperature and colour below
+the chart. Click the colour band or **Add point** to insert a point; **Remove point** keeps at least two.
+Points cannot cross or share the same temperature. The dashed marker shows the current reading. **Reset curve**
+restores only that sensor's default **15-colour cyan-to-red palette over 40–85 °C**, identical for CPU and GPU.
+Default point temperatures (even spacing, rounded to integer °C):
+
+`40, 43, 46, 50, 53, 56, 59, 62, 66, 69, 72, 75, 79, 82, 85 °C`.
+
+Outside the curve the first/last colour is held. Between points colours blend in linear light. Adding a point
+samples that palette at its temperature. The API rejects malformed, equal, decreasing or more than 15 points.
+**Colour smoothing** (0–5000 ms, default 1000) is an exponential time constant: after that time the colour has
+covered about 63% of the distance to its target. Zero changes the colour immediately. It behaves the same at
+different frame rates. This setting is separate from the engine's start/stop transition time.
+
+Temperatures come from the existing monitoring sample; the effect never polls sensors itself. Full monitoring
+uses the configured interval; light monitoring updates every 20 s. A sample expires after three intervals
+(at least 5 s). Monitoring off, missing/invalid readings or expired samples **hold the last displayed colour**
+of the affected half until fresh data arrives. An interrupted smooth transition stays at its last displayed
+colour; it does not continue towards an old target. The other half keeps working independently. When readings
+resume, smoothing continues from the held colour. Before the first valid reading, the first colour of that
+sensor's curve is used. Current temperatures / **No temperature data** are shown in the effect settings;
+unavailable readings are not reported as current temperatures.
+The usual top-row bar, when enabled, overlays the temperature colours.
+
+On Windows the CPU reading is the program's existing ACPI thermal-zone temperature, which may differ from a
+CPU Package reading in another monitoring tool. GPU temperature uses the existing NVIDIA monitor.
 
 ### Key presses and the screen
 
@@ -99,6 +135,8 @@ come from the monitor, so they need monitoring on (*EC Manager → Monitoring*).
 ```bash
 uwccctl kb fx                                             # effects, parameters, settings
 uwccctl kb fx matrix style=lasers density=4 --light 3
+uwccctl kb fx 116 left=cpu smoothing_ms=1000              # default 15-point curves, both sensors 40–85 °C
+uwccctl kb fx 116 cpu_points=40:00B4FF,85:FF0000            # optional custom two-point CPU curve
 uwccctl kb fx static zones=4 layout=vertical colors=FF0000,00FF00,0000FF,FFFFFF
 uwccctl kb fx-config fps_battery=20 transition=snake_main_in_out transition_ms=1200
 uwccctl kb fx-config bar=battery bar_direction=center_to_edges bar_start=00FF50 bar_end=FF1400
@@ -106,8 +144,12 @@ uwccctl kb fx-calibrate start
 uwccctl kb fx-calibrate apply FFE8D0                      # the colour you see
 ```
 
-API: `POST /api/keyboard/effect {"effect": 100..115, "light": 0..4, "fx": {...}}`, `POST /api/keyboard/fx/config`,
+API: `POST /api/keyboard/effect {"effect": 100..116, "light": 0..4, "fx": {...}}`, `POST /api/keyboard/fx/config`,
 `POST /api/keyboard/fx/calibrate {"action": "start|apply|cancel|reset", "observed": [r, g, b]}`.
+
+Temperature effect parameters use `cpu_points` / `gpu_points`, each an ascending list such as
+`[{"temp":40,"color":[0,180,255]},{"temp":85,"color":[255,0,0]}]`, plus `left: "cpu"|"gpu"` and `smoothing_ms`.
+UI helper tests: `node --test tests/test_temperature_editor.js` (Node.js 18+; not required at runtime).
 
 ## Not taken over
 

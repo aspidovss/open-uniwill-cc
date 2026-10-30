@@ -740,7 +740,10 @@ class Handler(BaseHTTPRequestHandler):
                 try:
                     msg = q.get(timeout=1.5)
                 except queue.Empty:
-                    msg = json.dumps({"type": "monitor", "data": s.sampler.snapshot()}, default=str)
+                    sample = dict(s.sampler.snapshot())
+                    engine = s.keyboard.engine()
+                    sample["keyboard_fx"] = engine.info() if engine else None
+                    msg = json.dumps({"type": "monitor", "data": sample}, default=str)
                 self.wfile.write(f"data: {msg}\n\n".encode())
                 self.wfile.flush()
         except (BrokenPipeError, ConnectionResetError, OSError):

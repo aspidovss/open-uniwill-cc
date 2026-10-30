@@ -326,8 +326,8 @@ class Service:
             self.emit("setting", {"fn_lock": value, "osd": True})
 
     def _fx_metrics(self):
-        """battery charge, CPU and GPU load for the top-row bar of the BetterRGB effects (from the monitor sample;
-        CPU and GPU only while monitoring is on)"""
+        """BetterRGB bar levels and fresh CPU/GPU temperatures, from the shared sampler.
+        No extra sensor reads in the lighting loop; disabled monitoring supplies no temperatures."""
         m = self.sampler.latest or {}
         out = {}
         bat = m.get("battery")
@@ -342,6 +342,13 @@ class Service:
             out["cpu"] = m["cpu"]["usage"]
         if (m.get("gpu") or {}).get("usage") is not None:
             out["gpu"] = m["gpu"]["usage"]
+        level = self.monitor_level()
+        interval = self.sampler.LIGHT_S if level == "light" else self.sampler.current_interval()
+        sampled = m.get("t")
+        if (level != "off" and m.get("monitoring") == level and isinstance(sampled, (int, float))
+                and 0 <= time.time() - sampled <= max(5.0, 3.0 * interval)):
+            for sensor in ("cpu", "gpu"):
+                out[sensor + "_temp"] = (m.get(sensor) or {}).get("temp")
         return out
 
     # -- aggregated state for the UI ----------------------------------------------------------------

@@ -174,6 +174,10 @@ function gauge(label, value, unit, max, sub, color) {
 }
 function svgEl(markup) { const d = document.createElement("div"); d.innerHTML = markup; return d.firstChild; }
 function onMonitor(m) {
+  if (m.keyboard_fx !== undefined && S?.keyboard) {
+    S.keyboard.fx = m.keyboard_fx;
+    renderFxTemperature();
+  }
   if (m.monitoring && m.monitoring !== "full") { lastMonitor = null; renderMonOff(m.monitoring); return; }
   renderMonOff("full");
   const g = $("#gauges"); g.innerHTML = "";
@@ -746,7 +750,8 @@ const FX_LABEL = { speed: "Speed", smooth: "Smoothness", random: "Random colours
   color_count: "Number of colours", style: "Style", layout: "Layout", zones: "Zones", scale: "Scale", blur: "Blur",
   response: "Response" };
 const FX_CHOICE = { short: "short", medium: "medium", long: "long", streaks: "streaks", columns: "columns", lasers: "lasers",
-  ripples: "ripples", horizontal: "horizontal (rows)", vertical: "vertical (columns)" };
+  ripples: "ripples", horizontal: "horizontal (rows)", vertical: "vertical (columns)",
+  cpu: "CPU (GPU on the right)", gpu: "GPU (CPU on the right)" };
 const FX_TRANS = { off: "Off", fade: "Fade", ripple_center: "Ripple from the centre", ripple_edges: "Ripple from the edges",
   ripple_top: "Wipe from the top", ripple_bottom: "Wipe from the bottom", ripple_left: "Wipe from the left", ripple_right: "Wipe from the right",
   snake_main_out_in: "Twin spiral ↘, inwards", snake_main_in_out: "Twin spiral ↘, outwards", snake_anti_out_in: "Twin spiral ↙, inwards",
@@ -780,6 +785,7 @@ function renderFx(k) {
   renderFxEngine(k);
 }
 function drawFxParams(k) {
+  const temperatureFocus = kbSel.effect === 116 ? document.activeElement?.getAttribute("data-temp-focus") : null;
   const c = k.fx_effects[kbSel.effect];
   const p = kbSel.fx = { ...fxDefaults(kbSel.effect), ...(kbSel.fx || {}) };
   const box = $("#fx-params"); box.innerHTML = "";
@@ -788,10 +794,19 @@ function drawFxParams(k) {
       : t("Reacts to key presses: the service reads them from the keyboard while this effect runs (nothing is stored)."))
     : c.needs.includes("screen") ? (S.platform.os === "windows" ? t("Follows the screen: the tray program sends a 64×24 picture of the main screen 15 times a second while this effect runs (it is not stored).")
       : t("Follows the screen: the session agent sends a 64×24 picture of the screen while this effect runs (X11 only; not on Wayland; it is not stored)."))
-    : "";
+    : kbSel.effect === 116 ? t("Set a colour curve for each sensor. Missing or stale readings keep the last colour until fresh data arrives. Before the first reading, the first curve colour is used.") : "";
   needs.textContent = note; needs.classList.toggle("hidden", !note);
   if (k.four_zone) { needs.textContent = (note ? note + " " : "") + t("On a four-zone keyboard each zone shows the average of its keys."); needs.classList.remove("hidden"); }
   const send = () => { fxParams[kbSel.effect] = p; applyKb(); };
+  if (kbSel.effect === 116) {
+    drawTemperatureParams(k, p, box, send);
+    if (temperatureFocus) {
+      const target = [...box.querySelectorAll("[data-temp-focus]")].find(el => el.dataset.tempFocus === temperatureFocus);
+      if (target && !target.disabled) target.focus({ preventScroll: true });
+      else box.querySelector('[data-temp-focus="' + temperatureFocus.split("-")[0] + '-temperature"]')?.focus({ preventScroll: true });
+    }
+    return;
+  }
   for (const q of c.params) {
     const label = t(FX_LABEL[q.key] || q.key);
     if (q.kind === "int") {
