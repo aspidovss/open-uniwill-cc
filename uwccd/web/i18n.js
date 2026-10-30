@@ -472,6 +472,9 @@ const RU = {
   "power-profiles-daemon is not installed or not running.": "power-profiles-daemon не установлен или не запущен.",
   "battery saver on": "экономия заряда включена",
   "Changes the program makes itself are not followed back; while a rule or a bound program is active the mode stays.": "Изменения, которые делает сама программа, обратно не повторяются; пока действует правило или привязанная программа, режим не меняется.",
+  "Applying…": "Применяется…",
+  "Applied": "Применено",
+  "Apply the settings as soon as they change": "Применять настройки сразу при изменении", "Not applied yet — press Apply": "Ещё не применено — нажмите «Применить»",
   "System switches": "Системные", "Laptop functions": "Функциональные",
   // liquid cooler: calm control
   "Pump stopped: cool": "Помпа остановлена: прохладно",

@@ -634,6 +634,8 @@ class Handler(BaseHTTPRequestHandler):
             log.info("user agreement %d accepted in the window", EULA_VERSION)
         elif key == "history_record":
             s.settings_store.set("history_record", bool(value))
+        elif key == "profile_autoapply":
+            s.settings_store.set("profile_autoapply", bool(value))
         elif key == "update_check":
             s.settings_store.set("update_check", bool(value))
         elif key == "kb_fx_screen":                  # Linux: allow BetterRGB Screen ambient (off by default)

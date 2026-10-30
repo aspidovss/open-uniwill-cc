@@ -70,7 +70,7 @@ SETTINGS = {
     "bluetooth": "bool", "wifi": "bool", "webcam": "bool", "kb_timeout": "int", "osd": "bool",
     "lc_hwoc": "bool", "mem_oc": "bool", "super_performance": "bool", "history_record": "bool",
     "update_check": "bool", "kb_picture_modes": "bool", "tcc_extended": "bool", "debug": "bool",
-    "kb_fx_screen": "bool", "kb_unlock_effects": "bool",
+    "kb_fx_screen": "bool", "kb_unlock_effects": "bool", "profile_autoapply": "bool",
     "alerts": "bool", "overheat_boost": "bool", "kb_off_on_battery": "bool", "ppd_sync": "bool",
     "ppd_follow": "bool", "ppd_modes": "ppdmap",
     "cpu_alert": "int", "gpu_alert": "int", "mode_on_ac": "mode", "mode_on_battery": "mode", "lang": "str",

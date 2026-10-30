@@ -213,7 +213,8 @@
       </div>
       <div class="card hidden" id="profile-editor">
         <div class="row between wrap"><h3 id="pe-title"></h3>
-          <div class="row"><button class="btn ghost" id="pe-reset" data-i>Reset slot to factory</button><button class="btn" id="pe-apply" data-i>Apply</button></div></div>
+          <div class="row"><span class="muted tiny" id="pe-saved"></span><button class="btn ghost" id="pe-reset" data-i>Reset slot to factory</button><button class="btn hidden" id="pe-apply" data-i>Apply</button></div></div>
+        <label class="chk tiny" style="margin:0 0 6px"><input type="checkbox" id="pe-auto"> <span data-i>Apply the settings as soon as they change</span></label>
         <p class="muted tiny" id="pe-note"></p>
         <div id="pe-rows"></div>
       </div>

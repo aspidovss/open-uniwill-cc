@@ -319,6 +319,7 @@ function renderProfileEditor(force) {
     (L.source === "config" ? " " + t("WMI path: limits are approximate — taken from the platform profile and the WMI settings in EC Manager.") + " " +
       t("Through WMI the extra graphics power is reached only in the stock Turbo mode; Dynamic Boost here adds power only while the processor leaves room.") : "");
   $("#pe-reset").textContent = custom ? t("Reset slot to factory") : t("Reset profile to factory");
+  $("#pe-auto").checked = peAuto(); $("#pe-apply").classList.toggle("hidden", peAuto());
   const rows = $("#pe-rows"); rows.innerHTML = "";
   const row = (title, sub, ctrl, out) => { const el = h("div", { class: "pe-row" }, h("div", { class: "lbl" }, h("b", {}, title), h("small", {}, sub)), h("div", { class: "val" }, ctrl), out || h("span")); rows.append(el); return el; };
   const slider = (sect, key, min, max, unit) => {
@@ -326,17 +327,19 @@ function renderProfileEditor(force) {
     const o = h("output", {}, `${pe[sect][key]} ${unit}`);
     const r = h("input", { type: "range", min, max: Math.max(min, max), step: 1, value: Math.min(Math.max(pe[sect][key], min), Math.max(min, max)) });
     r.addEventListener("input", () => { pe[sect][key] = +r.value; o.textContent = `${r.value} ${unit}`; });
+    r.addEventListener("change", peSave);
     return [r, o];
   };
   const toggle = (sect, key, after) => {
     const obj = sect ? pe[sect] : pe;
     const c = h("input", { type: "checkbox" }); c.checked = !!obj[key];
-    c.addEventListener("change", () => { obj[key] = c.checked ? 1 : 0; if (after) after(); });
+    c.addEventListener("change", () => { obj[key] = c.checked ? 1 : 0; if (after) after(); peSave(); });
     return h("label", { class: "sw" }, c, h("span"));
   };
   if (custom) {
     const inp = h("input", { type: "text", maxlength: 24, value: slotName(prof, +name.slice(-1)) });
     inp.addEventListener("input", () => { pe.CustomizeName = inp.value; });
+    inp.addEventListener("change", peSave);
     row(t("Slot name"), t("Shown here, on the fan page and in notifications"), inp);
   }
   const W = t("W");
@@ -366,6 +369,7 @@ function renderProfileEditor(force) {
     const o2 = h("output", {}, `${tj - pe.CPU.TccOffset} °C`);
     const r2 = h("input", { type: "range", min: lo, max: tj, step: 1, value: tj - pe.CPU.TccOffset });
     r2.addEventListener("input", () => { pe.CPU.TccOffset = tj - +r2.value; o2.textContent = `${r2.value} °C`; });
+    r2.addEventListener("change", peSave);
     row(t("CPU temperature limit"), t("The processor slows down to stay at or below this temperature (maximum {0} °C). Lower = cooler and quieter, less performance.", tj),
       h("div", { class: "row", style: "flex:1" }, toggle("CPU", "TccOffsetSwitch"), r2), o2);
   } else if (L.tcc_max > 0) {
@@ -397,7 +401,16 @@ function renderProfileEditor(force) {
   }
   if (typeof applyFeatures === "function" && S) applyFeatures();
 }
-$("#pe-apply").addEventListener("click", () => {
+// The profile settings are written by themselves: a slider when it is released, a switch at once (no Apply button).
+let peTimer = null;
+function peAuto() { return !S || !S.settings || S.settings.profile_autoapply !== false; }
+function peSave() {
+  if (!peAuto()) { $("#pe-saved").textContent = t("Not applied yet — press Apply"); return; }
+  clearTimeout(peTimer);
+  $("#pe-saved").textContent = t("Applying…");
+  peTimer = setTimeout(peApply, 500);                 // several quick changes -> one write
+}
+function peApply() {
   if (!pe) return;
   const c = pe.CPU;
   const L = S.power.limits || {};
@@ -409,8 +422,16 @@ $("#pe-apply").addEventListener("click", () => {
   if (L.gpu_temp && S.platform.nv_gpu) Object.assign(body.GPU, { TargetTemperatureSwitch: pe.GPU.TargetTemperatureSwitch ? 1 : 0, TargetTemperature: pe.GPU.TargetTemperature });
   if (!S.platform.nv_gpu) delete body.GPU;
   if (pe.Name.startsWith("Mode4")) body.CustomizeName = pe.CustomizeName;
-  act(async () => { await api("profiles/" + pe.Name, body, "PUT"); pe = null; }, t("Profile applied"));
-});
+  const name = pe.Name;
+  act(async () => {
+    await api("profiles/" + name, body, "PUT");
+    $("#pe-saved").textContent = "✓ " + t("Applied");
+    if (!peAuto()) pe = null;
+    setTimeout(() => { if ($("#pe-saved").textContent.startsWith("✓")) $("#pe-saved").textContent = ""; }, 2500);
+  });
+}
+$("#pe-apply").addEventListener("click", () => { clearTimeout(peTimer); peApply(); });
+$("#pe-auto").addEventListener("change", e => act(() => api("setting", { key: "profile_autoapply", value: e.target.checked })));
 $("#pe-reset").addEventListener("click", () => {
   if (!pe || !confirm(t("Reset “{0}” to the factory values? Its power limits and fan curve are replaced.", pe.Name.startsWith("Mode4") ? slotName(pe, +pe.Name.slice(-1)) : tableLabel(pe.FAN.TableName)))) return;
   act(async () => { await api("profile-reset/" + pe.Name, {}); pe = null; edit = null; }, t("Factory values restored"));

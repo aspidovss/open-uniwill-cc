@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.6.10
+
+- **Mode selection: the profile settings apply by themselves** — a slider when it is released, a switch at once (several
+  quick changes become one write). *Apply the settings as soon as they change* (on by default) turns it off: then the
+  Apply button is back. `uwccctl set profile_autoapply on|off`.
+
 ## 1.6.9
 
 - **New keyboard effect: CPU / GPU temperature** (BetterRGB engine, per-key keyboards) — contributed by
