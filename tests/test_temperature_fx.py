@@ -47,19 +47,48 @@ class TemperatureEffect(unittest.TestCase):
         self.assertEqual(f[0][0], 1.0)
         self.assertAlmostEqual(f[0][1], 0.06371884021782372)
         self.assertEqual(f[0][2], 0.0)
-        self.assertEqual(f[20], (0.0, 0.0, 0.0))
+        self.assertEqual(tuple(fx.l2s(v) for v in f[20]), (0, 180, 255))
 
-    def test_missing_invalid_and_returning_sensor(self):
+    def test_missing_initial_sample_uses_first_palette_colour(self):
         e = self.make(smoothing_ms=1000)
         for invalid in (None, float("nan"), float("inf"), -1, 151, 10 ** 400, True, "55"):
             e.update_metrics({"cpu_temp": invalid, "gpu_temp": 85})
             f = e.frame(0, 1)
-            self.assertEqual(f[0], (0.0, 0.0, 0.0))
+            self.assertEqual(tuple(fx.l2s(v) for v in f[0]), (0, 180, 255))
             self.assertEqual(f[20], (1.0, 0.0, 0.0))
+            self.assertEqual(e.status()["temperatures"]["cpu"], None)
         e.update_metrics({"cpu_temp": 95})
         self.assertEqual(e.frame(1, 1)[0], (1.0, 0.0, 0.0))
         e.update_metrics({})
-        self.assertEqual(e.frame(2, 1), [(0.0, 0.0, 0.0)] * 126)
+        self.assertEqual(e.frame(2, 1), [(1.0, 0.0, 0.0)] * 126)
+
+    def test_sensor_dropout_holds_exact_last_smoothed_colour(self):
+        e = self.make(smoothing_ms=1000)
+        e.update_metrics({"cpu_temp": 40, "gpu_temp": 85})
+        e.frame(0, 1)
+        e.update_metrics({"cpu_temp": 85, "gpu_temp": 40})
+        applied = e.frame(0.4, 1)
+        self.assertTrue(0 < applied[0][0] < 1)  # interruption during a colour transition
+        for i, invalid in enumerate((None, float("nan"), float("inf"), 10 ** 400, "55")):
+            e.update_metrics({"cpu_temp": invalid, "gpu_temp": invalid})
+            for t in (30 * i + 0.5, 30 * i + 1, 30 * (i + 1)):
+                self.assertEqual(e.frame(t, 1), applied)
+        e.update_metrics({"cpu_temp": 85, "gpu_temp": 40})
+        resumed = e.frame(150.1, 1)
+        self.assertAlmostEqual(resumed[0][0], applied[0][0] + (1 - applied[0][0]) * (1 - math.exp(-0.1)))
+        self.assertAlmostEqual(resumed[0][2], applied[0][2] * math.exp(-0.1))
+        self.assertLess(resumed[20][0], applied[20][0])
+
+    def test_missing_sensor_does_not_block_the_other_half(self):
+        e = self.make()
+        e.update_metrics({"cpu_temp": 85, "gpu_temp": 40})
+        e.frame(0, 1)
+        e.update_metrics({"gpu_temp": 85})
+        self.assertEqual(e.frame(1, 1), [(1.0, 0.0, 0.0)] * 126)
+        e.update_metrics({"cpu_temp": 40})
+        frame = e.frame(2, 1)
+        self.assertEqual(tuple(fx.l2s(v) for v in frame[0]), (0, 180, 255))
+        self.assertEqual(frame[20], (1.0, 0.0, 0.0))
 
     def test_smoothing_uses_elapsed_seconds(self):
         results = []
@@ -226,6 +255,27 @@ class TemperatureMetrics(unittest.TestCase):
             self.assertIsNone(s._fx_metrics().get("gpu_temp"))
         with patch("uwccd.service.time.time", return_value=now + 7):
             self.assertIsNone(s._fx_metrics().get("cpu_temp"))
+
+    def test_expired_or_disabled_monitoring_keeps_last_effect_colours(self):
+        svc = self.service()
+        effect = fx.make(116, {"smoothing_ms": 0})
+        effect.update_metrics(svc._fx_metrics())
+        applied = effect.frame(0, 1)
+        now = time.time()
+        with patch("uwccd.service.time.time", return_value=now + 7):
+            effect.update_metrics(svc._fx_metrics())
+            self.assertEqual(effect.frame(7, 1), applied)
+        svc.monitor_level = lambda: "off"
+        effect.update_metrics(svc._fx_metrics())
+        self.assertEqual(effect.frame(20, 1), applied)
+        self.assertEqual(effect.status()["temperatures"], {"cpu": None, "gpu": None})
+        svc.monitor_level = lambda: "full"
+        svc.sampler.latest["t"] = time.time()
+        svc.sampler.latest["cpu"]["temp"] = 85
+        effect.update_metrics(svc._fx_metrics())
+        resumed = effect.frame(21, 1)
+        self.assertEqual(resumed[0], (1.0, 0.0, 0.0))
+        self.assertEqual(resumed[20], applied[20])
 
 
 if __name__ == "__main__":

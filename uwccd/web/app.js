@@ -794,7 +794,7 @@ function drawFxParams(k) {
       : t("Reacts to key presses: the service reads them from the keyboard while this effect runs (nothing is stored)."))
     : c.needs.includes("screen") ? (S.platform.os === "windows" ? t("Follows the screen: the tray program sends a 64×24 picture of the main screen 15 times a second while this effect runs (it is not stored).")
       : t("Follows the screen: the session agent sends a 64×24 picture of the screen while this effect runs (X11 only; not on Wayland; it is not stored)."))
-    : kbSel.effect === 116 ? t("Set a colour curve for each sensor. Missing or stale readings turn that half off; monitoring must be on.") : "";
+    : kbSel.effect === 116 ? t("Set a colour curve for each sensor. Missing or stale readings keep the last colour until fresh data arrives. Before the first reading, the first curve colour is used.") : "";
   needs.textContent = note; needs.classList.toggle("hidden", !note);
   if (k.four_zone) { needs.textContent = (note ? note + " " : "") + t("On a four-zone keyboard each zone shows the average of its keys."); needs.classList.remove("hidden"); }
   const send = () => { fxParams[kbSel.effect] = p; applyKb(); };

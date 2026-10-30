@@ -772,8 +772,10 @@ class Temperature(Effect):
         colors = {}
         for sensor, temp in self.temperatures.items():
             if temp is None:
-                self.previous[sensor] = None
-                colors[sensor] = (0.0, 0.0, 0.0)
+                # Freeze the last displayed colour, including an unfinished smooth transition.
+                # Before the first valid sample, use the first colour of this sensor's curve.
+                prev = self.previous[sensor]
+                colors[sensor] = prev if prev is not None else self.points[sensor][0][1]
                 continue
             target = self._color(sensor, temp)
             prev = self.previous[sensor]

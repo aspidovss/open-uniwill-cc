@@ -77,8 +77,12 @@ different frame rates. This setting is separate from the engine's start/stop tra
 
 Temperatures come from the existing monitoring sample; the effect never polls sensors itself. Full monitoring
 uses the configured interval; light monitoring updates every 20 s. A sample expires after three intervals
-(at least 5 s). Monitoring off, missing readings or expired samples turn the corresponding half off immediately;
-the other half keeps working. Current temperatures / **No temperature data** are shown in the effect settings.
+(at least 5 s). Monitoring off, missing/invalid readings or expired samples **hold the last displayed colour**
+of the affected half until fresh data arrives. An interrupted smooth transition stays at its last displayed
+colour; it does not continue towards an old target. The other half keeps working independently. When readings
+resume, smoothing continues from the held colour. Before the first valid reading, the first colour of that
+sensor's curve is used. Current temperatures / **No temperature data** are shown in the effect settings;
+unavailable readings are not reported as current temperatures.
 The usual top-row bar, when enabled, overlays the temperature colours.
 
 On Windows the CPU reading is the program's existing ACPI thermal-zone temperature, which may differ from a

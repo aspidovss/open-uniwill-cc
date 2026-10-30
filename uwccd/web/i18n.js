@@ -590,8 +590,8 @@ Object.assign(RU, {
   "temperature points need integer temperatures from 0 to 120 °C": "Температуры точек должны быть целыми числами от 0 до 120 °C",
   "temperature points need RGB colours from 0 to 255": "RGB-каналы цвета должны быть целыми числами от 0 до 255",
   "temperature points must have strictly increasing temperatures": "Температуры точек должны строго возрастать",
-  "Set a colour curve for each sensor. Missing or stale readings turn that half off; monitoring must be on.":
-    "Настройте цветовую кривую каждого датчика. Без свежих показаний соответствующая половина гаснет; нужен включённый мониторинг.",
+  "Set a colour curve for each sensor. Missing or stale readings keep the last colour until fresh data arrives. Before the first reading, the first curve colour is used.":
+    "Настройте цветовую кривую каждого датчика. Если свежих показаний нет, сохраняется последний цвет до получения новых данных. До первого показания используется первый цвет кривой.",
   "Drag a point to change its temperature. Click the colour band to add a point (up to 15).":
     "Перетаскивайте точки по температуре. Щелчок по цветовой полосе добавляет точку (до 15).",
   "Smoothing: 0 = immediate. Higher values make colour changes slower.":
