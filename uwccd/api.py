@@ -444,6 +444,13 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(200, r)
             elif path == "/api/clevo":                    # Control Center 3.0 / Clevo (experimental)
                 return self._json(200, s.clevo.command(b))
+            elif path == "/api/load-rules":               # Automation: mode by power / temperature / load
+                from .automation import check_load_rules
+                s.settings_store.set("load_rules", check_load_rules(b.get("rules", [])))
+                s.load_rules.active = None
+                s.load_rules.since.clear()
+                s.emit("status", {})
+                return self._json(200, s.load_rules.status())
             elif path == "/api/appbinding":
                 rules = [{"process": str(r["process"])[:64], "mode": int(r["mode"]),
                           "enabled": bool(r.get("enabled", True))} for r in b.get("rules", [])]

@@ -19,6 +19,7 @@ Overview
   clevo ...                      Control Center 3.0 / Clevo (experimental, separate module): see uwccctl help clevo
   get [KEY]  /  set KEY VALUE    switches and automation (see: uwccctl help set)
   apps [add|remove|enable|disable] ...   switch the mode when a program runs
+  rules [list|export FILE|import FILE|clear|enable N|disable N]   mode by power / temperature / load
   restore --yes                  factory profiles and fan tables
   lc ...                         liquid cooler (Bluetooth): status, scan, connect, mode, manual, tiers, ...
   history [csv|csv-excel|json] [1m|5m|15m|1h|24h] [FILE]
@@ -166,6 +167,14 @@ HELP = {
         "uwccctl kb fx-calibrate start|cancel|reset | apply RRGGBB   white calibration (RRGGBB: the colour seen)\n"
         "  Example: uwccctl kb effect wave --speed 3 --multi\n"
         "           uwccctl kb fx rain density=4 color_count=2 colors=5080FF,FFFFFF"),
+    "rules": (
+        "uwccctl rules [list]                     automatic profile switching rules (Automation) and their state\n"
+        "uwccctl rules export FILE / import FILE   the rules as JSON (import replaces them)\n"
+        "uwccctl rules enable N / disable N / clear\n"
+        "  A rule: {\"name\": \"Heavy load\", \"conditions\": [{\"metric\": \"total_power\", \"op\": \">\", \"value\": 120}],\n"
+        "  \"join\": \"and\", \"hold\": 30, \"mode\": 2, \"slot\": null, \"back\": true, \"back_after\": 60}\n"
+        "  metrics: cpu_power gpu_power total_power (W), cpu_temp gpu_temp (°C), cpu_load gpu_load (%);\n"
+        "  mode 0 office, 1 gaming, 2 turbo, 3 custom; slot = profile 0..4 or null (current)"),
     "clevo": (
         "Control Center 3.0 / Clevo — experimental, separate module (laptops with Control Center 3.x)\n"
         "uwccctl clevo                              status: interface, capabilities, fans, saved state\n"
@@ -244,6 +253,7 @@ HELP = {
         "uwccctl lc curve KEY flat FAN% [PUMP_V]   a flat curve;  uwccctl lc curve MODE off   use the common curve\n"
         "uwccctl lc profile [list|apply ID|save ID|copy NAME|remove ID|rename ID NAME]   cooler profiles\n"
         "uwccctl lc tiers BELOW:FAN:PUMP ...      old tier form, becomes the common curve\n"
+        "uwccctl lc pump-limits 7,8,11,12 --accept-risks | off   own pump voltages (the cooler knows 7/8/11/12 V)\n"
         "uwccctl lc set KEY VALUE                 temp_source max|cpu|gpu, delay_up/delay_down 0..300 s,\n"
         "                                         smooth, notify_flow, flow_guard, boost_fan, boost_pump on|off\n"
         "uwccctl lc idle on|off [off_below=50 off_after=60 on_above=55 on_after=10 min_run=120]\n"
@@ -972,6 +982,47 @@ def cmd_lb(a):
                        for z, v in d["zones"].items()])
 
 
+# -- automatic profile switching (load rules) -------------------------------------------------------
+def rules_text(d):
+    names = {0: "office", 1: "gaming", 2: "turbo", 3: "custom"}
+    out = []
+    for i, r in enumerate(d["rules"]):
+        cond = f" {r.get('join', 'and')} ".join(f"{c['metric']} {c['op']} {c['value']:g}" for c in r["conditions"])
+        state = " [active]" if d.get("active") == i else (f" [holds {d['held'][str(i)]} s]" if str(i) in (d.get("held") or {}) else "")
+        out.append(f"{i + 1}. {'on ' if r.get('enabled', True) else 'off'} {r.get('name') or ''}: if {cond} for {r['hold']} s"
+                   f" -> {names.get(r['mode'])}{'' if r.get('slot') is None else ' profile ' + str(r['slot'])}"
+                   f"{', back after ' + str(r['back_after']) + ' s' if r.get('back') else ''}{state}")
+    return out or ["no rules"]
+
+
+def cmd_rules(a):
+    op = a[0] if a else "list"
+    st = call("state")["load_rules"]
+    rules = st["rules"]
+    if op == "list":
+        return out(st, rules_text)
+    if op == "export" and a[1:]:
+        with open(a[1], "w", encoding="utf-8") as f:
+            json.dump(rules, f, ensure_ascii=False, indent=1)
+        return out({"file": os.path.abspath(a[1]), "rules": len(rules)}, a[1])
+    if op == "import" and a[1:]:
+        try:
+            with open(a[1], encoding="utf-8") as f:
+                rules = json.load(f)
+        except (OSError, ValueError) as e:
+            fail(str(e), 1)
+    elif op == "clear":
+        rules = []
+    elif op in ("enable", "disable") and a[1:]:
+        n = num(a[1], "rules") - 1
+        if not 0 <= n < len(rules):
+            fail(f"no rule {n + 1}", 1)
+        rules[n]["enabled"] = op == "enable"
+    else:
+        usage("rules")
+    out(call("load-rules", {"rules": rules}), rules_text)
+
+
 # -- Control Center 3.0 / Clevo (experimental) -------------------------------------------------------
 def clevo_text(c):
     if not c.get("present"):
@@ -1128,6 +1179,15 @@ def cmd_lc(a):
         call("lc/config", {"tiers": tiers})
     elif op == "curve":
         return lc_curve(a[1:])
+    elif op == "pump-limits" and a[1:]:
+        if a[1] == "off":
+            call("lc/config", {"pump_limits": {"custom": False}})
+        else:
+            try:
+                levels = [int(v) for v in a[1].split(",")]
+            except ValueError:
+                usage("lc")
+            call("lc/config", {"pump_limits": {"custom": True, "levels": levels, "accept_risks": "--accept-risks" in a}})
     elif op == "profile":
         return lc_profile(a[1:])
     elif op == "set" and len(a) == 3:
@@ -1402,6 +1462,7 @@ def main(a):
         "kb": lambda: cmd_kb(rest),
         "lb": lambda: cmd_lb(rest),
         "clevo": lambda: cmd_clevo(rest),
+        "rules": lambda: cmd_rules(rest),
         "get": lambda: cmd_get(rest),
         "set": lambda: cmd_set(rest),
         "apps": lambda: cmd_apps(rest),

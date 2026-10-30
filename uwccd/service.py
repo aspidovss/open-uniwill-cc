@@ -10,7 +10,7 @@ import time
 from . import regs as R
 from . import store
 from .busy import Busy
-from .automation import DEFAULTS as AUTO_DEFAULTS, PowerSourceRules, Sampler, setting as auto_setting
+from .automation import DEFAULTS as AUTO_DEFAULTS, LoadRules, PowerSourceRules, Sampler, setting as auto_setting
 from .events import AppBinding, ECPoller, HotkeyEvents, IdleTimer, KeyPresses
 from .fan import PowerManager
 from .fan_std import PowerManagerStd
@@ -98,6 +98,7 @@ class Service:
         from .updates import Updater
         self.updater = Updater(self)
         self.rules = PowerSourceRules(self)
+        self.load_rules = LoadRules(self)              # mode by power / temperature / load (Automation)
         self.threads = []
         self.fan_control = False
 
@@ -204,8 +205,11 @@ class Service:
         self.threads.append(poll)
         if not IS_WIN:      # on Windows the tray app reports user idle time (a service cannot see input)
             self.threads.append(IdleTimer(lambda: int(self.settings_store.get("kb_timeout", 0) or 0), self.keyboard.idle))
+        def binding_mode(mode):                       # load rules come first: no App binding change while one is active
+            if self.load_rules.active is None:
+                self.power.user_set_mode(mode)
         self.threads.append(AppBinding(lambda: self.settings_store.get("app_binding", []),
-                                       self.power.user_set_mode, lambda: self.power.option["OperatingMode"]))
+                                       binding_mode, lambda: self.power.option["OperatingMode"]))
         if self.ec_info.get("active") == "wmi":
             from .ecaccess import config as wmi_config
             self.sampler.interval = float(wmi_config(self.pf.project_raw)["poll"].get("monitor_s", 5))
@@ -357,6 +361,7 @@ class Service:
             "liquid": self.liquid.status(),
             "hwoc": self.hwoc.status() if getattr(self, "hwoc", None) else None,
             "automation": {k: auto_setting(self.settings_store, k) for k in AUTO_DEFAULTS},
+            "load_rules": self.load_rules.status(),
             "info": self.monitor.info(),
             "ec_access": self.ec_access(),
             "clevo": self.clevo.status() if self.clevo.present else {"present": False},

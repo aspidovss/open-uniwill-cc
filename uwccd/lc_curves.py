@@ -3,9 +3,10 @@ and named cooler profiles.
 
     fan curve   [[°C, %], ...]   2..17 points, temperatures rising, duty not falling; linear between points, flat
                                  before the first and after the last point
-    pump steps  [[°C, V], ...]   1..4 steps "from this temperature on": 7 / 8 / 11 V, not falling; below the first
-                                 step the pump runs at the first voltage. No "off" and no 12 V on a curve: the pump
-                                 stops only through "pump idle" (with its minimum run time).
+    pump steps  [[°C, V], ...]   1..4 steps "from this temperature on": 0 (off) / 7 / 8 / 11 V, not falling; below
+                                 the first step the pump runs at the first voltage. 0 (off) only as the first level:
+                                 e.g. [[0, 0], [40, 7], [70, 11]] starts the pump at 40 °C (it then runs at least the
+                                 "pump idle" minimum run time). No 12 V on a curve.
 
     curves = {"common": {"fan": [...], "pump": [...]}, "office": None | {...}, "gaming": ..., "turbo": ..., "custom": ...}
 
@@ -17,7 +18,42 @@ import re
 MODE_KEYS = ("office", "gaming", "turbo", "custom")
 LAPTOP_MODE_KEY = {0: "office", 1: "gaming", 2: "turbo", 3: "custom"}      # EC operating mode -> key
 CURVE_KEYS = ("common",) + MODE_KEYS
-PUMP_LEVELS = (7, 8, 11)
+PUMP_LEVELS = (0, 7, 8, 11)          # 0 = off (only below the first running step); the default running levels
+ALL_VOLTAGES = (7, 8, 11, 12)        # all the cooler firmware knows (pump selector 2, 3, 0, 1); it cannot be asked
+DEFAULT_RUNNING = (7, 8, 11)         # without "own pump limits": 12 V is not used (the OEM software never does)
+
+
+def levels(running=None):
+    """Pump levels allowed on a curve: off + the running voltages."""
+    return (0,) + tuple(sorted(running or DEFAULT_RUNNING))
+
+
+def clamp_voltage(v, running=None):
+    """A running voltage outside the allowed ones -> the nearest allowed (the next higher one first)."""
+    run = sorted(running or DEFAULT_RUNNING)
+    if not v or v in run:
+        return v
+    higher = [x for x in run if x >= v]
+    return higher[0] if higher else run[-1]
+
+
+def clamp_set(cs, running=None):
+    """A curve set with every pump step moved into the allowed voltages (steps that become equal are merged)."""
+    out, last = [], None
+    for t, v in cs["pump"]:
+        v = clamp_voltage(v, running)
+        if last is not None and v < last:
+            v = last
+        if out and out[-1][1] == v:
+            continue
+        out.append([t, v])
+        last = v
+    return {"fan": cs["fan"], "pump": out}
+
+
+def clamp_curves(curves, running=None):
+    c = full(curves)
+    return {k: (clamp_set(v, running) if v else v) for k, v in c.items()}
 MAX_FAN_POINTS = 17
 MAX_PUMP_STEPS = 4
 
@@ -50,7 +86,7 @@ def full(curves):
     return out
 
 
-def check_set(s, where="curve"):
+def check_set(s, where="curve", running=None):
     if not isinstance(s, dict):
         raise ValueError(f"{where}: an object with fan and pump expected")
     fan = s.get("fan")
@@ -75,18 +111,22 @@ def check_set(s, where="curve"):
         t, v = int(p[0]), int(p[1])
         if not 0 <= t <= 100:
             raise ValueError(f"{where}: pump step at {t} °C: 0..100 °C")
-        if v not in PUMP_LEVELS:
-            raise ValueError(f"{where}: pump voltage 7 / 8 / 11 V")
+        allowed = levels(running)
+        if v not in allowed:
+            raise ValueError(f"{where}: pump voltage " + " / ".join("off (0)" if x == 0 else f"{x}" for x in allowed)
+                             + " V (own pump limits change the list)")
         if t <= last_t:
             raise ValueError(f"{where}: pump step temperatures must rise")
         if v < last_v:
             raise ValueError(f"{where}: pump voltage must not fall with the temperature")
+        if v == 0 and out_p:
+            raise ValueError(f"{where}: the pump can be off only below its first running step")
         out_p.append([t, v])
         last_t, last_v = t, v
     return {"fan": out_f, "pump": out_p}
 
 
-def check_curves(curves, base=None):
+def check_curves(curves, base=None, running=None):
     """Merge a partial {key: set | None} into base (validated). "common" cannot be None."""
     out = full(base)
     if not isinstance(curves, dict):
@@ -99,7 +139,7 @@ def check_curves(curves, base=None):
                 raise ValueError("the common curve cannot be removed")
             out[k] = None
         else:
-            out[k] = check_set(v, k)
+            out[k] = check_set(v, k, running)
     return out
 
 

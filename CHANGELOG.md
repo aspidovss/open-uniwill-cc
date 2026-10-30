@@ -1,21 +1,37 @@
 # Changelog
 
-## 1.6.8 (in progress)
+## 1.6.8
 
+- **Automation: automatic profile switching.** Rules like *CPU + GPU power above 120 W for 30 s → Turbo, profile 2*,
+  *CPU power below 15 W for 60 s → Office*, *CPU above 90 °C or GPU above 85 °C for 20 s → Gaming*: up to 3
+  conditions (and / or) on CPU / GPU / CPU + GPU power, temperature and load; the target is a mode and a profile slot;
+  optionally back to the previous mode when the condition has not held for N s. Rules are checked from the top, the
+  first that held long enough is applied; while one is active, App binding and the power-source settings do not
+  change the mode. Templates, reordering; `uwccctl rules [list|export|import|enable|disable|clear]`.
+- **Fan settings: a red dot shows the fan's current temperature and speed** on the curve of the active table
+  (CPU or GPU, with full monitoring), labelled with the temperature and the rpm.
 - **Liquid cooling: curves instead of temperature tiers.**
   - **Modes in two rows:** Automatic, Follow the laptop, Controller, Manual / High, Medium, Low, Off.
-  - **Automatic** follows a **fan curve** (2..17 points, linear between them) and **pump steps** (7 / 8 / 11 V; a step
+  - **Automatic** follows a **fan curve** (2..17 points, linear between them) and **pump steps** (off / 7 / 8 / 11 V; a step
     down waits until 3 °C below it). Both are edited by dragging the points (double-click adds / removes a point);
-    a crosshair shows the current temperature and the value the curve asks for. *Flat line…* makes a fixed duty.
+    a red dot shows the current temperature and value, labelled with them. *Flat line…* makes a fixed duty.
   - **Follow the laptop** uses the same **common** curve, or **its own curve** for each laptop mode (tabs Common /
     Office / Gaming / Turbo / Custom, *Own curve for this mode*). A mode change switches the curve at once; the fan
     still ramps. The Controller mode falls back to the common curve when the EC publishes no targets.
   - Kept: temperature averaging, up / down delays, ramping, flow guard, emergency rise (95 °C, or the curve asking
-    25 % more at once), pump stop when cool. A curve has no 12 V and never stops the pump.
+    25 % more at once), pump stop when cool. A curve has no 12 V.
+  - **Pump start temperature:** the first pump level can be *Off*; the next step (7 V or more), dragged to any
+    temperature, is where the pump starts. Below it again (3 °C hysteresis) the pump stops, but not before it ran the
+    minimum run time of *Stop the pump when it is cool* (120 s by default).
   - **Cooler profiles:** Quiet, Balanced, Performance and your own — Apply / Save / Copy / Remove (a profile holds the
     common and the per-mode curves); `uwccctl lc profile …`.
   - `uwccctl lc curve [KEY] [fan T:D … pump T:V …]`, `lc curve KEY flat N`, `lc curve MODE off`; `lc tiers` still
     works and becomes the common curve.
+  - The charts look like the fan curve of *Fan settings*.
+  - **Own pump voltage limits** (after a risk warning): choose which of 7 / 8 / 11 / 12 V may be used — the cooler
+    knows only these four and cannot report what a pump supports (6 V does not exist in its protocol). Every mode
+    keeps to the choice (Low becomes 8 V if 7 V is off); `uwccctl lc pump-limits 7,8,11,12 --accept-risks`.
+  - **Controller** mode shows the curves read-only (the EC drives the cooler).
   - **Update:** the tiers of 1.6.7 become a common curve with the same behaviour, and the old fixed duties of Follow
     the laptop (40 / 60 / 90 / 90 %, pump 11 V) become flat curves of those modes. A new install starts with Balanced.
 

@@ -78,6 +78,8 @@ DEFAULTS = {
     "curves": None,                # 1.6.8: fan curve + pump steps, common and per laptop mode (lc_curves.py)
     "profile": None,               # cooler profile the curves came from
     "profiles": [],                # own cooler profiles
+    "pump_custom": False,          # own pump voltage limits (after the risk warning)
+    "pump_running": [7, 8, 11],    # running voltages allowed with own limits (of 7 / 8 / 11 / 12)
 }
 
 
@@ -554,15 +556,6 @@ class LiquidCooler:
             return True
         return False
 
-    def _settle_tier(self, raw, avg, tiers):
-        cur = self.tier
-        if cur is None or raw == cur:
-            self._pending = None
-            return raw
-        up = raw > cur
-        urgent = up and (avg >= EMERGENCY_T or avg >= min(tiers[cur]["below"], 200) + EMERGENCY_OVER)
-        return raw if self._wait("up" if up else "down", urgent) else cur
-
     @staticmethod
     def _vidx(v):
         return VOLTAGES.index(v) if v in VOLTAGES else -1
@@ -616,6 +609,13 @@ class LiquidCooler:
                 pump = VOLTAGES[i + (1 if j > i else -1)]
         return fan, pump
 
+    def running(self):
+        """Running pump voltages allowed now: 7 / 8 / 11 V, or the user's own limits."""
+        c = self.cfg
+        if c.get("pump_custom") and c.get("pump_running"):
+            return tuple(sorted(c["pump_running"]))
+        return LCV.DEFAULT_RUNNING
+
     def _curve_for(self, mode, laptop_mode):
         curves = self.cfg.get("curves")
         if mode == "laptop":
@@ -647,11 +647,15 @@ class LiquidCooler:
             self._settled = (raw_f, raw_p)
         return self._settled
 
-    def _tier_index(self, t, tiers):
-        for i, tr in enumerate(tiers):
-            if t < tr["below"]:
-                return i
-        return len(tiers) - 1
+    def _curve_min_run(self, pump):
+        """A curve may switch the pump off below its start temperature: not before it ran the minimum run time of
+        "pump idle" (default 120 s), so it does not cycle around the threshold."""
+        cp = self.cur[1]
+        if pump == 0 and cp:
+            min_run = int((self.cfg.get("pump_idle") or PUMP_IDLE).get("min_run", PUMP_IDLE["min_run"]))
+            if self._now() - self._pump_on_since < min_run:
+                return cp
+        return pump
 
     def target(self):
         """(fan %, pump V) for the current mode. Pump 0 = off."""
@@ -691,6 +695,7 @@ class LiquidCooler:
                 if key != self.curve_key:         # another curve set (laptop mode changed): no waiting
                     self._settled, self._pending, self.curve_key = None, None, key
                 fan, pump = self._curve_target(cs, avg)
+                pump = self._curve_min_run(pump)
             pump = self._pump_idle(pump, avg)
         if calm and c.get("smooth", True) and not self._emergency and not self.guard:
             fan, pump = self._ramp(fan, pump)
@@ -702,6 +707,8 @@ class LiquidCooler:
             if self.guard and pump:
                 pump = max(pump, GUARD_PUMP, key=lambda v: VOLTAGES.index(v))
                 fan = max(fan, GUARD_FAN)
+        if pump:                                   # never outside the allowed voltages (own limits)
+            pump = LCV.clamp_voltage(pump, self.running())
         return fan, pump
 
     async def _apply_speed(self, force=False):
@@ -819,17 +826,35 @@ class LiquidCooler:
             if not 0 <= f <= 100:
                 raise ValueError("fan 0..100")
             c["fan"] = f
+        if "pump_limits" in b:                    # own pump voltage limits
+            pl = b["pump_limits"]
+            custom = bool(pl.get("custom", c.get("pump_custom")))
+            if custom and not c.get("pump_custom") and not pl.get("accept_risks"):
+                raise ValueError("own pump limits need accept_risks: a voltage outside 7..11 V can damage the pump")
+            run = sorted({int(v) for v in pl.get("levels", c.get("pump_running") or LCV.DEFAULT_RUNNING)})
+            if not run or any(v not in LCV.ALL_VOLTAGES for v in run):
+                raise ValueError("pump voltages: some of 7 / 8 / 11 / 12 V (the cooler knows no others)")
+            c["pump_custom"], c["pump_running"] = custom, run
+            allowed = run if custom else LCV.DEFAULT_RUNNING
+            c["curves"] = LCV.clamp_curves(c.get("curves"), allowed)
+            if c.get("pump"):
+                c["pump"] = LCV.clamp_voltage(int(c["pump"]), allowed)
+            log.warning("liquid cooler: pump voltages %s%s", allowed, " (own limits)" if custom else "")
+        allowed = tuple(c["pump_running"]) if c.get("pump_custom") else LCV.DEFAULT_RUNNING
         if "pump" in b:
             p = int(b["pump"])
             if p not in (0, *VOLTAGES):
                 raise ValueError("pump voltage 0/7/8/11/12")
+            if p and p not in allowed:
+                raise ValueError(f"pump voltage {p} V is outside the allowed {'/'.join(map(str, allowed))} V "
+                                 "(own pump limits)")
             c["pump"] = p
         if "tiers" in b:                          # 1.6.7 and older: tiers become the common curve
             c["tiers"] = self._check_tiers(b["tiers"])
             c["curves"] = LCV.full(c.get("curves"))
             c["curves"]["common"] = LCV.from_tiers(c["tiers"])
         if "curves" in b:
-            c["curves"] = LCV.check_curves(b["curves"], c.get("curves"))
+            c["curves"] = LCV.check_curves(b["curves"], c.get("curves"), allowed)
         if "temp_source" in b:
             if b["temp_source"] not in TEMP_SOURCES:
                 raise ValueError("temperature source: max / cpu / gpu")
@@ -881,6 +906,8 @@ class LiquidCooler:
         with self.lock:
             c = copy.deepcopy(self.cfg)
             pid = LCV.profile_action(c, b)
+            c["curves"] = LCV.clamp_curves(c.get("curves"),
+                                           c["pump_running"] if c.get("pump_custom") else LCV.DEFAULT_RUNNING)
             self.cfg = c
             self._save()
         self._wake_up()
@@ -979,7 +1006,9 @@ class LiquidCooler:
             "default_tiers": DEFAULT_TIERS,
             "curve_key": self.curve_key, "curve_raw": self.curve_raw,
             "curves": LCV.full(c.get("curves")), "curve_keys": list(LCV.CURVE_KEYS),
-            "pump_levels": list(LCV.PUMP_LEVELS), "max_fan_points": LCV.MAX_FAN_POINTS,
+            "pump_levels": list(LCV.levels(self.running())), "pump_running": list(self.running()),
+            "pump_custom": bool(c.get("pump_custom")), "all_voltages": list(LCV.ALL_VOLTAGES),
+            "max_fan_points": LCV.MAX_FAN_POINTS,
             "max_pump_steps": LCV.MAX_PUMP_STEPS,
             "profiles": [{"id": p["id"], "name": p["name"], "builtin": p["builtin"]} for p in LCV.profiles(c)],
             "profile": c.get("profile"), "profile_modified": LCV.modified(c),

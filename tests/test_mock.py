@@ -367,6 +367,15 @@ class CliService(MockService):
         self.assertIn("test-one", [p["id"] for p in self.j("lc", "profile")["profiles"]])
         self.j("lc", "profile", "apply", "quiet")
         self.cli("lc", "profile", "remove", "quiet", code=1)
+        rf = os.path.join(self.tmp, "rules.json")
+        with open(rf, "w") as f:
+            json.dump([{"name": "Heavy", "conditions": [{"metric": "total_power", "op": ">", "value": 120}], "hold": 30,
+                        "mode": 2, "back": True, "back_after": 60}], f)
+        self.assertEqual(self.j("rules", "import", rf)["rules"][0]["mode"], 2)
+        self.assertFalse(self.j("rules", "disable", "1")["rules"][0]["enabled"])
+        self.assertEqual(len(self.j("rules")["rules"]), 1)
+        self.assertEqual(self.j("rules", "clear")["rules"], [])
+        self.assertEqual(self.post("load-rules", {"rules": [{"conditions": [], "mode": 1}]})[0], 400)
         self.assertEqual(self.j("lc", "set", "temp_source", "gpu")["config"]["temp_source"], "gpu")
         self.assertEqual(self.j("lc", "set", "delay_up", "20")["config"]["delay_up"], 20)
         self.assertFalse(self.j("lc", "set", "smooth", "off")["config"]["smooth"])
@@ -745,6 +754,34 @@ class LiquidCoolerUnit(unittest.TestCase):
         self.lc.configure({"pump_idle": {"enabled": False}, "temp_source": "gpu",
                            "curves": {"common": {"fan": [[20, 0], [100, 0]], "pump": [[0, 7]]}}})
         self.assertEqual(self._step(45), (0, 7))
+
+    def test_curve_pump_start_temperature(self):
+        """Pump off below a start temperature, 7 V from it; off again only after the minimum run time."""
+        self._fake_clock()
+        self.lc.configure({"pump_idle": {"min_run": 60}})
+        self._curve([[20, 30], [100, 30]], [[0, 0], [45, 7], [70, 11]])
+        self.assertEqual(self._step(40, 61)[1], 0)             # the pump ran long enough since the connect
+        self.assertEqual(self._step(46, 1)[1], 7)                 # starts at 45 °C with 7 V
+        self.assertEqual(self._step(40, 10)[1], 7)                # below again, but ran only 10 s
+        self.assertEqual(self._step(40, 61)[1], 0)
+        with self.assertRaises(ValueError):
+            self._curve([[20, 30], [100, 30]], [[0, 7], [50, 0]])    # off only below the first running step
+
+    def test_own_pump_limits(self):
+        with self.assertRaises(ValueError):
+            self.lc.configure({"pump_limits": {"custom": True}})                  # the risk must be accepted
+        with self.assertRaises(ValueError):
+            self.lc.configure({"mode": "manual", "fan": 50, "pump": 12})           # 12 V only with own limits
+        self.lc.configure({"pump_limits": {"custom": True, "accept_risks": True, "levels": [8, 11, 12]}})
+        self.assertEqual(self.lc.status()["pump_levels"], [0, 8, 11, 12])
+        self._curve([[20, 50], [100, 50]], [[0, 8], [60, 12]])
+        self.lc.configure({"mode": "low"})                                         # Low = 7 V -> 8 V (7 not allowed)
+        time.sleep(0.4)
+        self.assertEqual(self.lc.status()["pump"], 8)
+        with self.assertRaises(ValueError):
+            self._curve([[20, 50], [100, 50]], [[0, 7]])
+        self.lc.configure({"pump_limits": {"custom": False}})                      # back to 7..11: 12 V steps -> 11 V
+        self.assertEqual(self.lc.status()["curves"]["common"]["pump"], [[0, 8], [60, 11]])
 
     def test_follow_laptop_own_curves(self):
         mode = [1]
@@ -1733,6 +1770,99 @@ class ClevoUnit(unittest.TestCase):
         finally:
             del os.environ["UWCC_MOCK_OEM"]
         self.assertEqual((info["active"], info["reason"]), ("none", "clevo_only"))
+
+
+class LoadRulesUnit(unittest.TestCase):
+    """Automation: mode by power / temperature / load (1.6.8)."""
+
+    def setUp(self):
+        from uwccd import automation as A
+        self.A = A
+
+        class Store(dict):
+            def get(self, k, d=None):
+                return dict.get(self, k, d)
+
+            def set(self, k, v):
+                self[k] = v
+
+        class Power:
+            MODES = (0, 1, 2, 3)
+
+            def __init__(p):
+                p.option = {"OperatingMode": 0}
+                p.idx = {"office": 0, "gaming": 0, "turbo": 0, "custom": 0}
+                p.calls = []
+
+            def status(p):
+                return {"profile_index": dict(p.idx)}
+
+            def user_set_mode(p, mode, osd=False):
+                p.option["OperatingMode"] = mode
+                p.calls.append(("mode", mode))
+
+            def set_profile_index(p, mode, idx):
+                p.idx[{0: "office", 1: "gaming", 2: "turbo", 3: "custom"}[mode]] = idx
+                p.option["OperatingMode"] = mode
+                p.calls.append(("slot", mode, idx))
+
+        class Pf:
+            turbo_support = True
+
+        class Svc:
+            fan_control = True
+
+            def __init__(sv):
+                sv.settings_store, sv.power, sv.pf = Store(), Power(), Pf()
+                sv.events = []
+
+            def emit(sv, k, d):
+                sv.events.append((k, d))
+        self.svc = Svc()
+        self.lr = A.LoadRules(self.svc)
+
+    def m(self, cp=10, gp=5, ct=50, gt=45, cl=10, asleep=False):
+        return {"monitoring": "full", "cpu": {"power_w": cp, "temp": ct, "usage": cl},
+                "gpu": {"power_w": gp, "temp": gt, "usage": 5, "asleep": asleep}}
+
+    def test_power_rule_with_return(self):
+        rules = self.A.check_load_rules([
+            {"name": "heavy", "conditions": [{"metric": "total_power", "op": ">", "value": 150}], "hold": 10,
+             "mode": 2, "slot": 1, "back": True, "back_after": 20},
+            {"name": "idle", "conditions": [{"metric": "cpu_power", "op": "<", "value": 15}], "hold": 30, "mode": 0}])
+        self.svc.settings_store.set("load_rules", rules)
+        self.svc.power.option["OperatingMode"] = 1
+        self.lr.tick(self.m(cp=120, gp=60), now=100)
+        self.lr.tick(self.m(cp=120, gp=60), now=105)
+        self.assertEqual(self.svc.power.option["OperatingMode"], 1)          # not held 10 s yet
+        self.lr.tick(self.m(cp=120, gp=60), now=110)
+        self.assertEqual((self.svc.power.option["OperatingMode"], self.svc.power.idx["turbo"]), (2, 1))
+        self.assertEqual(self.lr.active, 0)
+        self.lr.tick(self.m(cp=50, gp=20), now=115)
+        self.lr.tick(self.m(cp=50, gp=20), now=134)
+        self.assertEqual(self.svc.power.option["OperatingMode"], 2)          # back only after 20 s
+        self.lr.tick(self.m(cp=50, gp=20), now=136)
+        self.assertEqual(self.svc.power.option["OperatingMode"], 1)          # previous mode again
+        self.assertIsNone(self.lr.active)
+        for t in (200, 231):
+            self.lr.tick(self.m(cp=8, gp=0, asleep=True), now=t)
+        self.assertEqual(self.svc.power.option["OperatingMode"], 0)          # low CPU power -> Office
+
+    def test_temperature_or_and_validation(self):
+        rules = self.A.check_load_rules([{"conditions": [{"metric": "cpu_temp", "op": ">", "value": 90},
+                                                         {"metric": "gpu_temp", "op": ">", "value": 85}],
+                                          "join": "or", "hold": 5, "mode": 1, "slot": "current"}])
+        self.assertIsNone(rules[0]["slot"])
+        self.svc.settings_store.set("load_rules", rules)
+        self.lr.tick(self.m(gt=88), now=0)
+        self.lr.tick(self.m(gt=88), now=5)
+        self.assertEqual(self.svc.power.option["OperatingMode"], 1)
+        self.assertIn("0", self.lr.status(now=5)["held"])
+        for bad in ([{"conditions": [], "mode": 1}], [{"conditions": [{"metric": "ram", "op": ">", "value": 1}], "mode": 1}],
+                    [{"conditions": [{"metric": "cpu_load", "op": ">", "value": 150}], "mode": 1}],
+                    [{"conditions": [{"metric": "cpu_load", "op": ">", "value": 50}], "mode": 7}]):
+            with self.assertRaises((ValueError, KeyError)):
+                self.A.check_load_rules(bad)
 
 
 if __name__ == "__main__":

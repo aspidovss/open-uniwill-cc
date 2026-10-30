@@ -10,7 +10,7 @@ _uwccctl() {
     local w=() i
     for ((i = 1; i < cword; i++)); do [[ ${words[i]} == --json ]] || w+=("${words[i]}"); done
     local cmd=${w[0]} sub=${w[1]} n=${#w[@]}
-    local commands="status monitor mode profile boost super ramoc fan battery kb lb clevo get set apps restore lc
+    local commands="status monitor mode profile boost super ramoc fan battery kb lb clevo rules get set apps restore lc
         history export import report lang debug version update restart resume lighting nvram ec ec-direct release help driver"
     local onoff="on off"
     local modes="office gaming turbo custom"
@@ -83,6 +83,7 @@ _uwccctl() {
                 COMPREPLY=($(compgen -W "static breathing breathing_multi wave cycle rainbow colorbreath colorwave" -- "$cur"))
             elif ((n == z + 1)) && [[ $op == light ]]; then COMPREPLY=($(compgen -W "0 1 2 3 4" -- "$cur"))
             fi ;;
+        rules) ((n == 1)) && COMPREPLY=($(compgen -W "list export import enable disable clear" -- "$cur")) ;;
         clevo)
             local a2=${w[2]}
             if ((n == 1)); then COMPREPLY=($(compgen -W "writes restore power fan antidust kb" -- "$cur"))
@@ -117,7 +118,7 @@ _uwccctl() {
             fi ;;
         lc)
             if ((n == 1)); then
-                COMPREPLY=($(compgen -W "status scan connect disconnect mode manual curve profile tiers set idle rgb prime suspend" -- "$cur"))
+                COMPREPLY=($(compgen -W "status scan connect disconnect mode manual curve profile pump-limits tiers set idle rgb prime suspend" -- "$cur"))
             elif ((n == 2)); then
                 case $sub in
                     mode) COMPREPLY=($(compgen -W "auto laptop ec manual high medium low off" -- "$cur")) ;;

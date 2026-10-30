@@ -251,6 +251,19 @@ Light bar zones; the default zone is
 .TP
 .B lighting
 Keyboard and light bar devices (diagnostics).
+.SS Automatic profile switching
+.TP
+.BR "rules " [ list ]
+Rules that switch the mode and profile by power, temperature or load, and their state.
+.TP
+.BI "rules export " FILE ", rules import " FILE
+The rules as JSON; import replaces them (see
+.BR "uwccctl help rules" ).
+.TP
+.BR "rules enable " N ", " "rules disable " N ", " "rules clear"
+.TP
+.BI "lc pump-limits " "7,8,11,12 " "\-\-accept\-risks" "\fR | \fBoff"
+Own pump voltages (the cooler knows only 7, 8, 11 and 12 V).
 .SS Control Center 3.0 / Clevo (experimental)
 Separate module for laptops with Control Center 3.x (Clevo "DCHU" interface); see docs/CLEVO.md.
 Commands are refused until
@@ -356,7 +369,7 @@ Fan 0..100 %, pump 7, 8, 11 or 12 V (0 = off).
 Show the curves: common (Automatic, and Follow the laptop for modes without their own) and per laptop mode.
 .TP
 .BI "lc curve " "KEY " "fan " T:D " ... [pump " T:V " ...]"
-Set a curve: fan 2..17 points, pump 1..4 steps of 7, 8 or 11 V.
+Set a curve: fan 2..17 points, pump 1..4 steps of 7, 8 or 11 V; a first step of 0 V keeps the pump off below the next one.
 .TP
 .BI "lc curve " "KEY " "flat " "FAN \fR[\fIPUMP\fR]"
 A flat curve;

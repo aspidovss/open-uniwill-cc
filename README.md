@@ -97,7 +97,8 @@ Super / XMG NEO 16 (E23); on other models every function stays off until the sel
 - **Switches**: Win-key lock, Fn lock, touchpad, USB power in sleep, power-on with AC, MUX (dGPU direct), webcam
 - **Monitoring**: temperatures, load, clocks, fans, CPU and GPU power, memory, drives, battery; one-hour history
   with export to CSV / JSON / PNG
-- **Automation**: mode per power source, overheating alerts (with optional Fan Boost), app → mode binding
+- **Automation**: mode per power source, overheating alerts (with optional Fan Boost), app → mode binding,
+  automatic profile switching by power / temperature / load (1.6.8)
 - **Control Center 3.0 / Clevo** (new in 1.6.6, experimental, separate module): power modes, fan modes and curve,
   keyboard colour and effects on laptops with Control Center 3.x — [docs/CLEVO.md](docs/CLEVO.md)
 - **Liquid cooler** XMG Oasis (LCT21001 Mk1 / LCT22002 Mk2), Eluktronics Liquid Pad Pro, PCS Liquid Series,

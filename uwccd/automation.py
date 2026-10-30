@@ -124,6 +124,8 @@ class Sampler(threading.Thread):
                 if lvl == "full" and self.recording():
                     self._record(m)
                 self._overheat(m)
+                if lvl == "full" and getattr(self.svc, "load_rules", None):
+                    self.svc.load_rules.tick(m)
             except Exception:  # noqa: BLE001
                 log.exception("sampler")
 
@@ -382,7 +384,8 @@ class PowerSourceRules:
     def on_ac_change(self, online):
         svc, st = self.svc, self.svc.settings_store
         binding_active = any(getattr(t, "active", None) for t in svc.threads if t.name == "appbind")
-        if svc.fan_control and not binding_active:
+        rule_active = getattr(getattr(svc, "load_rules", None), "active", None) is not None   # load rules come first
+        if svc.fan_control and not binding_active and not rule_active:
             cur = svc.power.option["OperatingMode"]
             want = setting(st, "mode_on_ac" if online else "mode_on_battery")
             target = None
@@ -428,3 +431,179 @@ class PowerSourceRules:
                 subprocess.run(["powerprofilesctl", "set", "balanced"], capture_output=True, timeout=5, check=False)
         except (OSError, subprocess.SubprocessError) as e:
             log.debug("powerprofilesctl: %s", e)
+
+
+# -- automatic profile switching by load / power / temperature (1.6.8) ---------------------------------------------
+LOAD_METRICS = {                     # key -> (unit, max value)
+    "cpu_power": ("W", 500), "gpu_power": ("W", 500), "total_power": ("W", 1000),
+    "cpu_temp": ("°C", 110), "gpu_temp": ("°C", 110), "cpu_load": ("%", 100), "gpu_load": ("%", 100),
+}
+MAX_LOAD_RULES = 12
+
+
+def load_metric(m, key):
+    """A value of the monitor snapshot; None when it is not known (the GPU sleeping counts as 0 W / 0 %)."""
+    cpu, gpu = m.get("cpu") or {}, m.get("gpu") or {}
+    asleep = bool(gpu.get("asleep"))
+    if key == "cpu_power":
+        return cpu.get("power_w")
+    if key == "gpu_power":
+        return 0.0 if asleep else gpu.get("power_w")
+    if key == "total_power":
+        c, g = cpu.get("power_w"), (0.0 if asleep else gpu.get("power_w"))
+        return None if c is None and g is None else (c or 0) + (g or 0)
+    if key == "cpu_temp":
+        return cpu.get("temp")
+    if key == "gpu_temp":
+        return None if asleep else gpu.get("temp")
+    if key == "cpu_load":
+        return cpu.get("usage")
+    if key == "gpu_load":
+        return 0 if asleep else gpu.get("usage")
+    return None
+
+
+def check_load_rules(rules):
+    if not isinstance(rules, list) or len(rules) > MAX_LOAD_RULES:
+        raise ValueError(f"at most {MAX_LOAD_RULES} rules")
+    out = []
+    for i, r in enumerate(rules):
+        conds = r.get("conditions") or []
+        if not 1 <= len(conds) <= 3:
+            raise ValueError(f"rule {i + 1}: 1..3 conditions")
+        cc = []
+        for c in conds:
+            k = str(c.get("metric"))
+            if k not in LOAD_METRICS:
+                raise ValueError(f"rule {i + 1}: metric {k} ({', '.join(LOAD_METRICS)})")
+            op = str(c.get("op", ">"))
+            if op not in (">", "<"):
+                raise ValueError(f"rule {i + 1}: operator > or <")
+            v = float(c.get("value"))
+            if not 0 <= v <= LOAD_METRICS[k][1]:
+                raise ValueError(f"rule {i + 1}: {k} 0..{LOAD_METRICS[k][1]} {LOAD_METRICS[k][0]}")
+            cc.append({"metric": k, "op": op, "value": round(v, 1)})
+        join = str(r.get("join", "and"))
+        if join not in ("and", "or"):
+            raise ValueError(f"rule {i + 1}: join and / or")
+        hold, back_after = int(r.get("hold", 30)), int(r.get("back_after", 60))
+        if not 1 <= hold <= 3600 or not 1 <= back_after <= 3600:
+            raise ValueError(f"rule {i + 1}: times 1..3600 s")
+        mode = int(r["mode"])
+        if mode not in (0, 1, 2, 3):
+            raise ValueError(f"rule {i + 1}: mode 0..3")
+        slot = r.get("slot")
+        slot = None if slot in (None, "", "current") else int(slot)
+        if slot is not None and not 0 <= slot <= 4:
+            raise ValueError(f"rule {i + 1}: profile slot 0..4")
+        out.append({"enabled": bool(r.get("enabled", True)), "name": str(r.get("name") or "")[:40],
+                    "conditions": cc, "join": join, "hold": hold, "mode": mode, "slot": slot,
+                    "back": bool(r.get("back", False)), "back_after": back_after})
+    return out
+
+
+class LoadRules:
+    """Switch the laptop's mode (and profile slot) when power / temperature / load hold past a limit.
+
+    Rules are checked in their order on every monitor sample (full monitoring); the first rule whose conditions held
+    for `hold` seconds is applied — once, when it becomes active. While a rule is active, App binding and the power
+    source rules do not change the mode ("rules come first"). A rule with `back` returns to the mode / slot from
+    before when its conditions have been false for `back_after` seconds (unless the mode was changed meanwhile).
+    """
+
+    def __init__(self, svc):
+        self.svc = svc
+        self.since = {}          # rule index -> since when its conditions hold
+        self.false_since = None
+        self.active = None       # index of the active rule
+        self.applied = None      # (mode, slot) the active rule set
+        self.prev = None         # (mode, slot) before the first rule became active
+        self.lock = threading.Lock()
+
+    def rules(self):
+        return self.svc.settings_store.get("load_rules", []) or []
+
+    @staticmethod
+    def holds(rule, m):
+        res = []
+        for c in rule["conditions"]:
+            v = load_metric(m, c["metric"])
+            res.append(v is not None and (v > c["value"] if c["op"] == ">" else v < c["value"]))
+        return all(res) if rule.get("join", "and") == "and" else any(res)
+
+    def _current(self):
+        p = self.svc.power
+        mode = p.option.get("OperatingMode")
+        try:
+            slot = (p.status().get("profile_index") or {}).get({0: "office", 1: "gaming", 2: "turbo", 3: "custom"}.get(mode))
+        except Exception:  # noqa: BLE001
+            slot = None
+        return mode, slot
+
+    def _apply(self, mode, slot, why):
+        p = self.svc.power
+        if mode == 2 and not self.svc.pf.turbo_support or mode not in p.MODES:
+            log.warning("load rule: mode %s is not available here", mode)
+            return False
+        cur = self._current()
+        if cur == (mode, slot) or (slot is None and cur[0] == mode):
+            return True
+        log.info("load rule: %s -> mode %s%s", why, mode, f" slot {slot}" if slot is not None else "")
+        if slot is not None:
+            p.set_profile_index(mode, slot)
+        else:
+            p.user_set_mode(mode, osd=True)
+        self.svc.emit("load_rule", {"rule": why, "mode": mode, "slot": slot})
+        return True
+
+    def tick(self, m, now=None):
+        if not self.svc.fan_control or not m or m.get("monitoring", "full") != "full":
+            return
+        now = time.time() if now is None else now
+        rules = self.rules()
+        with self.lock:
+            hit = None
+            for i, r in enumerate(rules):
+                if not r.get("enabled", True):
+                    self.since.pop(i, None)
+                    continue
+                if self.holds(r, m):
+                    self.since.setdefault(i, now)
+                    if hit is None and now - self.since[i] >= r["hold"]:
+                        hit = i
+                else:
+                    self.since.pop(i, None)
+            try:
+                if hit is not None and hit != self.active:
+                    r = rules[hit]
+                    if self.active is None:
+                        self.prev = self._current()
+                    if self._apply(r["mode"], r.get("slot"), r.get("name") or f"rule {hit + 1}"):
+                        self.active, self.applied, self.false_since = hit, (r["mode"], r.get("slot")), None
+                elif self.active is not None and self.active < len(rules):
+                    r = rules[self.active]
+                    if self.active in self.since:
+                        self.false_since = None
+                    else:
+                        self.false_since = self.false_since or now
+                        if not r.get("back"):
+                            self.active = None
+                        elif now - self.false_since >= r["back_after"]:
+                            cur = self._current()
+                            if self.prev and cur[0] == self.applied[0]:
+                                log.info("load rule %s over: back to mode %s", r.get("name") or self.active + 1, self.prev[0])
+                                self._apply(self.prev[0], self.prev[1], "back")
+                            self.active = self.prev = self.applied = None
+                elif self.active is not None:            # the rule was removed
+                    self.active = self.prev = self.applied = None
+            except Exception:  # noqa: BLE001
+                log.exception("load rules")
+
+    def status(self, now=None):
+        now = time.time() if now is None else now
+        with self.lock:
+            return {"rules": self.rules(), "active": self.active, "metrics": {k: v[0] for k, v in LOAD_METRICS.items()},
+                    "held": {str(i): round(now - t) for i, t in self.since.items()},
+                    "back_in": (round(self.rules()[self.active]["back_after"] - (now - self.false_since))
+                                if self.active is not None and self.false_since and self.active < len(self.rules())
+                                and self.rules()[self.active].get("back") else None)}

@@ -829,4 +829,26 @@ Object.assign(RU, {
   "Drag the points. Double-click on the chart: add a point; double-click on a point: remove it.": "Перетаскивайте точки. Двойной щелчок по графику — добавить точку, по точке — удалить её.",
   "at once from 95 °C or when the curve asks 25 % more": "сразу при 95 °C или когда кривая требует на 25 % больше",
   "Stop the pump at low load (the cooler fan keeps following the curve)": "Останавливать помпу при низкой нагрузке (вентилятор охладителя продолжает следовать кривой)",
+  "Now: {0} °C · {1} %": "Сейчас: {0} °C · {1} %",
+  "The fan follows the curve between its points; the pump switches at the temperature of each step and goes down only 3 °C below it. Drag the first pump point to Off to set the temperature the pump starts at.":
+    "Вентилятор следует кривой между точками; помпа переключается на температуре каждой ступени, а вниз — только на 3 °C ниже неё. Перетащите первую точку помпы в «Выкл», чтобы задать температуру, с которой помпа включается.",
+  "Own pump voltage limits": "Свои границы напряжения помпы", "At least one voltage must stay": "Должно остаться хотя бы одно напряжение",
+  "Allowed: {0} V (from {1} to {2} V)": "Разрешено: {0} В (от {1} до {2} В)", "Own pump limits on": "Свои границы помпы включены",
+  "Pump limits: 7–11 V": "Границы помпы: 7–11 В",
+  "The cooler firmware knows only 7, 8, 11 and 12 V and cannot report which of them a pump supports (6 V does not exist in its protocol). Without own limits 7–11 V are used. The limits apply to every mode: a voltage outside them becomes the nearest allowed one.":
+    "Прошивка охладителя знает только 7, 8, 11 и 12 В и не умеет сообщать, какие из них поддерживает помпа (6 В в её протоколе нет). Без своих границ используются 7–11 В. Границы действуют во всех режимах: напряжение вне них заменяется ближайшим разрешённым.",
+  "Own pump voltage limits: a voltage outside 7–11 V can damage the pump — too low and it may stop moving the coolant, too high and it wears out faster (the OEM software never uses 12 V). Do you understand the risks and want to continue?":
+    "Свои границы напряжения помпы: напряжение вне 7–11 В может повредить помпу — при слишком низком она может перестать прокачивать жидкость, при слишком высоком быстрее изнашивается (программа производителя никогда не использует 12 В). Вы понимаете риски и хотите продолжить?",
+  "Curves — view only (Controller: used when the EC publishes no targets)": "Кривые — только просмотр (Контроллер: используются, когда EC не публикует цели)",
+  // 1.6.8 — automatic profile switching
+  "Automatic profile switching": "Автоматическое переключение профилей", "Add rule": "Добавить правило",
+  "Switch the mode and profile when power, temperature or load stays past a limit. The rules are checked from the top; the first one that held long enough is applied. While a rule is active, App binding and the power source settings do not change the mode. Needs full monitoring (EC Manager → Monitoring).":
+    "Переключать режим и профиль, когда мощность, температура или загрузка держатся за пределом. Правила проверяются сверху вниз; применяется первое, условие которого держалось достаточно долго. Пока правило активно, привязка программ и настройки источника питания режим не меняют. Нужен полный мониторинг (Менеджер EC → Мониторинг).",
+  "Monitoring is not complete — the rules are paused.": "Мониторинг неполный — правила приостановлены.",
+  "CPU + GPU power": "Мощность ЦП + ГП", "Heavy load → Turbo": "Высокая нагрузка → Турбо", "Light load → Office": "Низкая нагрузка → Офисный",
+  "Hot → Gaming": "Горячо → Игровой", "Empty rule": "Пустое правило", "Heavy load": "Высокая нагрузка", "Light load": "Низкая нагрузка", "Hot": "Горячо",
+  "Rule {0}": "Правило {0}", "active": "активно", "holds {0} of {1} s": "держится {0} из {1} с", "and": "и", "or": "или",
+  "above": "выше", "below": "ниже", "+ condition": "+ условие", "current profile": "текущий профиль", "profile {0}": "профиль {0}",
+  "s → switch to": "с → переключить на", "then return to the previous mode when it has not held for": "потом вернуть прежний режим, когда условие не выполняется",
+  "If": "Если", "Automation: {0} → {1}": "Автоматизация: {0} → {1}", "back": "возврат",
 });

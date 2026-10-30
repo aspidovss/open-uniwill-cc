@@ -202,6 +202,7 @@ function onMonitor(m) {
   $("#st-bat").append(h("h3", {}, t("Battery")), h("div", { class: "big" }, b.present ? `${b.percent}%` : t("none")),
     h("div", { class: "sub" }, b.present ? `${batStatus(b.status)}${b.remaining_min ? " · " + t("{0} h {1} min", Math.floor(b.remaining_min / 60), b.remaining_min % 60) : ""}${m.ac ? " · " + t("on AC") : ""}` : ""));
   lastMonitor = m; updateBatStats();
+  if ($("#page-fans") && $("#page-fans").classList.contains("active")) drawCurveNow();
   if ($("#page-monitor").classList.contains("active")) loadHistory();
 }
 let lastMonitor = null;
@@ -497,6 +498,7 @@ function drawCurve() {
   let circles = "";
   pts.forEach(p => { circles += `<circle class="pt ${fanKind === "GPU" ? "gpu" : ""}" data-i="${p.i}" r="7" cx="${CX(Math.max(20, p.i === 0 ? 20 : p.UpT))}" cy="${CY(p.Duty)}"><title>${t("Level")} ${p.i}: ${p.i ? p.UpT + "°C" : t("start")} → ${p.Duty}%</title></circle>`; });
   svg.innerHTML = g + `<path d="${path}" fill="none" stroke="${col}" stroke-width="2.5"/>` + circles;
+  drawCurveNow();
   // the drag state lives outside drawCurve(): the SVG is re-rendered on every move
   svg.onpointerdown = e => {
     e.preventDefault();                       // no text selection / native drag (Edge, WebKitGTK)
@@ -522,6 +524,27 @@ function drawCurve() {
     if (curveDrag != null && svg.hasPointerCapture(e.pointerId)) svg.releasePointerCapture(e.pointerId);
     curveDrag = null;
   };
+}
+// red dot: the fan's current temperature and speed, on the table that is active now (needs full monitoring)
+function drawCurveNow() {
+  const svg = $("#curve"); if (!svg) return;
+  svg.querySelectorAll(".now").forEach(x => x.remove());
+  const m = lastMonitor;
+  if (!m || !S || curTable !== S.power.current_table || curveDrag != null) return;
+  const gpu = fanKind === "GPU";
+  const temp = gpu ? (m.gpu && !m.gpu.asleep ? m.gpu.temp : null) : m.cpu && m.cpu.temp;
+  const duty = gpu ? m.fans.gpu_duty : m.fans.cpu_duty, rpm = gpu ? m.fans.gpu_rpm : m.fans.cpu_rpm;
+  if (temp == null || duty == null) return;
+  const x = CX(Math.max(20, Math.min(100, temp))), y = CY(Math.max(0, Math.min(100, duty)));
+  const label = `${temp} °C · ${rpm != null ? rpm + " " + t("rpm") : duty + " %"}`;
+  const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+  c.setAttribute("class", "now"); c.setAttribute("r", "6"); c.setAttribute("cx", x); c.setAttribute("cy", y);
+  const tt = document.createElementNS("http://www.w3.org/2000/svg", "title");
+  tt.textContent = t("Now: {0} °C · {1} %", temp, duty) + (rpm != null ? ` · ${rpm} ${t("rpm")}` : ""); c.append(tt);
+  const tx = document.createElementNS("http://www.w3.org/2000/svg", "text"), left = x > 470, up = y > 246;
+  tx.setAttribute("class", "now nowlbl"); tx.setAttribute("x", left ? x - 10 : x + 10); tx.setAttribute("y", up ? y - 12 : y + 22);
+  tx.setAttribute("text-anchor", left ? "end" : "start"); tx.textContent = label;
+  svg.append(c, tx);
 }
 function drawPts() {
   const tb = $("#pts"); tb.innerHTML = "";
@@ -1203,6 +1226,23 @@ function renderLiquid() {
     ? t("Active: EC liquid-cooling table{0}, power level {1}", hw.table_loaded === false ? " " + t("(the EC did not confirm it)") : "", hw.level ?? "—")
     : reason;
   $("#lc-notify").checked = !!c.notify_flow; $("#lc-bfan").checked = !!c.boost_fan; $("#lc-bpump").checked = !!c.boost_pump;
+  // own pump voltage limits
+  $("#lc-pcustom").checked = !!L.pump_custom;
+  const pv = $("#lc-pvolts"); pv.innerHTML = "";
+  for (const v of L.all_voltages || []) {
+    const on = (L.pump_custom ? c.pump_running : [7, 8, 11]).includes(v);
+    const box = h("input", { type: "checkbox", ...(on ? { checked: true } : {}), ...(L.pump_custom ? {} : { disabled: true }) });
+    box.addEventListener("change", () => {
+      const cur = new Set(c.pump_running || []); box.checked ? cur.add(v) : cur.delete(v);
+      if (!cur.size) { box.checked = true; return toast(t("At least one voltage must stay"), true); }
+      lcPost("config", { pump_limits: { levels: [...cur] } });
+    });
+    pv.append(h("label", { class: "chk" + (v === 12 ? " warn-text" : "") }, box, ` ${v} V`));
+  }
+  const run = L.pump_running || [];
+  $("#lc-prange").textContent = run.length ? t("Allowed: {0} V (from {1} to {2} V)", run.join(" / "), run[0], run[run.length - 1]) : "";
+  const ms = $("#lc-pump");                          // Manual: only the allowed voltages
+  for (const o of ms.options) { const v = +o.value; o.hidden = o.disabled = !!v && !run.includes(v); }
 }
 // ---- curve editors: fan curve (points, linear) and pump steps (7 / 8 / 11 V)
 const LCX0 = 20, LCX1 = 100;                                   // temperature axis, °C
@@ -1232,16 +1272,19 @@ function drawCurves(L) {
   $("#lc-own-row").classList.toggle("hidden", !own);
   $("#lc-own").checked = own && !!L.curves[lcTab];
   $("#lc-own-label").textContent = t("Own curve for the mode “{0}” (otherwise the common curve)", t(LC_CURVE_NAME[lcTab] || lcTab));
-  $("#lc-curves-title").textContent = laptop ? t("Curves — Follow the laptop") : c.mode === "ec" ? t("Curves — used when the EC publishes no targets") : t("Curves — Automatic");
+  $("#lc-curves-title").textContent = laptop ? t("Curves — Follow the laptop") : c.mode === "ec" ? t("Curves — view only (Controller: used when the EC publishes no targets)") : t("Curves — Automatic");
   $("#lc-curves-hint").textContent = laptop ? t("The cooler uses the curve of the laptop's current mode (●) if it has its own (✎), otherwise the common curve. The common curve is also the curve of the Automatic mode.")
-    : t("The fan follows the curve between its points; the pump switches at the temperature of each step and goes down only 3 °C below it.");
+    : t("The fan follows the curve between its points; the pump switches at the temperature of each step and goes down only 3 °C below it. Drag the first pump point to Off to set the temperature the pump starts at.");
   const key = own && L.curves[lcTab] ? lcTab : "common";
   const set = JSON.parse(JSON.stringify(lcSet(L, key)));
-  const readonly = own && !L.curves[lcTab];
+  const viewOnly = c.mode === "ec";                  // Controller: the EC drives the cooler, the curves are only shown
+  const readonly = (own && !L.curves[lcTab]) || viewOnly;
   const active = L.connected && ["auto", "laptop", "ec"].includes(c.mode) && L.curve_key === key ? L : null;
   const ed = $("#lc-editors"); ed.innerHTML = "";
   ed.append(lcFanEditor(set, key, readonly, active), lcPumpEditor(set, key, readonly, active));
   $("#lc-flat").disabled = readonly;
+  for (const id of ["lc-prof", "lc-prof-apply", "lc-prof-save", "lc-prof-copy", "lc-prof-remove"]) if (viewOnly) $("#" + id).disabled = true;
+  if (!viewOnly) $("#lc-prof").disabled = $("#lc-prof-copy").disabled = false;
   $("#lc-flat").onclick = () => {
     const v = prompt(t("Fan duty for the whole curve, %"), String(set.fan[set.fan.length - 1][1]));
     if (v === null) return; const n = Math.max(0, Math.min(100, parseInt(v, 10) || 0));
@@ -1251,25 +1294,30 @@ function drawCurves(L) {
 $("#lc-own").addEventListener("change", e => {
   const L = S.liquid; lcPostCurve(lcTab, e.target.checked ? JSON.parse(JSON.stringify(L.curves.common)) : null);
 });
-function lcSvg(w, hgt) { const e = document.createElementNS("http://www.w3.org/2000/svg", "svg"); e.setAttribute("viewBox", `0 0 ${w} ${hgt}`); e.setAttribute("class", "lc-curve"); return e; }
+function lcSvg(w, hgt) { const e = document.createElementNS("http://www.w3.org/2000/svg", "svg"); e.setAttribute("viewBox", `0 0 ${w} ${hgt}`); e.setAttribute("class", "curve lc-curve"); return e; }
 function lcEl(tag, attrs, text) { const e = document.createElementNS("http://www.w3.org/2000/svg", tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); if (text != null) e.textContent = text; return e; }
-function lcAxes(svg, P, yTicks, yLabel, xLabel) {
+// same look as the laptop fan curve (Fan settings): 640-wide box, grid, 11 px labels, filled points
+function lcAxes(svg, P, yTicks) {
+  const g = lcEl("g", { class: "grid" });
   for (let x = LCX0; x <= LCX1; x += 10) {
-    const px = P.x(x); svg.append(lcEl("line", { x1: px, x2: px, y1: P.top, y2: P.bot, class: "grid" }), lcEl("text", { x: px, y: P.bot + 16, class: "tick", "text-anchor": "middle" }, `${x}°`));
+    const px = P.x(x); g.append(lcEl("line", { x1: px, x2: px, y1: P.top, y2: P.bot }), lcEl("text", { x: px - 8, y: P.bot + 18 }, `${x}°`));
   }
-  for (const [v, lab] of yTicks) { const py = P.y(v); svg.append(lcEl("line", { x1: P.left, x2: P.right, y1: py, y2: py, class: "grid" }), lcEl("text", { x: P.left - 6, y: py + 4, class: "tick", "text-anchor": "end" }, lab)); }
-  svg.append(lcEl("text", { x: P.left, y: P.top - 8, class: "ttl" }, yLabel));
-  svg.append(lcEl("text", { x: P.right, y: P.bot + 32, class: "tick", "text-anchor": "end" }, xLabel));
+  for (const [v, lab] of yTicks) { const py = P.y(v); g.append(lcEl("line", { x1: P.left, x2: P.right, y1: py, y2: py }), lcEl("text", { x: 14, y: py + 4 }, lab)); }
+  svg.append(g);
 }
-function lcCross(svg, P, temp, yv, label) {
-  if (temp == null) return;
-  const px = P.x(Math.max(LCX0, Math.min(LCX1, temp)));
-  svg.append(lcEl("line", { x1: px, x2: px, y1: P.top, y2: P.bot, class: "cross" }));
-  if (yv != null) { const py = P.y(yv); svg.append(lcEl("line", { x1: P.left, x2: P.right, y1: py, y2: py, class: "cross" }), lcEl("circle", { cx: px, cy: py, r: 4, class: "crossdot" })); }
-  svg.append(lcEl("text", { x: px + 4, y: P.top + 12, class: "crosslbl" }, label));
+function lcNowLabel(svg, x, y, label, right, bot) {  // text under the red dot (rising curves pass above-right of it)
+  const left = x > right - 150, up = y > bot - 24;
+  svg.append(lcEl("text", { x: left ? x - 10 : x + 10, y: up ? y - 12 : y + 22, class: "nowlbl", "text-anchor": left ? "end" : "start" }, label));
+}
+function lcCross(svg, P, temp, yv, label) {            // the current point: a red dot with temperature · value
+  if (temp == null || yv == null) return;
+  const x = P.x(Math.max(LCX0, Math.min(LCX1, temp))), y = P.y(yv);
+  const d = lcEl("circle", { cx: x, cy: y, r: 6, class: "crossdot" });
+  d.append(lcEl("title", {}, label)); svg.append(d);
+  lcNowLabel(svg, x, y, label, P.right, P.bot);
 }
 function lcPlot(w, hgt, ymin, ymax) {
-  const P = { left: 46, right: w - 14, top: 26, bot: hgt - 38 };
+  const P = { left: 50, right: 620, top: 20, bot: hgt - 30 };
   P.x = tc => P.left + (tc - LCX0) / (LCX1 - LCX0) * (P.right - P.left);
   P.y = v => P.bot - (v - ymin) / (ymax - ymin) * (P.bot - P.top);
   P.tx = px => Math.round(LCX0 + (px - P.left) / (P.right - P.left) * (LCX1 - LCX0));
@@ -1278,34 +1326,43 @@ function lcPlot(w, hgt, ymin, ymax) {
 }
 function lcPointer(svg, e) { const r = svg.getBoundingClientRect(), vb = svg.viewBox.baseVal; return [(e.clientX - r.left) / r.width * vb.width, (e.clientY - r.top) / r.height * vb.height]; }
 function lcFanEditor(set, key, readonly, L) {
-  const W = 900, H = 260, P = lcPlot(W, H, 0, 100), svg = lcSvg(W, H), pts = set.fan;
-  lcAxes(svg, P, [[0, "0%"], [25, "25%"], [50, "50%"], [75, "75%"], [100, "100%"]], t("Cooler fan, %"), t("Temperature, °C"));
-  const path = lcEl("polyline", { class: "curve" + (readonly ? " ro" : "") }); svg.append(path);
+  const W = 640, H = 300, P = lcPlot(W, H, 0, 100), svg = lcSvg(W, H), pts = set.fan;
+  lcAxes(svg, P, [[0, "0%"], [25, "25%"], [50, "50%"], [75, "75%"], [100, "100%"]]);
+  const path = lcEl("polyline", { class: "line" + (readonly ? " ro" : "") }); svg.append(path);
   const dots = lcEl("g", {}); svg.append(dots);
   const redraw = () => {
     const xs = [[LCX0, pts[0][1]], ...pts.map(p => [Math.max(LCX0, p[0]), p[1]]), [LCX1, pts[pts.length - 1][1]]];
     path.setAttribute("points", xs.map(([a, b]) => `${P.x(a)},${P.y(b)}`).join(" "));
     dots.innerHTML = "";
     pts.forEach((p, i) => {
-      const d = lcEl("circle", { cx: P.x(Math.max(LCX0, p[0])), cy: P.y(p[1]), r: 6, class: "pt" + (readonly ? " ro" : "") });
+      const d = lcEl("circle", { cx: P.x(Math.max(LCX0, p[0])), cy: P.y(p[1]), r: 7, class: "pt" + (readonly ? " ro" : "") });
+      d.dataset.i = i;
       d.append(lcEl("title", {}, `${p[0]} °C · ${p[1]} %`));
-      if (!readonly) {
-        d.addEventListener("pointerdown", ev => { ev.preventDefault(); d.setPointerCapture(ev.pointerId); lcDrag = { i }; });
-        d.addEventListener("pointermove", ev => {
-          if (!lcDrag || lcDrag.i !== i) return;
-          const [mx, my] = lcPointer(svg, ev);
-          const lo = i ? pts[i - 1][0] + 1 : LCX0, hi = i < pts.length - 1 ? pts[i + 1][0] - 1 : LCX1;
-          const dlo = i ? pts[i - 1][1] : 0, dhi = i < pts.length - 1 ? pts[i + 1][1] : 100;
-          p[0] = Math.max(lo, Math.min(hi, P.tx(mx))); p[1] = Math.max(dlo, Math.min(dhi, Math.round(P.vy(my))));
-          redraw();
-        });
-        d.addEventListener("pointerup", () => { if (lcDrag) { lcDrag = null; lcPostCurve(key, set); } });
-        d.addEventListener("dblclick", ev => { ev.stopPropagation(); if (pts.length > 2) { pts.splice(i, 1); lcPostCurve(key, set); } });
-      }
       dots.append(d);
     });
   };
   redraw();
+  // the dots are redrawn on every move: the svg itself holds the pointer (as in the laptop fan curve)
+  if (!readonly) {
+    svg.addEventListener("pointerdown", ev => {
+      const c = ev.target.closest && ev.target.closest(".pt"); if (!c) return;
+      ev.preventDefault(); svg.setPointerCapture(ev.pointerId); lcDrag = { i: +c.dataset.i };
+    });
+    svg.addEventListener("pointermove", ev => {
+      if (!lcDrag) return;
+      const i = lcDrag.i, p = pts[i], [mx, my] = lcPointer(svg, ev);
+      const lo = i ? pts[i - 1][0] + 1 : LCX0, hi = i < pts.length - 1 ? pts[i + 1][0] - 1 : LCX1;
+      const dlo = i ? pts[i - 1][1] : 0, dhi = i < pts.length - 1 ? pts[i + 1][1] : 100;
+      p[0] = Math.max(lo, Math.min(hi, P.tx(mx))); p[1] = Math.max(dlo, Math.min(dhi, Math.round(P.vy(my))));
+      redraw();
+    });
+    const end = ev => { if (!lcDrag) return; if (svg.hasPointerCapture(ev.pointerId)) svg.releasePointerCapture(ev.pointerId); lcDrag = null; lcPostCurve(key, set); };
+    svg.addEventListener("pointerup", end); svg.addEventListener("pointercancel", end);
+    dots.addEventListener("dblclick", ev => {
+      const c = ev.target.closest && ev.target.closest(".pt"); if (!c) return;
+      ev.stopPropagation(); if (pts.length > 2) { pts.splice(+c.dataset.i, 1); lcPostCurve(key, set); }
+    });
+  }
   if (!readonly) svg.addEventListener("dblclick", ev => {
     if (pts.length >= S.liquid.max_fan_points) return toast(t("At most {0} points", S.liquid.max_fan_points), true);
     const [mx] = lcPointer(svg, ev); const tc = Math.max(LCX0, Math.min(LCX1, P.tx(mx)));
@@ -1315,14 +1372,14 @@ function lcFanEditor(set, key, readonly, L) {
     const duty = prev && next ? Math.round(prev[1] + (next[1] - prev[1]) * (tc - prev[0]) / (next[0] - prev[0])) : (prev || next)[1];
     pts.splice(ins, 0, [tc, duty]); lcPostCurve(key, set);
   });
-  if (L && L.temp_avg != null) lcCross(svg, P, L.temp_avg, L.curve_raw ? L.curve_raw[0] : L.fan, `${L.temp_avg}°C · ${L.curve_raw ? L.curve_raw[0] : L.fan}%`);
-  return h("div", { class: "lc-ed" }, svg);
+  if (L && L.temp_avg != null && L.fan != null) lcCross(svg, P, L.temp_avg, L.fan, `${L.temp_avg} °C · ${L.fan} %`);
+  return h("div", { class: "lc-ed" }, h("h4", {}, t("Cooler fan")), svg);
 }
 function lcPumpEditor(set, key, readonly, L) {
-  const W = 900, H = 180, lv = S.liquid.pump_levels, P = lcPlot(W, H, 0, lv.length - 1), svg = lcSvg(W, H), st = set.pump;
+  const W = 640, H = 170, lv = S.liquid.pump_levels, P = lcPlot(W, H, 0, lv.length - 1), svg = lcSvg(W, H), st = set.pump;
   const yi = v => lv.indexOf(v);
-  lcAxes(svg, P, lv.map((v, i) => [i, `${v} V`]), t("Pump, V"), t("Temperature, °C"));
-  const path = lcEl("polyline", { class: "curve pump" + (readonly ? " ro" : "") }); svg.append(path);
+  lcAxes(svg, P, lv.map((v, i) => [i, v ? `${v} V` : t("Off")]));
+  const path = lcEl("polyline", { class: "line pump" + (readonly ? " ro" : "") }); svg.append(path);
   const dots = lcEl("g", {}); svg.append(dots);
   const redraw = () => {
     const xs = [];
@@ -1334,37 +1391,47 @@ function lcPumpEditor(set, key, readonly, L) {
     path.setAttribute("points", xs.map(([a, b]) => `${P.x(a)},${P.y(b)}`).join(" "));
     dots.innerHTML = "";
     st.forEach((s0, i) => {
-      const d = lcEl("circle", { cx: P.x(i === 0 ? LCX0 : Math.max(LCX0, s0[0])), cy: P.y(yi(s0[1])), r: 6, class: "pt" + (readonly ? " ro" : "") });
-      d.append(lcEl("title", {}, i === 0 ? `${t("from the start")} · ${s0[1]} V` : `${t("from")} ${s0[0]} °C · ${s0[1]} V`));
-      if (i) dots.append(lcEl("text", { x: P.x(Math.max(LCX0, s0[0])) - 4, y: P.y(yi(s0[1])) - 9, class: "tick", "text-anchor": "end" }, `${s0[0]}°`));
-      if (!readonly) {
-        d.addEventListener("pointerdown", ev => { ev.preventDefault(); d.setPointerCapture(ev.pointerId); lcDrag = { i }; });
-        d.addEventListener("pointermove", ev => {
-          if (!lcDrag || lcDrag.i !== i) return;
-          const [mx, my] = lcPointer(svg, ev);
-          if (i) { const lo = st[i - 1][0] + 1, hi = i < st.length - 1 ? st[i + 1][0] - 1 : LCX1; s0[0] = Math.max(lo, Math.min(hi, P.tx(mx))); }
-          const vlo = i ? yi(st[i - 1][1]) : 0, vhi = i < st.length - 1 ? yi(st[i + 1][1]) : lv.length - 1;
-          s0[1] = lv[Math.max(vlo, Math.min(vhi, Math.round(P.vy(my))))];
-          redraw();
-        });
-        d.addEventListener("pointerup", () => { if (lcDrag) { lcDrag = null; lcPostCurve(key, set); } });
-        d.addEventListener("dblclick", ev => { ev.stopPropagation(); if (i && st.length > 1) { st.splice(i, 1); lcPostCurve(key, set); } });
-      }
+      const d = lcEl("circle", { cx: P.x(i === 0 ? LCX0 : Math.max(LCX0, s0[0])), cy: P.y(yi(s0[1])), r: 7, class: "pt gpu" + (readonly ? " ro" : "") });
+      const vtxt = s0[1] ? `${s0[1]} V` : t("off");
+      d.dataset.i = i;
+      d.append(lcEl("title", {}, i === 0 ? `${t("from the start")} · ${vtxt}` : `${t("from")} ${s0[0]} °C · ${vtxt}`));
+      if (i) dots.append(lcEl("text", { x: P.x(Math.max(LCX0, s0[0])) - 10, y: P.y(yi(s0[1])) - 10, "text-anchor": "end" }, `${s0[0]}°`));
       dots.append(d);
     });
   };
   redraw();
+  if (!readonly) {
+    svg.addEventListener("pointerdown", ev => {
+      const c = ev.target.closest && ev.target.closest(".pt"); if (!c) return;
+      ev.preventDefault(); svg.setPointerCapture(ev.pointerId); lcDrag = { i: +c.dataset.i };
+    });
+    svg.addEventListener("pointermove", ev => {
+      if (!lcDrag) return;
+      const i = lcDrag.i, s0 = st[i], [mx, my] = lcPointer(svg, ev);
+      if (i) { const lo = st[i - 1][0] + 1, hi = i < st.length - 1 ? st[i + 1][0] - 1 : LCX1; s0[0] = Math.max(lo, Math.min(hi, P.tx(mx))); }
+      // "off" only for the first level: the next step is then where the pump starts (7 V and up)
+      const vlo = i ? Math.max(1, yi(st[i - 1][1])) : 0, vhi = i < st.length - 1 ? yi(st[i + 1][1]) : lv.length - 1;
+      s0[1] = lv[Math.max(vlo, Math.min(vhi, Math.round(P.vy(my))))];
+      redraw();
+    });
+    const end = ev => { if (!lcDrag) return; if (svg.hasPointerCapture(ev.pointerId)) svg.releasePointerCapture(ev.pointerId); lcDrag = null; lcPostCurve(key, set); };
+    svg.addEventListener("pointerup", end); svg.addEventListener("pointercancel", end);
+    dots.addEventListener("dblclick", ev => {
+      const c = ev.target.closest && ev.target.closest(".pt"); if (!c) return;
+      ev.stopPropagation(); const i = +c.dataset.i; if (i && st.length > 1) { st.splice(i, 1); lcPostCurve(key, set); }
+    });
+  }
   if (!readonly) svg.addEventListener("dblclick", ev => {
     if (st.length >= S.liquid.max_pump_steps) return toast(t("At most {0} steps", S.liquid.max_pump_steps), true);
     const [mx] = lcPointer(svg, ev); const tc = Math.max(LCX0 + 1, Math.min(LCX1, P.tx(mx)));
     if (st.some(s0 => s0[0] === tc)) return;
     const k = st.findIndex(s0 => s0[0] > tc), ins = k < 0 ? st.length : k;
     const prevV = st[ins - 1][1], nextV = st[ins] ? st[ins][1] : lv[lv.length - 1];
-    const v = lv[Math.min(yi(nextV), yi(prevV) + 1)];
+    const v = lv[Math.max(1, Math.min(yi(nextV), yi(prevV) + 1))];
     st.splice(ins, 0, [tc, v]); lcPostCurve(key, set);
   });
-  if (L && L.temp_avg != null) lcCross(svg, P, L.temp_avg, L.pump ? yi(L.pump) : null, `${L.temp_avg}°C · ${L.pump ? L.pump + " V" : t("off")}`);
-  return h("div", { class: "lc-ed" }, svg);
+  if (L && L.temp_avg != null && L.pump != null) lcCross(svg, P, L.temp_avg, Math.max(0, yi(L.pump)), `${L.temp_avg} °C · ${L.pump ? L.pump + " V" : t("off")}`);
+  return h("div", { class: "lc-ed" }, h("h4", {}, t("Pump")), svg);
 }
 $("#lc-prof").addEventListener("change", () => drawCurves(S.liquid));
 const lcProf = (action, extra, ok) => lcPost("profile", { action, id: $("#lc-prof").value, ...(extra || {}) }, ok);
@@ -1420,7 +1487,7 @@ $("#lc-fan").addEventListener("input", e => { e.target.nextElementSibling.textCo
 $("#lc-fan").addEventListener("change", e => lcPost("config", { mode: "manual", fan: +e.target.value }));
 $("#lc-pump").addEventListener("change", e => {
   const v = +e.target.value;
-  if (v === 12 && !confirm(t("12 V is not used by the OEM software and may shorten pump life. Continue?"))) { e.target.value = S.liquid.config.pump; return; }
+  if (v === 12 && !confirm(t("12 V is not used by the OEM software and may shorten pump life. Continue?"))) { e.target.value = S.liquid.config.pump; return; }   // only with own limits
   if (v === 0 && !confirm(t("Stop the pump? The coolant will not circulate."))) { e.target.value = S.liquid.config.pump; return; }
   lcPost("config", { mode: "manual", pump: v });
 });
@@ -1430,6 +1497,12 @@ $("#lc-calm-save").addEventListener("click", () => act(async () => {
 $("#lc-calm-reset").addEventListener("click", () => {
   lcCalm = { temp_source: "max", delay_up: 10, delay_down: 30, smooth: true, pump_idle: { ...(S.liquid.config.pump_idle || {}), enabled: false } };
   drawCalm(S.liquid);
+});
+$("#lc-pcustom").addEventListener("change", e => {
+  if (e.target.checked) {
+    if (!confirm(t("Own pump voltage limits: a voltage outside 7–11 V can damage the pump — too low and it may stop moving the coolant, too high and it wears out faster (the OEM software never uses 12 V). Do you understand the risks and want to continue?"))) { e.target.checked = false; return; }
+    lcPost("config", { pump_limits: { custom: true, accept_risks: true } }, t("Own pump limits on"));
+  } else lcPost("config", { pump_limits: { custom: false } }, t("Pump limits: 7–11 V"));
 });
 $("#lc-rgb-on").addEventListener("change", e => lcPost("config", { rgb: { on: e.target.checked } }));
 $("#lc-color").addEventListener("change", e => lcPost("config", { rgb: { on: true, color: hex2rgb(e.target.value) } }));
@@ -1949,7 +2022,70 @@ function renderAuto() {
   $("#au-alerts").checked = !!a.alerts; $("#au-boost").checked = !!a.overheat_boost; $("#au-boost").disabled = !S.platform.fan_control;
   if (document.activeElement !== $("#au-cpu")) $("#au-cpu").value = a.cpu_alert;
   if (document.activeElement !== $("#au-gpu")) $("#au-gpu").value = a.gpu_alert;
+  renderLoadRules();
 }
+// ---- automatic profile switching (load rules, 1.6.8)
+const AU_METRIC = { cpu_power: "CPU power", gpu_power: "GPU power", total_power: "CPU + GPU power", cpu_temp: "CPU temperature",
+  gpu_temp: "GPU temperature", cpu_load: "CPU load", gpu_load: "GPU load" };
+const AU_TEMPLATES = [
+  ["heavy", "Heavy load → Turbo", { name: "Heavy load", conditions: [{ metric: "total_power", op: ">", value: 120 }], hold: 30, mode: 2, slot: null, back: true, back_after: 60 }],
+  ["light", "Light load → Office", { name: "Light load", conditions: [{ metric: "cpu_power", op: "<", value: 15 }], hold: 60, mode: 0, slot: null, back: false, back_after: 60 }],
+  ["hot", "Hot → Gaming", { name: "Hot", conditions: [{ metric: "cpu_temp", op: ">", value: 90 }, { metric: "gpu_temp", op: ">", value: 85 }], join: "or", hold: 20, mode: 1, slot: null, back: true, back_after: 120 }],
+  ["empty", "Empty rule", { name: "", conditions: [{ metric: "cpu_power", op: ">", value: 50 }], hold: 30, mode: 1, slot: null, back: false, back_after: 60 }],
+];
+let auRules = null, auDirty = false;
+function renderLoadRules() {
+  const R = S.load_rules; if (!R) return;
+  if (!auDirty || !auRules) auRules = JSON.parse(JSON.stringify(R.rules || []));
+  $("#au-rules-mon").classList.toggle("hidden", (S.monitoring || "full") === "full");
+  const tpl = $("#au-rule-tpl"); if (!tpl.options.length || tpl.dataset.lang !== LANG) {
+    tpl.innerHTML = ""; tpl.dataset.lang = LANG; for (const [id, n] of AU_TEMPLATES) tpl.append(h("option", { value: id }, t(n)));
+  }
+  const box = $("#au-rules"); if (box.contains(document.activeElement) && document.activeElement.tagName !== "BUTTON") return;
+  box.innerHTML = "";
+  if (!auRules.length) { box.append(h("p", { class: "muted" }, t("No rules yet"))); return; }
+  const modes = MODES.filter(m => (m.id !== 3 || S.power.custom_support) && (m.id !== 2 || S.power.turbo_support));
+  const change = () => { auDirty = true; };
+  const sel = (opts, val, on) => { const e = h("select", {}, ...opts.map(([v, n]) => { const o = h("option", { value: v }, n); if (String(val) === String(v)) o.selected = true; return o; })); e.addEventListener("change", () => { on(e.value); change(); renderLoadRules(); }); return e; };
+  const num = (val, min, max, on) => { const e = h("input", { type: "number", class: "num", min, max, value: val }); e.addEventListener("change", () => { on(+e.value); change(); }); return e; };
+  auRules.forEach((r, i) => {
+    const active = R.active === i && !auDirty, held = (R.held || {})[i];
+    const en = h("input", { type: "checkbox", ...(r.enabled !== false ? { checked: true } : {}) }); en.addEventListener("change", () => { r.enabled = en.checked; change(); });
+    const name = h("input", { type: "text", maxlength: 40, value: r.name || "", placeholder: t("Rule {0}", i + 1) }); name.addEventListener("change", () => { r.name = name.value; change(); });
+    const move = (d) => { const j = i + d; if (j < 0 || j >= auRules.length) return; [auRules[i], auRules[j]] = [auRules[j], auRules[i]]; change(); renderLoadRules(); };
+    const head = h("div", { class: "row between wrap" }, h("div", { class: "row wrap" }, h("label", { class: "chk" }, en), name,
+      active ? h("span", { class: "badge-on" }, t("active")) : held != null && !auDirty ? h("span", { class: "muted tiny" }, t("holds {0} of {1} s", held, r.hold)) : ""),
+      h("div", { class: "row" }, h("button", { class: "btn ghost sm", title: t("Up"), onclick: () => move(-1) }, "↑"), h("button", { class: "btn ghost sm", title: t("Down"), onclick: () => move(1) }, "↓"),
+        h("button", { class: "btn ghost sm", onclick: () => { auRules.splice(i, 1); change(); renderLoadRules(); } }, t("Delete"))));
+    const conds = h("div", { class: "au-conds" });
+    r.conditions.forEach((c, k) => {
+      if (k) conds.append(sel([["and", t("and")], ["or", t("or")]], r.join || "and", v => { r.join = v; }));
+      conds.append(h("span", { class: "au-cond" },
+        sel(Object.entries(AU_METRIC).map(([v, n]) => [v, t(n)]), c.metric, v => { c.metric = v; }),
+        sel([[">", t("above")], ["<", t("below")]], c.op, v => { c.op = v; }),
+        num(c.value, 0, 1000, v => { c.value = v; }), h("span", { class: "muted" }, t(R.metrics[c.metric] === "W" ? "W" : R.metrics[c.metric] || "")),
+        r.conditions.length > 1 ? h("button", { class: "btn ghost sm", onclick: () => { r.conditions.splice(k, 1); change(); renderLoadRules(); } }, "✕") : ""));
+    });
+    if (r.conditions.length < 3) conds.append(h("button", { class: "btn ghost sm", onclick: () => { r.conditions.push({ metric: "gpu_power", op: ">", value: 50 }); change(); renderLoadRules(); } }, t("+ condition")));
+    const key = { 0: "office", 1: "gaming", 2: "turbo", 3: "custom" }[r.mode], nslots = (S.power.slots || {})[key] || 1;
+    const slotOpts = [["", t("current profile")], ...Array.from({ length: nslots }, (_, j) => [j, r.mode === 3 ? slotName(S.profiles["Mode4_Profile" + (j + 1)], j + 1) : t("profile {0}", j + 1)])];
+    const act1 = h("div", { class: "row wrap au-line" }, h("span", {}, t("for")), num(r.hold, 1, 3600, v => { r.hold = v; }), h("span", {}, t("s → switch to")),
+      sel(modes.map(m => [m.id, t(m.name)]), r.mode, v => { r.mode = +v; r.slot = null; }),
+      sel(slotOpts, r.slot ?? "", v => { r.slot = v === "" ? null : +v; }));
+    const bk = h("input", { type: "checkbox", ...(r.back ? { checked: true } : {}) }); bk.addEventListener("change", () => { r.back = bk.checked; change(); });
+    const act2 = h("div", { class: "row wrap au-line" }, h("label", { class: "chk" }, bk, " ", h("span", {}, t("then return to the previous mode when it has not held for"))),
+      num(r.back_after, 1, 3600, v => { r.back_after = v; }), h("span", {}, t("s")));
+    box.append(h("div", { class: "au-rule" + (active ? " on" : "") }, head, h("div", { class: "au-line" }, h("b", {}, t("If")), " ", conds), act1, act2));
+  });
+}
+$("#au-rule-add").addEventListener("click", () => {
+  const tp = AU_TEMPLATES.find(x => x[0] === $("#au-rule-tpl").value) || AU_TEMPLATES[0];
+  if (!auRules) auRules = [];
+  const r = JSON.parse(JSON.stringify(tp[2])); r.name = r.name ? t(r.name) : ""; r.enabled = true;
+  if (r.mode === 2 && !S.power.turbo_support) r.mode = 1;
+  auRules.push(r); auDirty = true; renderLoadRules();
+});
+$("#au-rules-save").addEventListener("click", () => act(async () => { await api("load-rules", { rules: auRules || [] }); auDirty = false; }, t("Saved")));
 const setKey = (key, value) => act(() => api("setting", { key, value }));
 $("#au-ac").addEventListener("change", e => setKey("mode_on_ac", isNaN(+e.target.value) ? e.target.value : +e.target.value));
 $("#au-bat").addEventListener("change", e => setKey("mode_on_battery", isNaN(+e.target.value) ? e.target.value : +e.target.value));
@@ -2015,6 +2151,7 @@ function connect() {
     if (m.type === "mode" && m.data.osd) osd(m.data.mode === 3 ? `Custom · ${slotName(S?.profiles?.["Mode4_Profile" + ((m.data.slot || 0) + 1)], (m.data.slot || 0) + 1)}` : (MODES[m.data.mode]?.osd || ""));
     if (m.type === "overheat") toast(t("{0} at {1} °C for 30 seconds", m.data.sensor === "gpu" ? t("GPU") : t("CPU"), m.data.temp), true);
     if (m.type === "overheat_boost") toast(t("Fan Boost turned on because of overheating"), true);
+    if (m.type === "load_rule") toast(t("Automation: {0} → {1}", m.data.rule === "back" ? t("back") : m.data.rule, t((MODES[m.data.mode] || {}).name || "")));
     if (m.type === "fanboost" && m.data.osd) osd(m.data.on ? "FanBoostOn" : "FanBoostOff");
     if (m.type === "lc" && m.data.event === "flow_fault") toast(t("Liquid cooler: no coolant flow! Check the tubes and the coolant level."), true);
     if (m.type === "lc" && m.data.event === "disconnected" && m.data.unexpected) toast(t("Liquid cooler disconnected — reconnecting automatically"), true);

@@ -337,20 +337,27 @@ pre.code{margin:0;padding:10px 12px;background:var(--bg0);border:1px solid var(-
 #page-clevo .card.locked .clevo-cmd{opacity:.45;pointer-events:none}
 .clevo-row input[type=range]{flex:1;min-width:180px;max-width:420px;width:auto;margin:0}
 .clevo-row output{min-width:44px}
-/* liquid cooler curves (1.6.8) */
-.lc-editors{display:grid;grid-template-columns:1fr;gap:8px;margin-top:8px}
-.lc-ed{background:var(--bg1);border:1px solid var(--line);border-radius:10px;padding:4px}
-svg.lc-curve{width:100%;height:auto;display:block;touch-action:none;user-select:none}
-svg.lc-curve .grid{stroke:var(--line);stroke-width:1}
-svg.lc-curve .tick{fill:var(--muted);font-size:11px}
-svg.lc-curve .ttl{fill:var(--muted);font-size:12px;font-weight:600}
-svg.lc-curve .curve{fill:none;stroke:var(--acc);stroke-width:2.5}
-svg.lc-curve .curve.pump{stroke:#5aa9ff}
-svg.lc-curve .curve.ro{stroke:var(--muted);stroke-dasharray:5 4}
-svg.lc-curve .pt{fill:#e8eef3;stroke:var(--acc);stroke-width:2;cursor:grab}
-svg.lc-curve .pt.ro{cursor:default;stroke:var(--muted)}
-svg.lc-curve .cross{stroke:#ff6b4a;stroke-width:1.2;stroke-dasharray:4 3}
-svg.lc-curve .crossdot{fill:#ff6b4a}
-svg.lc-curve .crosslbl{fill:#ff6b4a;font-size:11px;font-weight:600}
+/* liquid cooler curves (1.6.8): the look of the laptop fan curve (.curve) */
+.lc-editors{display:grid;grid-template-columns:1fr;gap:4px;margin-top:8px}
+.lc-ed h4{margin:10px 0 0}
+svg.lc-curve{margin:8px 0 4px}
+svg.lc-curve .line{fill:none;stroke:var(--acc);stroke-width:2.5}
+svg.lc-curve .line.pump{stroke:var(--gpu)}
+svg.lc-curve .line.ro{stroke:#6d7c88;stroke-dasharray:6 5}
+svg.lc-curve .pt.ro{fill:#3a4650;cursor:default}
+svg.lc-curve .crossdot{fill:#ff4d3d;stroke:#2a0b07;stroke-width:2}
+.curve .now{fill:#ff4d3d;stroke:#2a0b07;stroke-width:2;pointer-events:all}
+.curve text.nowlbl{fill:#ff6b5a;font-size:12px;font-weight:600;stroke:#101418;stroke-width:3px;paint-order:stroke;pointer-events:none}
 .lc-prof select{min-width:180px}
 #lc-curve-tabs{margin:8px 0 4px}
+
+/* automation: load rules (1.6.8) */
+.au-rule{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:10px 0;background:var(--bg1)}
+.au-rule.on{border-color:var(--acc)}
+.au-rule input[type=text]{width:180px}
+.au-line{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px}
+.au-conds{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap}
+.au-cond{display:inline-flex;align-items:center;gap:6px}
+.au-rule .num{width:72px}
+.badge-on{font-size:11px;padding:2px 8px;border-radius:99px;background:var(--acc);color:#002b25;font-weight:700}
+.btn.sm{padding:4px 9px;font-size:12.5px}
