@@ -2170,6 +2170,7 @@ function renderAuto() {
 // ---- automatic profile switching (load rules, 1.6.8)
 const AU_METRIC = { cpu_power: "CPU power", gpu_power: "GPU power", total_power: "CPU + GPU power", cpu_temp: "CPU temperature",
   gpu_temp: "GPU temperature", cpu_load: "CPU load", gpu_load: "GPU load", battery: "Battery charge", ac: "Power source" };
+const AU_UNIT = { cpu_power: "W", gpu_power: "W", total_power: "W", cpu_temp: "°C", gpu_temp: "°C", cpu_load: "%", gpu_load: "%", battery: "%" };
 const AU_TEMPLATES = [                                   // the first one is chosen by default
   ["empty", "Empty rule", { name: "", conditions: [{ metric: "cpu_power", op: ">", value: 50 }], hold: 30, mode: 1, slot: null, back: false, back_after: 60 }],
   ["heavy", "Heavy load → Turbo", { name: "Heavy load", conditions: [{ metric: "total_power", op: ">", value: 120 }], hold: 30, mode: 2, slot: null, back: true, back_after: 60 }],
@@ -2177,7 +2178,7 @@ const AU_TEMPLATES = [                                   // the first one is cho
   ["hot", "Hot → Gaming", { name: "Hot", conditions: [{ metric: "cpu_temp", op: ">", value: 90 }, { metric: "gpu_temp", op: ">", value: 85 }], join: "or", hold: 20, mode: 1, slot: null, back: true, back_after: 120 }],
 ];
 let auRules = null, auDirty = false;
-function renderLoadRules() {
+function renderLoadRules(force) {                 // force: our own change, redraw although a field has the focus
   const R = S.load_rules; if (!R) return;
   if (!auDirty || !auRules) auRules = JSON.parse(JSON.stringify(R.rules || []));
   $("#au-rules-mon").classList.toggle("hidden", (S.monitoring || "full") === "full");
@@ -2185,22 +2186,22 @@ function renderLoadRules() {
     tpl.innerHTML = ""; tpl.dataset.lang = LANG; for (const [id, n] of AU_TEMPLATES) tpl.append(h("option", { value: id }, t(n)));
   }
   renderRulesLog(R);
-  const box = $("#au-rules"); if (box.contains(document.activeElement) && document.activeElement.tagName !== "BUTTON") return;
+  const box = $("#au-rules"); if (!force && box.contains(document.activeElement) && document.activeElement.tagName !== "BUTTON") return;
   box.innerHTML = "";
   if (!auRules.length) { box.append(h("p", { class: "muted" }, t("No rules yet"))); return; }
   const modes = MODES.filter(m => (m.id !== 3 || S.power.custom_support) && (m.id !== 2 || S.power.turbo_support));
   const change = () => { auDirty = true; };
-  const sel = (opts, val, on) => { const e = h("select", {}, ...opts.map(([v, n]) => { const o = h("option", { value: v }, n); if (String(val) === String(v)) o.selected = true; return o; })); e.addEventListener("change", () => { on(e.value); change(); renderLoadRules(); }); return e; };
+  const sel = (opts, val, on) => { const e = h("select", {}, ...opts.map(([v, n]) => { const o = h("option", { value: v }, n); if (String(val) === String(v)) o.selected = true; return o; })); e.addEventListener("change", () => { on(e.value); change(); renderLoadRules(true); }); return e; };
   const num = (val, min, max, on) => { const e = h("input", { type: "number", class: "num", min, max, value: val }); e.addEventListener("change", () => { on(+e.value); change(); }); return e; };
   auRules.forEach((r, i) => {
     const active = R.active === i && !auDirty, held = (R.held || {})[i];
     const en = h("input", { type: "checkbox", ...(r.enabled !== false ? { checked: true } : {}) }); en.addEventListener("change", () => { r.enabled = en.checked; change(); });
     const name = h("input", { type: "text", maxlength: 40, value: r.name || "", placeholder: t("Rule {0}", i + 1) }); name.addEventListener("change", () => { r.name = name.value; change(); });
-    const move = (d) => { const j = i + d; if (j < 0 || j >= auRules.length) return; [auRules[i], auRules[j]] = [auRules[j], auRules[i]]; change(); renderLoadRules(); };
+    const move = (d) => { const j = i + d; if (j < 0 || j >= auRules.length) return; [auRules[i], auRules[j]] = [auRules[j], auRules[i]]; change(); renderLoadRules(true); };
     const head = h("div", { class: "row between wrap" }, h("div", { class: "row wrap" }, h("label", { class: "chk" }, en), name,
       active ? h("span", { class: "badge-on" }, t("active")) : held != null && !auDirty ? h("span", { class: "muted tiny" }, t("holds {0} of {1} s", held, r.hold)) : ""),
       h("div", { class: "row" }, h("button", { class: "btn ghost sm", title: t("Up"), onclick: () => move(-1) }, "↑"), h("button", { class: "btn ghost sm", title: t("Down"), onclick: () => move(1) }, "↓"),
-        h("button", { class: "btn ghost sm", onclick: () => { auRules.splice(i, 1); change(); renderLoadRules(); } }, t("Delete"))));
+        h("button", { class: "btn ghost sm", onclick: () => { auRules.splice(i, 1); change(); renderLoadRules(true); } }, t("Delete"))));
     const conds = h("div", { class: "au-conds" });
     r.conditions.forEach((c, k) => {
       if (k) conds.append(sel([["and", t("and")], ["or", t("or")]], r.join || "and", v => { r.join = v; }));
@@ -2211,10 +2212,10 @@ function renderLoadRules() {
       conds.append(h("span", { class: "au-cond" }, metric,
         ...(c.metric === "ac" ? [sel([[1, t("from the mains")], [0, t("on battery")]], c.value ? 1 : 0, v => { c.value = +v; })]
           : [sel([[">", ">"], ["<", "<"]], c.op, v => { c.op = v; }),
-            num(c.value, 0, 1000, v => { c.value = v; }), h("span", { class: "muted" }, t(R.metrics[c.metric] === "W" ? "W" : R.metrics[c.metric] || ""))]),
-        r.conditions.length > 1 ? h("button", { class: "btn ghost sm", onclick: () => { r.conditions.splice(k, 1); change(); renderLoadRules(); } }, "✕") : ""));
+            num(c.value, 0, 1000, v => { c.value = v; }), h("span", { class: "muted" }, t(AU_UNIT[c.metric] ?? (R.metrics || {})[c.metric] ?? ""))]),
+        r.conditions.length > 1 ? h("button", { class: "btn ghost sm", onclick: () => { r.conditions.splice(k, 1); change(); renderLoadRules(true); } }, "✕") : ""));
     });
-    if (r.conditions.length < 3) conds.append(h("button", { class: "btn ghost sm", onclick: () => { r.conditions.push({ metric: "gpu_power", op: ">", value: 50 }); change(); renderLoadRules(); } }, t("+ condition")));
+    if (r.conditions.length < 3) conds.append(h("button", { class: "btn ghost sm", onclick: () => { r.conditions.push({ metric: "gpu_power", op: ">", value: 50 }); change(); renderLoadRules(true); } }, t("+ condition")));
     const key = { 0: "office", 1: "gaming", 2: "turbo", 3: "custom" }[r.mode], nslots = (S.power.slots || {})[key] || 1;
     const slotOpts = [["", t("current profile")], ...Array.from({ length: nslots }, (_, j) => [j, r.mode === 3 ? slotName(S.profiles["Mode4_Profile" + (j + 1)], j + 1) : t("profile {0}", j + 1)])];
     const act1 = h("div", { class: "row wrap au-line" }, h("span", {}, t("for")), num(r.hold, 1, 3600, v => { r.hold = v; }), h("span", {}, t("s → switch to")),
@@ -2250,7 +2251,7 @@ $("#au-rule-add").addEventListener("click", () => {
   if (!auRules) auRules = [];
   const r = JSON.parse(JSON.stringify(tp[2])); r.name = r.name ? t(r.name) : ""; r.enabled = true;
   if (r.mode === 2 && !S.power.turbo_support) r.mode = 1;
-  auRules.push(r); auDirty = true; renderLoadRules();
+  auRules.push(r); auDirty = true; renderLoadRules(true);
 });
 $("#au-rules-save").addEventListener("click", () => act(async () => { await api("load-rules", { rules: auRules || [] }); auDirty = false; }, t("Saved")));
 const setKey = (key, value) => act(() => api("setting", { key, value }));
