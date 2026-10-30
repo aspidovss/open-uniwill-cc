@@ -249,8 +249,9 @@
           <div class="seg" id="fan-presets"><button data-p="factory" data-i>Factory</button><button data-p="quiet" data-i>Quiet</button><button data-p="max" data-i>Maximum</button></div>
           <span class="muted tiny" style="margin:0" data-i>A preset only changes the editor; press Save to write it.</span></div>
         <svg id="curve" viewBox="0 0 640 300" class="curve"></svg>
-        <p class="muted tiny" data-i>Drag the points: horizontally — the temperature at which a level starts, vertically — fan speed. Set the release temperature in the table.</p>
+        <p class="muted tiny" data-i>Drag the points: horizontally — the temperature at which a level starts, vertically — fan speed. The temperature of the return to the lower level follows the next level by itself.</p>
         <div class="table-wrap"><table class="pts" id="pts"></table></div>
+        <label class="chk muted tiny" style="margin:6px 0 10px"><input type="checkbox" id="pts-down"> <span data-i>Show the return temperatures (Off, °C)</span></label>
         <div class="row between wrap">
           <label class="chk"><input type="checkbox" id="respective"> <span data-i>Enable fan control center (separate CPU/GPU control)</span></label>
           <div class="row wrap">

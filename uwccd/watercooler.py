@@ -1010,6 +1010,6 @@ class LiquidCooler:
             "pump_custom": bool(c.get("pump_custom")), "all_voltages": list(LCV.ALL_VOLTAGES),
             "max_fan_points": LCV.MAX_FAN_POINTS,
             "max_pump_steps": LCV.MAX_PUMP_STEPS,
-            "profiles": [{"id": p["id"], "name": p["name"], "builtin": p["builtin"]} for p in LCV.profiles(c)],
+            "profiles": [{"id": p["id"], "name": p["name"], "builtin": p["builtin"], "curves": p["curves"]} for p in LCV.profiles(c)],
             "profile": c.get("profile"), "profile_modified": LCV.modified(c),
         }

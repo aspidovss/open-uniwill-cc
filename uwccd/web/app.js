@@ -515,8 +515,9 @@ function drawCurve() {
       // equal neighbours are allowed: factory tables use them (e.g. 55/55 °C)
       const lo = drag > 1 ? P[drag - 1].UpT : 21, hiP = P[drag + 1];
       const hi = hiP && hiP.Duty <= 100 && hiP.UpT > 0 && hiP.UpT < 255 ? hiP.UpT : 100;
+      const was = p.UpT;
       p.UpT = Math.max(lo, Math.min(hi, TX(x)));
-      if (P[drag - 1].DownT >= p.UpT && drag - 1 >= 0) P[drag - 1].DownT = Math.max(0, p.UpT - 2);
+      fanFollowDown(P, drag, was);
     }
     drawCurve(); drawPts();
   };
@@ -553,12 +554,38 @@ function drawPts() {
   const row = (label, f, help) => h("tr", {}, h("th", { title: help }, label), ...P.map((p, i) => {
     const unused = p.Duty > 100 || (i > 0 && (p.UpT >= 255 || p.UpT === 0));
     const inp = h("input", { type: "number", min: 0, max: 255, value: p[f], disabled: f === "UpT" && i === 0 });
-    inp.addEventListener("change", () => { p[f] = Math.max(0, Math.min(255, parseInt(inp.value || "0", 10))); drawCurve(); drawPts(); });
+    inp.addEventListener("change", () => {
+      const was = p[f]; p[f] = Math.max(0, Math.min(255, parseInt(inp.value || "0", 10)));
+      if (f === "UpT" && i > 0) fanFollowDown(P, i, was);
+      drawCurve(); drawPts();
+    });
     return h("td", { class: unused ? "na" : "" }, inp);
   }));
   tb.append(head, row(t("On, °C"), "UpT", t("Temperature to enter this level (255 — unused)")),
-    row(t("Off, °C"), "DownT", t("Temperature to return to the previous level")),
+    ...(fanShowDown ? [row(t("Off, °C"), "DownT", t("Temperature to return to the previous level"))] : []),
     row(t("Speed, %"), "Duty", t("Fan speed (255 — level unused)")));
+  $("#pts-down").checked = fanShowDown;
+}
+// "Off, °C" (DownT of level i) is where the fan drops back from level i+1 to level i. It is not edited by hand any more:
+// it follows the next level's "On" and keeps its distance to it (factory tables: equal, or a wider gap at level 0).
+let fanShowDown = false;
+try { fanShowDown = !!localStorage.getItem("uwcc-fan-down"); } catch (_) {}
+$("#pts-down").addEventListener("change", e => {
+  fanShowDown = e.target.checked; try { localStorage.setItem("uwcc-fan-down", fanShowDown ? "1" : ""); } catch (_) {}
+  if (edit) drawPts();
+});
+function fanFollowDown(P, j, wasUp) {
+  const prev = P[j - 1]; if (!prev) return;
+  const gap = prev.DownT > 0 && prev.DownT < 255 && prev.DownT <= wasUp && wasUp < 255 ? wasUp - prev.DownT : 0;
+  prev.DownT = P[j].UpT >= 255 ? 255 : Math.max(0, P[j].UpT - gap);
+}
+function fanFixDown(P) {                   // before Save: every active level returns at or below the next level's "On"
+  const act = P.map((p, i) => i).filter(i => P[i].Duty <= 100 && (i === 0 || (P[i].UpT > 0 && P[i].UpT < 255)));
+  act.forEach((i, k) => {
+    const nx = act[k + 1];
+    if (nx === undefined) P[i].DownT = 255;
+    else if (P[i].DownT >= 255 || P[i].DownT > P[nx].UpT) P[i].DownT = P[nx].UpT;
+  });
 }
 $("#respective").addEventListener("change", e => { if (edit) edit.FanControlRespective = e.target.checked; });
 $("#btn-table-save").addEventListener("click", () => act(async () => {
@@ -571,6 +598,7 @@ $("#btn-table-save").addEventListener("click", () => act(async () => {
       prev = p.UpT;
     }
   }
+  fanFixDown(edit.CPU); fanFixDown(edit.GPU);
   await api("table/" + curTable, { CPU: edit.CPU, GPU: edit.GPU, FanControlRespective: edit.FanControlRespective }, "PUT"); edit = null;
 }, t("Table saved")));
 $("#btn-table-restore").addEventListener("click", () => { if (confirm(t("Restore the factory curve for “{0}”?", TABLE_LABEL[curTable]))) act(async () => { await api(`table/${curTable}/restore`, {}); edit = null; }, t("Factory table restored")); });
@@ -1123,7 +1151,7 @@ const LC_MODES = [
   { id: "off", row: 2, name: "Off", desc: "Fan and pump stopped, lighting stays." },
 ];
 const LC_CURVE_NAME = { common: "Common", office: "Office", gaming: "Gaming", turbo: "Turbo", custom: "Custom" };
-const LC_PROFILE_NAME = { quiet: "Quiet", balanced: "Balanced", performance: "Performance" };
+const LC_PROFILE_NAME = { default: "Default", quiet: "Quiet", balanced: "Balanced", performance: "Performance" };
 const LC_FX = { static: "Static", breathe: "Breathe", rainbow: "Rainbow", breathe_rainbow: "Breathing rainbow",
   spiral: "Spiral", rotating_rainbow: "Rotating rainbow", color_wave: "Colour wave" };
 const LC_COLORS = [[255, 0, 0], [255, 96, 0], [255, 200, 0], [0, 255, 0], [0, 128, 0], [0, 255, 255], [0, 80, 255], [160, 0, 255], [255, 0, 160], [255, 255, 255]];
@@ -1245,6 +1273,7 @@ function renderLiquid() {
   for (const o of ms.options) { const v = +o.value; o.hidden = o.disabled = !!v && !run.includes(v); }
 }
 // ---- curve editors: fan curve (points, linear) and pump steps (7 / 8 / 11 V)
+let lcPick = null;                                   // a profile picked in the list and shown before Apply
 const LCX0 = 20, LCX1 = 100;                                   // temperature axis, °C
 function lcCurrentLaptopKey() { return ({ 0: "office", 1: "gaming", 2: "turbo", 3: "custom" })[S.power && S.power.mode]; }
 function lcSet(L, key) { const cs = L.curves[key]; return cs || L.curves.common; }
@@ -1254,13 +1283,16 @@ function drawCurves(L) {
   if (!laptop || !L.curve_keys.includes(lcTab)) lcTab = laptop ? lcTab : "common";
   // profile row
   const sel = $("#lc-prof"); sel.innerHTML = "";
+  if (lcPick && (lcPick === L.profile || !L.profiles.some(p => p.id === lcPick))) lcPick = null;
   if (!L.profile) sel.append(h("option", { value: "" }, t("— own settings —")));
   for (const p of L.profiles) {
     const nm = p.builtin ? t(LC_PROFILE_NAME[p.id] || p.name) : p.name;
     const o = h("option", { value: p.id }, nm + (p.id === L.profile && L.profile_modified ? " · " + t("changed") : ""));
-    if (p.id === L.profile) o.selected = true; sel.append(o);
+    if (p.id === (lcPick || L.profile)) o.selected = true; sel.append(o);
   }
+  if (!sel.value && sel.options.length) sel.selectedIndex = 0;
   const cur = L.profiles.find(p => p.id === sel.value);
+  const pick = lcPick ? L.profiles.find(p => p.id === lcPick) : null;   // chosen in the list, not applied yet: shown
   $("#lc-prof-save").disabled = !cur || cur.builtin; $("#lc-prof-remove").disabled = !cur || cur.builtin;
   $("#lc-prof-apply").disabled = !cur;
   // tabs (Follow the laptop)
@@ -1270,21 +1302,23 @@ function drawCurves(L) {
     t(LC_CURVE_NAME[k]) + (k === now ? " ●" : "") + (k !== "common" && L.curves[k] ? " ✎" : "")));
   const own = laptop && lcTab !== "common";
   $("#lc-own-row").classList.toggle("hidden", !own);
-  $("#lc-own").checked = own && !!L.curves[lcTab];
+  $("#lc-own").checked = own && !!(pick ? pick.curves : L.curves)[lcTab]; $("#lc-own").disabled = !!pick;
   $("#lc-own-label").textContent = t("Own curve for the mode “{0}” (otherwise the common curve)", t(LC_CURVE_NAME[lcTab] || lcTab));
   $("#lc-curves-title").textContent = laptop ? t("Curves — Follow the laptop") : c.mode === "ec" ? t("Curves — view only (Controller: used when the EC publishes no targets)") : t("Curves — Automatic");
   $("#lc-curves-hint").textContent = laptop ? t("The cooler uses the curve of the laptop's current mode (●) if it has its own (✎), otherwise the common curve. The common curve is also the curve of the Automatic mode.")
     : t("The fan follows the curve between its points; the pump switches at the temperature of each step and goes down only 3 °C below it. Drag the first pump point to Off to set the temperature the pump starts at.");
-  const key = own && L.curves[lcTab] ? lcTab : "common";
-  const set = JSON.parse(JSON.stringify(lcSet(L, key)));
+  const src = pick ? pick.curves : L.curves;
+  const key = own && src[lcTab] ? lcTab : "common";
+  const set = JSON.parse(JSON.stringify(src[key] || src.common));
   const viewOnly = c.mode === "ec";                  // Controller: the EC drives the cooler, the curves are only shown
-  const readonly = (own && !L.curves[lcTab]) || viewOnly;
-  const active = L.connected && ["auto", "laptop", "ec"].includes(c.mode) && L.curve_key === key ? L : null;
+  const readonly = (own && !src[lcTab]) || viewOnly || (pick ? "preview" : false);
+  if (pick) $("#lc-curves-hint").textContent = t("Preview of the profile “{0}”: press Apply to use it.", sel.options[sel.selectedIndex].textContent);
+  const active = !pick && L.connected && ["auto", "laptop", "ec"].includes(c.mode) && L.curve_key === key ? L : null;
   const ed = $("#lc-editors"); ed.innerHTML = "";
   ed.append(lcFanEditor(set, key, readonly, active), lcPumpEditor(set, key, readonly, active));
   $("#lc-flat").disabled = readonly;
   for (const id of ["lc-prof", "lc-prof-apply", "lc-prof-save", "lc-prof-copy", "lc-prof-remove"]) if (viewOnly) $("#" + id).disabled = true;
-  if (!viewOnly) $("#lc-prof").disabled = $("#lc-prof-copy").disabled = false;
+  if (!viewOnly) { $("#lc-prof").disabled = false; $("#lc-prof-copy").disabled = !!pick; }
   $("#lc-flat").onclick = () => {
     const v = prompt(t("Fan duty for the whole curve, %"), String(set.fan[set.fan.length - 1][1]));
     if (v === null) return; const n = Math.max(0, Math.min(100, parseInt(v, 10) || 0));
@@ -1305,19 +1339,39 @@ function lcAxes(svg, P, yTicks) {
   for (const [v, lab] of yTicks) { const py = P.y(v); g.append(lcEl("line", { x1: P.left, x2: P.right, y1: py, y2: py }), lcEl("text", { x: 14, y: py + 4 }, lab)); }
   svg.append(g);
 }
-function lcNowLabel(svg, x, y, label, right, bot) {  // text under the red dot (rising curves pass above-right of it)
-  const left = x > right - 150, up = y > bot - 24;
+function lcNowLabel(svg, x, y, label, right, bot, flip) {  // text under the red dot (rising curves pass above-right of it)
+  const left = x > right - 150, up = (y > bot - 24) !== !!flip;
   svg.append(lcEl("text", { x: left ? x - 10 : x + 10, y: up ? y - 12 : y + 22, class: "nowlbl", "text-anchor": left ? "end" : "start" }, label));
 }
-function lcCross(svg, P, temp, yv, label) {            // the current point: a red dot with temperature · value
+function lcCross(svg, P, temp, yv, label, flip) {      // the current point: a red dot with temperature · value
   if (temp == null || yv == null) return;
   const x = P.x(Math.max(LCX0, Math.min(LCX1, temp))), y = P.y(yv);
   const d = lcEl("circle", { cx: x, cy: y, r: 6, class: "crossdot" });
   d.append(lcEl("title", {}, label)); svg.append(d);
-  lcNowLabel(svg, x, y, label, P.right, P.bot);
+  lcNowLabel(svg, x, y, label, P.right, P.bot, flip);
 }
+// The red dots follow the temperature source: CPU only / GPU only (the CPU while the GPU sleeps) / both — two dots.
+// The sensor that drives the cooler shows the cooler's real output; the other one shows its point on the curve.
+function lcSensorDots(L) {
+  const src = (lcCalm && lcCalm.temp_source) || L.config.temp_source || "max", m = lastMonitor;
+  const cpu = m && m.cpu && m.cpu.temp != null ? m.cpu.temp : null;
+  const gpu = m && m.gpu && !m.gpu.asleep && m.gpu.temp != null ? m.gpu.temp : null;
+  let dots = [];
+  if (src === "cpu" || (src === "gpu" && gpu == null)) dots = cpu != null ? [{ who: "CPU", temp: cpu }] : [];
+  else if (src === "gpu") dots = [{ who: "GPU", temp: gpu }];
+  else dots = [cpu != null && { who: "CPU", temp: cpu }, gpu != null && { who: "GPU", temp: gpu }].filter(Boolean);
+  if (!dots.length) return L.temp_avg != null ? [{ who: "", temp: L.temp_avg, main: true }] : [];
+  dots.reduce((a, b) => (b.temp > a.temp ? b : a)).main = true;
+  return dots;
+}
+function lcFanAt(set, tc) {
+  const f = set.fan; if (tc <= f[0][0]) return f[0][1]; if (tc >= f[f.length - 1][0]) return f[f.length - 1][1];
+  for (let i = 1; i < f.length; i++) if (tc <= f[i][0]) return Math.round(f[i - 1][1] + (f[i][1] - f[i - 1][1]) * (tc - f[i - 1][0]) / (f[i][0] - f[i - 1][0]));
+  return f[f.length - 1][1];
+}
+function lcPumpAt(set, tc) { let v = set.pump[0][1]; for (const [t0, v0] of set.pump.slice(1)) if (tc >= t0) v = v0; return v; }
 function lcPlot(w, hgt, ymin, ymax) {
-  const P = { left: 50, right: 620, top: 20, bot: hgt - 30 };
+  const P = { left: 62, right: 606, top: 20, bot: hgt - 30 };
   P.x = tc => P.left + (tc - LCX0) / (LCX1 - LCX0) * (P.right - P.left);
   P.y = v => P.bot - (v - ymin) / (ymax - ymin) * (P.bot - P.top);
   P.tx = px => Math.round(LCX0 + (px - P.left) / (P.right - P.left) * (LCX1 - LCX0));
@@ -1326,16 +1380,16 @@ function lcPlot(w, hgt, ymin, ymax) {
 }
 function lcPointer(svg, e) { const r = svg.getBoundingClientRect(), vb = svg.viewBox.baseVal; return [(e.clientX - r.left) / r.width * vb.width, (e.clientY - r.top) / r.height * vb.height]; }
 function lcFanEditor(set, key, readonly, L) {
-  const W = 640, H = 300, P = lcPlot(W, H, 0, 100), svg = lcSvg(W, H), pts = set.fan;
+  const W = 640, H = 230, P = lcPlot(W, H, 0, 100), svg = lcSvg(W, H), pts = set.fan;
   lcAxes(svg, P, [[0, "0%"], [25, "25%"], [50, "50%"], [75, "75%"], [100, "100%"]]);
-  const path = lcEl("polyline", { class: "line" + (readonly ? " ro" : "") }); svg.append(path);
+  const path = lcEl("polyline", { class: "line" + (readonly === true ? " ro" : "") }); svg.append(path);
   const dots = lcEl("g", {}); svg.append(dots);
   const redraw = () => {
     const xs = [[LCX0, pts[0][1]], ...pts.map(p => [Math.max(LCX0, p[0]), p[1]]), [LCX1, pts[pts.length - 1][1]]];
     path.setAttribute("points", xs.map(([a, b]) => `${P.x(a)},${P.y(b)}`).join(" "));
     dots.innerHTML = "";
     pts.forEach((p, i) => {
-      const d = lcEl("circle", { cx: P.x(Math.max(LCX0, p[0])), cy: P.y(p[1]), r: 7, class: "pt" + (readonly ? " ro" : "") });
+      const d = lcEl("circle", { cx: P.x(Math.max(LCX0, p[0])), cy: P.y(p[1]), r: 7, class: "pt" + (readonly === true ? " ro" : readonly ? " pv" : "") });
       d.dataset.i = i;
       d.append(lcEl("title", {}, `${p[0]} °C · ${p[1]} %`));
       dots.append(d);
@@ -1372,14 +1426,17 @@ function lcFanEditor(set, key, readonly, L) {
     const duty = prev && next ? Math.round(prev[1] + (next[1] - prev[1]) * (tc - prev[0]) / (next[0] - prev[0])) : (prev || next)[1];
     pts.splice(ins, 0, [tc, duty]); lcPostCurve(key, set);
   });
-  if (L && L.temp_avg != null && L.fan != null) lcCross(svg, P, L.temp_avg, L.fan, `${L.temp_avg} °C · ${L.fan} %`);
+  if (L && L.fan != null) lcSensorDots(L).forEach((d, k) => {
+    const v = d.main ? L.fan : lcFanAt(set, d.temp);
+    lcCross(svg, P, d.temp, v, `${d.who ? d.who + " " : ""}${d.temp} °C · ${v} %`, k > 0);
+  });
   return h("div", { class: "lc-ed" }, h("h4", {}, t("Cooler fan")), svg);
 }
 function lcPumpEditor(set, key, readonly, L) {
-  const W = 640, H = 170, lv = S.liquid.pump_levels, P = lcPlot(W, H, 0, lv.length - 1), svg = lcSvg(W, H), st = set.pump;
+  const W = 640, H = 230, lv = S.liquid.pump_levels, P = lcPlot(W, H, 0, lv.length - 1), svg = lcSvg(W, H), st = set.pump;
   const yi = v => lv.indexOf(v);
   lcAxes(svg, P, lv.map((v, i) => [i, v ? `${v} V` : t("Off")]));
-  const path = lcEl("polyline", { class: "line pump" + (readonly ? " ro" : "") }); svg.append(path);
+  const path = lcEl("polyline", { class: "line pump" + (readonly === true ? " ro" : "") }); svg.append(path);
   const dots = lcEl("g", {}); svg.append(dots);
   const redraw = () => {
     const xs = [];
@@ -1391,7 +1448,7 @@ function lcPumpEditor(set, key, readonly, L) {
     path.setAttribute("points", xs.map(([a, b]) => `${P.x(a)},${P.y(b)}`).join(" "));
     dots.innerHTML = "";
     st.forEach((s0, i) => {
-      const d = lcEl("circle", { cx: P.x(i === 0 ? LCX0 : Math.max(LCX0, s0[0])), cy: P.y(yi(s0[1])), r: 7, class: "pt gpu" + (readonly ? " ro" : "") });
+      const d = lcEl("circle", { cx: P.x(i === 0 ? LCX0 : Math.max(LCX0, s0[0])), cy: P.y(yi(s0[1])), r: 7, class: "pt gpu" + (readonly === true ? " ro" : readonly ? " pv" : "") });
       const vtxt = s0[1] ? `${s0[1]} V` : t("off");
       d.dataset.i = i;
       d.append(lcEl("title", {}, i === 0 ? `${t("from the start")} · ${vtxt}` : `${t("from")} ${s0[0]} °C · ${vtxt}`));
@@ -1430,11 +1487,14 @@ function lcPumpEditor(set, key, readonly, L) {
     const v = lv[Math.max(1, Math.min(yi(nextV), yi(prevV) + 1))];
     st.splice(ins, 0, [tc, v]); lcPostCurve(key, set);
   });
-  if (L && L.temp_avg != null && L.pump != null) lcCross(svg, P, L.temp_avg, Math.max(0, yi(L.pump)), `${L.temp_avg} °C · ${L.pump ? L.pump + " V" : t("off")}`);
+  if (L && L.pump != null) lcSensorDots(L).forEach((d, k) => {
+    const v = d.main ? L.pump : lcPumpAt(set, d.temp);
+    lcCross(svg, P, d.temp, Math.max(0, yi(v)), `${d.who ? d.who + " " : ""}${d.temp} °C · ${v ? v + " V" : t("off")}`, k > 0);
+  });
   return h("div", { class: "lc-ed" }, h("h4", {}, t("Pump")), svg);
 }
-$("#lc-prof").addEventListener("change", () => drawCurves(S.liquid));
-const lcProf = (action, extra, ok) => lcPost("profile", { action, id: $("#lc-prof").value, ...(extra || {}) }, ok);
+$("#lc-prof").addEventListener("change", e => { lcPick = e.target.value || null; drawCurves(S.liquid); });
+const lcProf = (action, extra, ok) => { const id = $("#lc-prof").value; lcPick = null; return lcPost("profile", { action, id, ...(extra || {}) }, ok); };
 $("#lc-prof-apply").addEventListener("click", () => lcProf("apply", {}, t("Profile applied")));
 $("#lc-prof-save").addEventListener("click", () => lcProf("save", {}, t("Saved")));
 $("#lc-prof-copy").addEventListener("click", () => {
@@ -1461,7 +1521,7 @@ function drawCalm(L) {
   const line = (label, ...ctrl) => h("div", { class: "calm-row" }, h("span", {}, label), h("div", { class: "row wrap", style: "gap:10px" }, ...ctrl));
   const src = h("select", {}, ...[["max", "Hotter of CPU and GPU"], ["cpu", "CPU"], ["gpu", "GPU only"]].map(([v, n]) => {
     const o = h("option", { value: v }, t(n)); if (k.temp_source === v) o.selected = true; return o; }));
-  src.addEventListener("change", () => { k.temp_source = src.value; });
+  src.addEventListener("change", () => { k.temp_source = src.value; if (!lcDrag) drawCurves(S.liquid); });
   box.append(
     h("h4", {}, t("Behaviour")),
     line(t("Temperature"), src, h("span", { class: "muted tiny" }, t("GPU only: while the graphics card sleeps, the CPU is used"))),

@@ -10,6 +10,8 @@
   change the mode. Templates, reordering; `uwccctl rules [list|export|import|enable|disable|clear]`.
 - **Fan settings: a red dot shows the fan's current temperature and speed** on the curve of the active table
   (CPU or GPU, with full monitoring), labelled with the temperature and the rpm.
+- **Fan settings: the *Off, °C* row is hidden.** The return to the lower level follows the next level's *On* by
+  itself (keeping the distance the table had); *Show the return temperatures* brings the row back.
 - **Liquid cooling: curves instead of temperature tiers.**
   - **Modes in two rows:** Automatic, Follow the laptop, Controller, Manual / High, Medium, Low, Off.
   - **Automatic** follows a **fan curve** (2..17 points, linear between them) and **pump steps** (off / 7 / 8 / 11 V; a step
@@ -23,17 +25,23 @@
   - **Pump start temperature:** the first pump level can be *Off*; the next step (7 V or more), dragged to any
     temperature, is where the pump starts. Below it again (3 °C hysteresis) the pump stops, but not before it ran the
     minimum run time of *Stop the pump when it is cool* (120 s by default).
-  - **Cooler profiles:** Quiet, Balanced, Performance and your own — Apply / Save / Copy / Remove (a profile holds the
-    common and the per-mode curves); `uwccctl lc profile …`.
+  - **Cooler profiles:** Default (the factory steps of 1.6.7), Quiet, Balanced, Performance and your own — Apply / Save /
+    Copy / Remove (a profile holds the common and the per-mode curves); a profile picked in the list is shown on the
+    charts before Apply; `uwccctl lc profile …`.
   - `uwccctl lc curve [KEY] [fan T:D … pump T:V …]`, `lc curve KEY flat N`, `lc curve MODE off`; `lc tiers` still
     works and becomes the common curve.
-  - The charts look like the fan curve of *Fan settings*.
+  - The charts look like the fan curve of *Fan settings*; fan and pump side by side on a wide window.
+  - The red dots follow *Temperature*: CPU only — the CPU dot, GPU only — the GPU dot (the CPU while the GPU
+    sleeps), hotter of CPU and GPU — two dots. The sensor that drives the cooler shows its real output, the other its
+    point on the curve.
   - **Own pump voltage limits** (after a risk warning): choose which of 7 / 8 / 11 / 12 V may be used — the cooler
     knows only these four and cannot report what a pump supports (6 V does not exist in its protocol). Every mode
     keeps to the choice (Low becomes 8 V if 7 V is off); `uwccctl lc pump-limits 7,8,11,12 --accept-risks`.
   - **Controller** mode shows the curves read-only (the EC drives the cooler).
   - **Update:** the tiers of 1.6.7 become a common curve with the same behaviour, and the old fixed duties of Follow
-    the laptop (40 / 60 / 90 / 90 %, pump 11 V) become flat curves of those modes. A new install starts with Balanced.
+    the laptop (40 / 60 / 90 / 90 %, pump 11 V) become flat curves of those modes. A new install starts with Default.
+- **Setup:** the WMI note on the EC access page is shorter — check with the self-check (EC Manager) which
+  functions your platform has.
 
 ## 1.6.7
 

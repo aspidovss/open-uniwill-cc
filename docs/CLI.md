@@ -160,7 +160,7 @@ Automatic profile switching (power / temperature / load): `rules` (list and stat
 | `lc curve [KEY]` | show the curves; KEY `common` (Automatic, and Follow the laptop by default) or `office` `gaming` `turbo` `custom` |
 | `lc curve KEY fan T:D ... [pump T:V ...]` | set a curve: fan 2..17 points (°C:%), pump 1..4 steps (from °C:V, 0/7/8/11 V; 0 = off, only as the first: e.g. `pump 0:0 45:7 70:11`) |
 | `lc curve KEY flat FAN [PUMP]` / `lc curve MODE off` | a flat curve / the mode uses the common curve |
-| `lc profile [list\|apply ID\|save ID\|copy NAME\|remove ID\|rename ID NAME]` | cooler profiles (built-in: quiet, balanced, performance) |
+| `lc profile [list\|apply ID\|save ID\|copy NAME\|remove ID\|rename ID NAME]` | cooler profiles (built-in: default, quiet, balanced, performance) |
 | `lc tiers BELOW:FAN:PUMP ...` | old tier form (1.6.7), becomes the common curve |
 | `lc pump-limits 7,8,11,12 --accept-risks` / `lc pump-limits off` | own pump voltages (of 7/8/11/12 V) / back to 7–11 V |
 | `lc set KEY VALUE` | `temp_source max\|cpu\|gpu`, `delay_up`/`delay_down` 0..300 s, `smooth` `notify_flow` `flow_guard` `boost_fan` `boost_pump` on/off |

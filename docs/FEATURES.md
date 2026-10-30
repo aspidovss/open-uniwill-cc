@@ -84,7 +84,7 @@ the system sleeps the cooler is put to sleep. Needs `python3-bleak` (installed b
 | **Curves** (1.6.8): a fan curve (2..17 points, linear between them) and pump steps (off / 7 / 8 / 11 V, down only 3 °C below a step; *off* as the first level sets the temperature the pump starts at), edited by dragging; a red dot shows the current temperature and value. One **common** curve (Automatic, and Follow the laptop for modes without their own); in Follow the laptop each mode — Office, Gaming, Turbo, Custom — can have **its own curve**; a change of the laptop's mode switches the curve at once (the fan still ramps) | |
 | **Own pump voltage limits** (after a risk warning): choose which of 7 / 8 / 11 / 12 V may be used — the cooler firmware knows only these and cannot report what a pump supports; a voltage outside the choice becomes the nearest allowed one in every mode | |
 | **Controller** mode: the curves are shown but cannot be edited (the EC drives the cooler; the common curve is used only when the EC publishes no targets) | |
-| **Cooler profiles**: Quiet, Balanced, Performance and your own (Apply / Save / Copy / Remove) — a profile holds the common and the per-mode curves | |
+| **Cooler profiles**: Default (factory steps), Quiet, Balanced, Performance and your own (Apply / Save / Copy / Remove) — a profile holds the common and the per-mode curves | |
 | Lighting: static, breathing, rainbow, breathing rainbow; Mk2 also spiral, rotating rainbow, colour wave | `0x1E` / `0x33` |
 | Coolant flow check every 15 s with a desktop alert when the pump runs but nothing circulates | `0x32` |
 | Coolant filling cycle (8 pump pulses, ~70 s) | `0x19` |
@@ -110,7 +110,7 @@ time of *Stop the pump when it is cool* (120 s by default).
 
 **Update from 1.6.7 or older:** the temperature tiers become the common curve with the same behaviour, and the old
 fixed duties of *Follow the laptop* (Office 40 %, Gaming 60 %, Turbo / Custom 90 %, pump 11 V) become flat curves of
-those modes. A new install starts with the Balanced profile and no per-mode curves.
+those modes. A new install starts with the Default profile and no per-mode curves.
 
 **Cooler firmware.** open-uniwill-cc shows the cooler firmware version but does not flash it: a failed DFU update can
 leave the cooler unusable. Use the vendor tool or nRF Connect with the right package if you really need an update.

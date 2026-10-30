@@ -675,7 +675,7 @@ class LiquidCoolerUnit(unittest.TestCase):
         s = self.sent()
         self.assertEqual(self.W.MockLink.last.sent[0], b"sw")
         self.assertIn("fe1e0100800000ef", s)         # RGB static, OEM default green
-        self.assertIn("fe1b011c000000ef", s)         # fan 28 % (Balanced curve at 50 °C)
+        self.assertIn("fe1b0119000000ef", s)         # fan 25 % (Default curve at 50 °C)
         self.assertIn("fe1c013c030000ef", s)         # pump duty 60, 8 V selector 3
         self.assertTrue(self.ec.read(0x7C7) & 0x02)
         self.lc.disconnect()
@@ -807,8 +807,12 @@ class LiquidCoolerUnit(unittest.TestCase):
 
     def test_cooler_profiles(self):
         lc = self.lc
-        self.assertEqual(lc.status()["profile"], "balanced")
+        self.assertEqual(lc.status()["profile"], "default")
         self.assertFalse(lc.status()["profile_modified"])
+        from uwccd import lc_curves as LCV
+        dflt = LCV.find(lc.cfg, "default")["curves"]["common"]           # Default = the factory tiers
+        self.assertEqual(dflt["fan"], LCV.from_tiers(self.W.DEFAULT_TIERS)["fan"])
+        self.assertEqual([LCV.pump_index(dflt, t) for t in (40, 69, 70)], [0, 0, 1])
         lc.profile({"action": "apply", "id": "performance"})
         self.assertEqual(lc.status()["curves"]["common"]["pump"], [[0, 11]])
         self._curve([[40, 50], [60, 60]], [[0, 11]])
@@ -838,7 +842,7 @@ class LiquidCoolerUnit(unittest.TestCase):
         self.assertFalse(LCV.migrate(cfg, self.W.DEFAULT_TIERS))
         fresh = {"tiers": self.W.DEFAULT_TIERS}
         LCV.migrate(fresh, self.W.DEFAULT_TIERS, stored=False)      # a new install: no per-mode curves
-        self.assertEqual((fresh["profile"], fresh["curves"]["office"]), ("balanced", None))
+        self.assertEqual((fresh["profile"], fresh["curves"]["office"]), ("default", None))
 
     def test_ec_targets(self):
         self.ec.write(0x7E6, 0x80 | 70)

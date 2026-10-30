@@ -58,6 +58,10 @@ MAX_FAN_POINTS = 17
 MAX_PUMP_STEPS = 4
 
 BUILTIN_PROFILES = {
+    # Default: the factory steps (the temperature tiers of 1.6.7 and older, as in the original software)
+    "default": {"name": "Default", "curves": {
+        "common": {"fan": [[20, 25], [54, 25], [55, 50], [69, 50], [70, 75], [84, 75], [85, 90], [100, 90]],
+                   "pump": [[0, 8], [70, 11]]}}},
     "quiet": {"name": "Quiet", "curves": {
         "common": {"fan": [[45, 20], [60, 25], [70, 40], [80, 60], [90, 85], [100, 100]],
                    "pump": [[0, 8], [80, 11]]}}},
@@ -68,7 +72,7 @@ BUILTIN_PROFILES = {
         "common": {"fan": [[35, 40], [50, 50], [60, 65], [70, 80], [80, 100]],
                    "pump": [[0, 11]]}}},
 }
-DEFAULT_PROFILE = "balanced"
+DEFAULT_PROFILE = "default"
 # "Follow the laptop" before 1.6.8: a fixed duty per laptop mode and the pump at 11 V — kept as flat per-mode curves
 OLD_LAPTOP_FAN = {"office": 40, "gaming": 60, "turbo": 90, "custom": 90}
 

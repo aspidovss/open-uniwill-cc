@@ -338,13 +338,19 @@ pre.code{margin:0;padding:10px 12px;background:var(--bg0);border:1px solid var(-
 .clevo-row input[type=range]{flex:1;min-width:180px;max-width:420px;width:auto;margin:0}
 .clevo-row output{min-width:44px}
 /* liquid cooler curves (1.6.8): the look of the laptop fan curve (.curve) */
-.lc-editors{display:grid;grid-template-columns:1fr;gap:4px;margin-top:8px}
+.lc-editors{display:grid;grid-template-columns:1fr;gap:4px 16px;margin-top:8px}
+@media (min-width:1100px){.lc-editors{grid-template-columns:1fr 1fr}}
+.lc-ed{min-width:0}
+.lc-ed svg.lc-curve{max-height:300px}
 .lc-ed h4{margin:10px 0 0}
 svg.lc-curve{margin:8px 0 4px}
+svg.lc-curve text{font-size:15px}
+svg.lc-curve text.nowlbl{font-size:16px}
 svg.lc-curve .line{fill:none;stroke:var(--acc);stroke-width:2.5}
 svg.lc-curve .line.pump{stroke:var(--gpu)}
 svg.lc-curve .line.ro{stroke:#6d7c88;stroke-dasharray:6 5}
 svg.lc-curve .pt.ro{fill:#3a4650;cursor:default}
+svg.lc-curve .pt.pv{cursor:default}
 svg.lc-curve .crossdot{fill:#ff4d3d;stroke:#2a0b07;stroke-width:2}
 .curve .now{fill:#ff4d3d;stroke:#2a0b07;stroke-width:2;pointer-events:all}
 .curve text.nowlbl{fill:#ff6b5a;font-size:12px;font-weight:600;stroke:#101418;stroke-width:3px;paint-order:stroke;pointer-events:none}
