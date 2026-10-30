@@ -55,7 +55,10 @@ settings do not change the mode. Needs full monitoring. `uwccctl rules …`.
 
 
 * **Power source:** a mode for "charger plugged in" (keep / the mode before unplugging / a mode) and for "unplugged";
-  keyboard backlight off on battery; follow the mode with power-profiles-daemon (Turbo → performance, battery → power saver).
+  keyboard backlight off on battery; follow the mode with power-profiles-daemon / the Windows power mode (Turbo →
+  performance, battery → power saver) and, the other way round, switch the laptop's mode when the system power profile
+  changes (power saver / balanced / performance → a mode of your choice; the program's own changes are not followed
+  back). The rules can also test the system power profile and Windows battery saver.
 * **Overheating:** a desktop notice when the CPU or GPU stays at the limit (default 95 °C / 87 °C) for 30 s, at most once
   in 10 minutes; optionally Fan Boost is switched on if it is still hot 30 s later.
 

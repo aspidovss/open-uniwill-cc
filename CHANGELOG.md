@@ -11,6 +11,11 @@
   Also: conditions on the battery charge and the power source (mains / battery); a **cooler profile** with the
   mode (its curves come back with the return); **what the rules did** — a log in the card and in `uwccctl rules`;
   the comparisons are shown as > and <.
+- **System power profile, both ways:** besides moving the Windows power mode / power-profiles-daemon with the
+  laptop's mode, the laptop's mode can now follow it — power saver / balanced / performance → a mode of your choice
+  (Automation → Power source; changes the program makes itself are not followed back; rules and App binding come
+  first). The rules can test the system power profile and Windows battery saver. `uwccctl set ppd_follow on`,
+  `uwccctl set ppd_modes power-saver=office,balanced=keep,performance=turbo`.
 - **Fan settings: a red dot shows the fan's current temperature and speed** on the curve of the active table
   (CPU or GPU, with full monitoring): it lies on the curve at the sensor's temperature, the label has the real rpm.
 - **Switches** in two groups: *System* (notifications, updates, CPU temperature limit range, sensor history, debug

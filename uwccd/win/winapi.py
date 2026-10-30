@@ -151,6 +151,32 @@ OVERLAY = {"power-saver": "961cc777-2547-4f9d-8174-7d86181b8a7a",
            "performance": "ded574b5-45a0-4f42-8737-46345c09c238"}
 
 
+OVERLAY_NAME = {v: k for k, v in OVERLAY.items()}
+OVERLAY_NAME["3af9b8d9-7c97-431d-ad78-34a8bfea439f"] = "balanced"     # "better performance" on some builds
+
+
+def get_power_overlay():
+    """The power mode slider now: "power-saver" / "balanced" / "performance" (None when it cannot be read).
+    The effective scheme already includes battery saver; the call is exported by powrprof since Windows 10 1709."""
+    powrprof = ctypes.WinDLL("powrprof")
+    buf = (ctypes.c_ubyte * 16)()
+    for fn in ("PowerGetEffectiveOverlayScheme", "PowerGetActualOverlayScheme"):
+        try:
+            f = getattr(powrprof, fn)
+        except AttributeError:
+            continue
+        if f(ctypes.byref(buf)) == 0:
+            g = str(uuid.UUID(bytes_le=bytes(buf)))
+            return OVERLAY_NAME.get(g, "balanced")
+    return None
+
+
+def battery_saver():
+    """Windows battery saver on (SYSTEM_POWER_STATUS.SystemStatusFlag bit 0); None when unknown."""
+    s = power_status()
+    return None if s is None else bool(s.SystemStatusFlag & 1)
+
+
 def set_power_overlay(name):
     powrprof = ctypes.WinDLL("powrprof")
     g = uuid.UUID(OVERLAY[name])

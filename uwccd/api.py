@@ -657,8 +657,21 @@ class Handler(BaseHTTPRequestHandler):
             apply_debug(bool(value))
         elif key == "webcam":
             st.set_webcam(bool(value))
-        elif key in ("alerts", "overheat_boost", "kb_off_on_battery", "ppd_sync"):
+        elif key in ("alerts", "overheat_boost", "kb_off_on_battery", "ppd_sync", "ppd_follow"):
             s.settings_store.set(key, bool(value))
+        elif key == "ppd_modes":                  # system power profile -> laptop mode
+            from .automation import SYS_PROFILES
+            if not isinstance(value, dict) or set(value) - set(SYS_PROFILES):
+                raise ValueError("ppd_modes: {power-saver|balanced|performance: keep | 0..3}")
+            out = {}
+            for k in SYS_PROFILES:
+                v = value.get(k, "keep")
+                if v != "keep":
+                    v = int(v)
+                    if v not in s.power.MODES:
+                        raise ValueError(f"ppd_modes {k}: mode not available")
+                out[k] = v
+            s.settings_store.set(key, out)
         elif key in ("cpu_alert", "gpu_alert"):
             v = int(value)
             if not 60 <= v <= 105:

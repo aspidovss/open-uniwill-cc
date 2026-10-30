@@ -136,7 +136,8 @@ Control Center 3.0 / Clevo (experimental): `uwccctl clevo …` — see [CLEVO.md
 |---|---|
 | `winkey_lock` `fn_lock` `usb_charger` `touchpad_toggle` `touchpad_enabled` `ac_recovery` `dgpu_direct` `bluetooth` `wifi` `webcam` `osd` `lc_hwoc` `kb_picture_modes` `tcc_extended` `history_record` `update_check` `debug` `mem_oc` `super_performance` | on / off |
 | `kb_timeout` | seconds 0..3600, 0 = never |
-| `alerts` `overheat_boost` `kb_off_on_battery` `ppd_sync` | on / off |
+| `alerts` `overheat_boost` `kb_off_on_battery` `ppd_sync` `ppd_follow` | on / off |
+| `ppd_modes` | the system power profile → the laptop's mode, e.g. `power-saver=office,balanced=keep,performance=turbo` |
 | `cpu_alert` `gpu_alert` | 60..105 °C |
 | `mode_on_ac` | `keep`, `previous` or a mode |
 | `mode_on_battery` | `keep` or a mode |

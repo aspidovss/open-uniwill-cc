@@ -1915,5 +1915,35 @@ class LoadRulesUnit(unittest.TestCase):
         self.assertEqual([x["what"] for x in log], ["back", "on"])             # newest first
         self.assertEqual(log[1]["lc_profile"], "quiet")
 
+    def test_system_power_profile(self):
+        """Follow the system power profile (Windows power mode / power-profiles-daemon) and the rule condition."""
+        from uwccd import sysprofile as SP
+        svc = self.svc
+        svc.threads, svc.rules = [], self.A.PowerSourceRules(svc)
+        svc.power.ac_online = True
+        sp = SP.SystemProfile(svc)
+        svc.sysprof = sp
+        reads = []
+        sp.read = lambda: reads.pop(0)
+        svc.settings_store.set("ppd_follow", True)
+        svc.settings_store.set("ppd_modes", {"power-saver": 0, "balanced": "keep", "performance": 2})
+        svc.power.option["OperatingMode"] = 1
+        reads[:] = [("balanced", False), ("power-saver", False), ("balanced", False), ("performance", True)]
+        sp.poll()                                                    # the first read only learns the profile
+        sp.poll()
+        self.assertEqual(svc.power.option["OperatingMode"], 0)          # power saver -> Office
+        sp.poll()
+        self.assertEqual(svc.power.option["OperatingMode"], 0)          # balanced: keep
+        sp.note_set("performance")                                   # the program set it itself: not followed
+        sp.poll()
+        self.assertEqual(svc.power.option["OperatingMode"], 0)
+        rules = self.A.check_load_rules([{"name": "saver", "conditions": [{"metric": "saver", "op": ">", "value": 1},
+                                          {"metric": "sys_profile", "op": "<", "value": 2}], "hold": 1, "mode": 1}])
+        self.assertEqual([c["op"] for c in rules[0]["conditions"]], ["=", "="])
+        svc.settings_store.set("load_rules", rules)
+        self.lr.tick(self.m(), now=0)
+        self.lr.tick(self.m(), now=2)
+        self.assertEqual(svc.power.option["OperatingMode"], 1)          # battery saver on and "performance" (2)
+
 if __name__ == "__main__":
     unittest.main()

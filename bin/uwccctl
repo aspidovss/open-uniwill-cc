@@ -72,6 +72,7 @@ SETTINGS = {
     "update_check": "bool", "kb_picture_modes": "bool", "tcc_extended": "bool", "debug": "bool",
     "kb_fx_screen": "bool", "kb_unlock_effects": "bool",
     "alerts": "bool", "overheat_boost": "bool", "kb_off_on_battery": "bool", "ppd_sync": "bool",
+    "ppd_follow": "bool", "ppd_modes": "ppdmap",
     "cpu_alert": "int", "gpu_alert": "int", "mode_on_ac": "mode", "mode_on_battery": "mode", "lang": "str",
     "fan_manager": "str", "clevo_writes": "bool", "clevo_restore": "bool",
 }
@@ -174,7 +175,8 @@ HELP = {
         "  A rule: {\"name\": \"Heavy load\", \"conditions\": [{\"metric\": \"total_power\", \"op\": \">\", \"value\": 120}],\n"
         "  \"join\": \"and\", \"hold\": 30, \"mode\": 2, \"slot\": null, \"lc_profile\": null, \"back\": true, \"back_after\": 60}\n"
         "  metrics: cpu_power gpu_power total_power (W), cpu_temp gpu_temp (°C), cpu_load gpu_load battery (%),\n"
-        "  ac (op \"=\", value 1 = on AC, 0 = on battery); lc_profile = a cooler profile id or null;\n"
+        "  ac (op \"=\", value 1 = on AC, 0 = on battery), sys_profile (op \"=\", 0 power-saver / 1 balanced /\n"
+        "  2 performance), saver (Windows battery saver, op \"=\", 1 / 0); lc_profile = a cooler profile id or null;\n"
         "  mode 0 office, 1 gaming, 2 turbo, 3 custom; slot = profile 0..4 or null (current)"),
     "clevo": (
         "Control Center 3.0 / Clevo — experimental, separate module (laptops with Control Center 3.x)\n"
@@ -434,6 +436,15 @@ def setting_value(key, v):
         return num(v, "set")
     if kind == "mode":
         return mode_value(v)
+    if kind == "ppdmap":                         # power-saver=office,balanced=keep,performance=turbo
+        out = {}
+        for kv in v.split(","):
+            k, eq, m = kv.partition("=")
+            if not eq or k.strip() not in ("power-saver", "balanced", "performance"):
+                usage("set")
+            m = m.strip()
+            out[k.strip()] = "keep" if m == "keep" else (MODES[m] if m in MODES else num(m, "set"))
+        return out
     return v
 
 

@@ -549,7 +549,9 @@
         <label class="slider wide"><span data-i>When the charger is unplugged</span><select id="au-bat"></select></label>
         <p class="muted tiny" data-i>The mode changes once, at the moment the power source changes; while a bound program runs it is not changed.</p>
         <label class="chk"><input type="checkbox" id="au-kb"> <span data-i>Turn the keyboard backlight off on battery (back on when plugged in)</span></label>
-        <label class="chk"><input type="checkbox" id="au-ppd"> <span data-i>Follow the mode with the system power profile (power-profiles-daemon): Turbo — performance, battery — power saver</span></label>
+        <label class="chk"><input type="checkbox" id="au-ppd"> <span id="au-ppd-label"></span></label>
+        <label class="chk"><input type="checkbox" id="au-follow"> <span id="au-follow-label"></span></label>
+        <div id="au-follow-box" class="hidden"></div>
       </div>
       <div class="card">
         <h3 data-i>Overheating</h3>

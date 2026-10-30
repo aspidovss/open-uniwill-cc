@@ -39,7 +39,10 @@ RANGES = {60: "fine", 300: "fine", 900: "fine", 3600: "history", 86400: "day"}
 DEFAULTS = {
     "alerts": True, "cpu_alert": 95, "gpu_alert": 87, "overheat_boost": False,
     "mode_on_ac": "keep", "mode_on_battery": "keep", "kb_off_on_battery": False, "ppd_sync": False,
+    # the other way round: the system power profile (Windows power mode / power-profiles-daemon) -> the laptop's mode
+    "ppd_follow": False, "ppd_modes": {"power-saver": 0, "balanced": "keep", "performance": 2},
 }
+SYS_PROFILES = ("power-saver", "balanced", "performance")
 
 
 def setting(st, key):
@@ -411,13 +414,40 @@ class PowerSourceRules:
                 self.kb_was_on = None
         self.sync_ppd()
 
+    def follow_system(self, prof):
+        """The system power profile changed (not by us): the laptop's mode from "ppd_modes"."""
+        svc, st = self.svc, self.svc.settings_store
+        if not setting(st, "ppd_follow") or not svc.fan_control:
+            return
+        binding_active = any(getattr(t, "active", None) for t in svc.threads if t.name == "appbind")
+        rule_active = getattr(getattr(svc, "load_rules", None), "active", None) is not None
+        if binding_active or rule_active:                # App binding and the rules come first
+            return
+        want = (setting(st, "ppd_modes") or {}).get(prof, "keep")
+        if want in ("keep", None):
+            return
+        mode = int(want)
+        if mode not in svc.power.MODES or (mode == 2 and not svc.pf.turbo_support):
+            return
+        if svc.power.option["OperatingMode"] != mode:
+            log.info("system power profile %s -> mode %s", prof, mode)
+            svc.power.user_set_mode(mode, osd=True)
+
     def sync_ppd(self, mode=None):
         """Follow the operating mode with power-profiles-daemon (on battery: power-saver)."""
-        if not setting(self.svc.settings_store, "ppd_sync"):
+        st = self.svc.settings_store
+        if not setting(st, "ppd_sync"):
             return
         if mode is None:
             mode = self.svc.power.option["OperatingMode"]
         prof = self.PPD.get(mode, "balanced") if self.svc.power.ac_online else "power-saver"
+        sp = getattr(self.svc, "sysprof", None)
+        if sp is not None and setting(st, "ppd_follow") and sp.profile:
+            want = (setting(st, "ppd_modes") or {}).get(sp.profile, "keep")
+            if want not in ("keep", None) and int(want) == mode:
+                return                                   # the mode came from this profile: leave the profile
+        if sp is not None:
+            sp.note_set(prof)
         if sys.platform == "win32":                 # Windows power mode slider (overlay scheme)
             from .win.winapi import set_power_overlay
             try:
@@ -441,7 +471,10 @@ LOAD_METRICS = {                     # key -> (unit, max value)
     "cpu_temp": ("°C", 110), "gpu_temp": ("°C", 110), "cpu_load": ("%", 100), "gpu_load": ("%", 100),
     "battery": ("%", 100),           # charge level
     "ac": ("", 1),                   # power source: op "=", value 1 = from the mains, 0 = on battery
+    "sys_profile": ("", 2),          # system power profile: op "=", 0 power-saver / 1 balanced / 2 performance
+    "saver": ("", 1),                # Windows battery saver: op "=", 1 on / 0 off
 }
+EQ_METRICS = ("ac", "sys_profile", "saver")
 LOAD_LOG_LEN = 30
 MAX_LOAD_RULES = 12
 
@@ -470,6 +503,11 @@ def load_metric(m, key):
         return b.get("percent") if b.get("present", True) else None
     if key == "ac":
         return None if m.get("ac") is None else (1 if m.get("ac") else 0)
+    if key == "sys_profile":
+        p = m.get("sys_profile")
+        return SYS_PROFILES.index(p) if p in SYS_PROFILES else None
+    if key == "saver":
+        return None if m.get("saver") is None else (1 if m.get("saver") else 0)
     return None
 
 
@@ -487,7 +525,7 @@ def check_load_rules(rules):
             if k not in LOAD_METRICS:
                 raise ValueError(f"rule {i + 1}: metric {k} ({', '.join(LOAD_METRICS)})")
             op = str(c.get("op", ">"))
-            if k == "ac":
+            if k in EQ_METRICS:
                 op = "="
             elif op not in (">", "<"):
                 raise ValueError(f"rule {i + 1}: operator > or <")
@@ -606,6 +644,9 @@ class LoadRules:
     def tick(self, m, now=None):
         if not self.svc.fan_control or not m or m.get("monitoring", "full") != "full":
             return
+        sp = getattr(self.svc, "sysprof", None)
+        if sp is not None:
+            m = {**m, "sys_profile": sp.profile, "saver": sp.saver}
         now = time.time() if now is None else now
         rules = self.rules()
         with self.lock:

@@ -98,6 +98,8 @@ class Service:
         from .updates import Updater
         self.updater = Updater(self)
         self.rules = PowerSourceRules(self)
+        from .sysprofile import SystemProfile
+        self.sysprof = SystemProfile(self)              # Windows power mode / power-profiles-daemon (Automation)
         self.load_rules = LoadRules(self)              # mode by power / temperature / load (Automation)
         self.threads = []
         self.fan_control = False
@@ -222,6 +224,7 @@ class Service:
         from .hwoc import LiquidHWOC
         self.hwoc = LiquidHWOC(self)
         self.threads.append(self.hwoc)
+        self.threads.append(self.sysprof)
         if not self.mock:
             self.threads.append(self.updater)
         for t in self.threads:
@@ -361,6 +364,7 @@ class Service:
             "liquid": self.liquid.status(),
             "hwoc": self.hwoc.status() if getattr(self, "hwoc", None) else None,
             "automation": {k: auto_setting(self.settings_store, k) for k in AUTO_DEFAULTS},
+            "sysprofile": self.sysprof.status(),
             "load_rules": self.load_rules.status(),
             "info": self.monitor.info(),
             "ec_access": self.ec_access(),

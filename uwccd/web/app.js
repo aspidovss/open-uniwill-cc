@@ -2162,14 +2162,43 @@ function renderAuto() {
   };
   fill($("#au-ac"), a.mode_on_ac, true); fill($("#au-bat"), a.mode_on_battery, false);
   $("#au-kb").checked = !!a.kb_off_on_battery; $("#au-ppd").checked = !!a.ppd_sync;
+  renderSysFollow(a, modes);
   $("#au-alerts").checked = !!a.alerts; $("#au-boost").checked = !!a.overheat_boost; $("#au-boost").disabled = !S.platform.fan_control;
   if (document.activeElement !== $("#au-cpu")) $("#au-cpu").value = a.cpu_alert;
   if (document.activeElement !== $("#au-gpu")) $("#au-gpu").value = a.gpu_alert;
   renderLoadRules();
 }
+// ---- the system power profile: Windows power mode / power-profiles-daemon, both ways (1.6.8)
+const SYS_PROF = ["power-saver", "balanced", "performance"];
+function sysProfName(p) {
+  const win = S.platform.os === "windows";
+  return t({ "power-saver": win ? "Best power efficiency" : "Power saver", balanced: "Balanced", performance: win ? "Best performance" : "Performance" }[p] || p);
+}
+function renderSysFollow(a, modes) {
+  const win = S.platform.os === "windows", sp = S.sysprofile || {};
+  $("#au-ppd-label").textContent = win ? t("Move the Windows power mode with the laptop's mode: Turbo — best performance, battery — best power efficiency")
+    : t("Follow the mode with the system power profile (power-profiles-daemon): Turbo — performance, battery — power saver");
+  $("#au-follow-label").textContent = win ? t("Switch the laptop's mode when the Windows power mode changes")
+    : t("Switch the laptop's mode when the system power profile (power-profiles-daemon) changes");
+  $("#au-follow").checked = !!a.ppd_follow; $("#au-follow").disabled = !S.platform.fan_control;
+  const box = $("#au-follow-box"); box.classList.toggle("hidden", !a.ppd_follow);
+  if (!a.ppd_follow || box.contains(document.activeElement)) return;
+  const map = a.ppd_modes || {};
+  const rows = SYS_PROF.map(p => {
+    const sel = h("select", {}, ...[["keep", t("Don't change")], ...modes.map(m => [String(m.id), t(m.name)])].map(([v, n]) => {
+      const o = h("option", { value: v }, n); if (String(map[p] ?? "keep") === v) o.selected = true; return o; }));
+    sel.addEventListener("change", () => act(() => api("setting", { key: "ppd_modes", value: { ...map, [p]: sel.value === "keep" ? "keep" : +sel.value } })));
+    return h("label", { class: "slider wide" }, h("span", {}, sysProfName(p) + (sp.profile === p ? " ●" : "")), sel);
+  });
+  const now = sp.available === false ? t(win ? "The Windows power mode cannot be read here." : "power-profiles-daemon is not installed or not running.")
+    : sp.profile ? t("Now: {0}", sysProfName(sp.profile)) + (sp.saver ? " · " + t("battery saver on") : "") : "";
+  box.replaceChildren(...rows, h("p", { class: "muted tiny" }, (now ? now + " " : "") + t("Changes the program makes itself are not followed back; while a rule or a bound program is active the mode stays.")));
+}
 // ---- automatic profile switching (load rules, 1.6.8)
 const AU_METRIC = { cpu_power: "CPU power", gpu_power: "GPU power", total_power: "CPU + GPU power", cpu_temp: "CPU temperature",
-  gpu_temp: "GPU temperature", cpu_load: "CPU load", gpu_load: "GPU load", battery: "Battery charge", ac: "Power source" };
+  gpu_temp: "GPU temperature", cpu_load: "CPU load", gpu_load: "GPU load", battery: "Battery charge", ac: "Power source",
+  sys_profile: "System power profile", saver: "Battery saver (Windows)" };
+const AU_EQ = ["ac", "sys_profile", "saver"];          // compared with "=": a choice instead of > / < and a number
 const AU_UNIT = { cpu_power: "W", gpu_power: "W", total_power: "W", cpu_temp: "°C", gpu_temp: "°C", cpu_load: "%", gpu_load: "%", battery: "%" };
 const AU_TEMPLATES = [                                   // the first one is chosen by default
   ["empty", "Empty rule", { name: "", conditions: [{ metric: "cpu_power", op: ">", value: 50 }], hold: 30, mode: 1, slot: null, back: false, back_after: 60 }],
@@ -2205,12 +2234,14 @@ function renderLoadRules(force) {                 // force: our own change, redr
     const conds = h("div", { class: "au-conds" });
     r.conditions.forEach((c, k) => {
       if (k) conds.append(sel([["and", t("and")], ["or", t("or")]], r.join || "and", v => { r.join = v; }));
-      const metric = sel(Object.entries(AU_METRIC).map(([v, n]) => [v, t(n)]), c.metric, v => {
-        if (v === "ac") { c.op = "="; c.value = 0; } else if (c.metric === "ac") { c.op = "<"; c.value = 30; }
+      const metric = sel(Object.entries(AU_METRIC).filter(([v]) => v !== "saver" || S.platform.os === "windows" || c.metric === "saver").map(([v, n]) => [v, t(n)]), c.metric, v => {
+        if (AU_EQ.includes(v)) { c.op = "="; c.value = v === "saver" ? 1 : 0; } else if (AU_EQ.includes(c.metric)) { c.op = "<"; c.value = 30; }
         c.metric = v;
       });
       conds.append(h("span", { class: "au-cond" }, metric,
         ...(c.metric === "ac" ? [sel([[1, t("from the mains")], [0, t("on battery")]], c.value ? 1 : 0, v => { c.value = +v; })]
+          : c.metric === "sys_profile" ? [sel(SYS_PROF.map((p, j) => [j, sysProfName(p)]), c.value, v => { c.value = +v; })]
+          : c.metric === "saver" ? [sel([[1, t("on")], [0, t("off")]], c.value ? 1 : 0, v => { c.value = +v; })]
           : [sel([[">", ">"], ["<", "<"]], c.op, v => { c.op = v; }),
             num(c.value, 0, 1000, v => { c.value = v; }), h("span", { class: "muted" }, t(AU_UNIT[c.metric] ?? (R.metrics || {})[c.metric] ?? ""))]),
         r.conditions.length > 1 ? h("button", { class: "btn ghost sm", onclick: () => { r.conditions.splice(k, 1); change(); renderLoadRules(true); } }, "✕") : ""));
@@ -2257,7 +2288,7 @@ $("#au-rules-save").addEventListener("click", () => act(async () => { await api(
 const setKey = (key, value) => act(() => api("setting", { key, value }));
 $("#au-ac").addEventListener("change", e => setKey("mode_on_ac", isNaN(+e.target.value) ? e.target.value : +e.target.value));
 $("#au-bat").addEventListener("change", e => setKey("mode_on_battery", isNaN(+e.target.value) ? e.target.value : +e.target.value));
-for (const [id, key] of [["au-kb", "kb_off_on_battery"], ["au-ppd", "ppd_sync"], ["au-alerts", "alerts"], ["au-boost", "overheat_boost"]])
+for (const [id, key] of [["au-kb", "kb_off_on_battery"], ["au-ppd", "ppd_sync"], ["au-follow", "ppd_follow"], ["au-alerts", "alerts"], ["au-boost", "overheat_boost"]])
   $("#" + id).addEventListener("change", e => setKey(key, e.target.checked));
 for (const [id, key] of [["au-cpu", "cpu_alert"], ["au-gpu", "gpu_alert"]])
   $("#" + id).addEventListener("change", e => setKey(key, +e.target.value));
