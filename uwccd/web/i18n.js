@@ -457,7 +457,13 @@ const RU = {
   "Done": "Готово",
   "Working…": "Применение…",
   "Record sensor history": "Записывать историю датчиков",
-  "Charts on the Monitor page: 15 minutes every 2 s, an hour every 5 s, 24 hours as per-minute averages (kept on disk). Turn off to stop recording.": "Графики на странице «Монитор»: 15 минут с шагом 2 с, час с шагом 5 с, 24 часа средними за минуту (хранятся на диске). Выключите, чтобы остановить запись.",
+  "Keeps the readings for the charts on the Monitor page and the export: the latest 450 samples at the sampling interval (15 min at 2 s), the last hour every 5 s, 24 hours as per-minute averages on disk. Turn off to stop recording.": "Хранит показания для графиков на странице «Монитор» и для экспорта: последние 450 замеров с интервалом опроса (15 мин при 2 с), последний час с шагом 5 с, 24 часа средними за минуту на диске. Выключите, чтобы остановить запись.",
+  "Battery charge": "Заряд батареи", "from the mains": "от сети", "on battery": "от батареи",
+  "cooler": "охладитель", "keep its curves": "не менять кривые",
+  "then return to the previous mode and cooler curves when it has not held for": "потом вернуть прежний режим и кривые охладителя, когда условие не выполняется",
+  "What the rules did": "Что делали правила", "over — back to {0}": "закончилось — назад в {0}", "cooler curves back": "кривые охладителя возвращены",
+  "over": "закончилось", "rule": "правило",
+  "System switches": "Системные", "Laptop functions": "Функциональные",
   // liquid cooler: calm control
   "Pump stopped: cool": "Помпа остановлена: прохладно",
   "Behaviour": "Поведение",
@@ -850,8 +856,8 @@ Object.assign(RU, {
   "Curves — view only (Controller: used when the EC publishes no targets)": "Кривые — только просмотр (Контроллер: используются, когда EC не публикует цели)",
   // 1.6.8 — automatic profile switching
   "Automatic profile switching": "Автоматическое переключение профилей", "Add rule": "Добавить правило",
-  "Switch the mode and profile when power, temperature or load stays past a limit. The rules are checked from the top; the first one that held long enough is applied. While a rule is active, App binding and the power source settings do not change the mode. Needs full monitoring (EC Manager → Monitoring).":
-    "Переключать режим и профиль, когда мощность, температура или загрузка держатся за пределом. Правила проверяются сверху вниз; применяется первое, условие которого держалось достаточно долго. Пока правило активно, привязка программ и настройки источника питания режим не меняют. Нужен полный мониторинг (Менеджер EC → Мониторинг).",
+  "Switch the mode, the profile and the cooler profile when power, temperature, load, battery charge or the power source stays past a limit. The rules are checked from the top; the first one that held long enough is applied. While a rule is active, App binding and the power source settings do not change the mode. Needs full monitoring (EC Manager → Monitoring).":
+    "Переключать режим, профиль и профиль охладителя, когда мощность, температура, загрузка, заряд батареи или источник питания держатся за пределом. Правила проверяются сверху вниз; применяется первое, условие которого держалось достаточно долго. Пока правило активно, привязка программ и настройки источника питания режим не меняют. Нужен полный мониторинг (Менеджер EC → Мониторинг).",
   "Monitoring is not complete — the rules are paused.": "Мониторинг неполный — правила приостановлены.",
   "CPU + GPU power": "Мощность ЦП + ГП", "Heavy load → Turbo": "Высокая нагрузка → Турбо", "Light load → Office": "Низкая нагрузка → Офисный",
   "Hot → Gaming": "Горячо → Игровой", "Empty rule": "Пустое правило", "Heavy load": "Высокая нагрузка", "Light load": "Низкая нагрузка", "Hot": "Горячо",

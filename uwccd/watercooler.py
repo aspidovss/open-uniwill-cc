@@ -914,6 +914,22 @@ class LiquidCooler:
         self._changed()
         return pid
 
+    def curves_snapshot(self):
+        """The curves and the profile now (Automation: a rule puts them back when it ends)."""
+        with self.lock:
+            return copy.deepcopy(self.cfg.get("curves")), self.cfg.get("profile")
+
+    def curves_restore(self, snap):
+        curves, prof = snap
+        with self.lock:
+            c = copy.deepcopy(self.cfg)
+            c["curves"] = LCV.clamp_curves(curves, c["pump_running"] if c.get("pump_custom") else LCV.DEFAULT_RUNNING)
+            c["profile"] = prof
+            self.cfg = c
+            self._save()
+        self._wake_up()
+        self._changed()
+
     @staticmethod
     def _check_idle(pi):
         out = {"enabled": bool(pi["enabled"])}

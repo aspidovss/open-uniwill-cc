@@ -1054,8 +1054,10 @@ $("#btn-lim").addEventListener("click", () => act(() => api("battery", { limit_u
 $("#typec").addEventListener("change", e => act(() => api("battery", { typec_priority: e.target.checked })));
 
 // ---------------------------------------------------------------- switches
+const HIST_REC_DESC = "Keeps the readings for the charts on the Monitor page and the export: the latest 450 samples at the sampling interval (15 min at 2 s), the last hour every 5 s, 24 hours as per-minute averages on disk. Turn off to stop recording.";
 function renderSwitches() {
   const s = S.settings; const L = $("#switch-list"); L.innerHTML = "";
+  const group = title => L.append(h("h3", { class: "sw-group" }, t(title)));
   const item = (title, desc, key, value, opts = {}) => {
     const inp = h("input", { type: "checkbox", disabled: opts.disabled }); inp.checked = !!value;
     inp.addEventListener("change", () => {
@@ -1064,28 +1066,14 @@ function renderSwitches() {
     });
     L.append(h("div", { class: "item" }, h("div", {}, h("h4", {}, t(title)), h("p", {}, t(desc))), h("label", { class: "sw" }, inp, h("span"))));
   };
-  item("Windows key lock", "Disable the Super (Windows) key on the keyboard.", "winkey_lock", s.winkey_lock);
-  item("Fn Key Lock", "F1–F12 functions without pressing Fn (primary/secondary function set).", "fn_lock", s.fn_lock);
-  item("USB power in sleep", "When the computer is off or asleep, the USB port keeps charging devices.", "usb_charger", s.usb_charger);
-  item("Touchpad", "Turn the touchpad on or off.", "touchpad_enabled", s.touchpad_enabled);
-  item("Touchpad toggle", "Button/gesture on the touchpad itself that turns it on and off.", "touchpad_toggle", s.touchpad_toggle);
-  item("Power on with AC", "The laptop turns on when the power adapter is connected.", "ac_recovery", s.ac_recovery);
-  if (s.dgpu_direct !== null) item("NVIDIA Optimus off (discrete GPU direct mode)", "The internal display is wired directly to the discrete GPU. Restart required.", "dgpu_direct", s.dgpu_direct, { confirm: t("The MUX switch takes effect after a restart. Continue?"), ok: t("The change takes effect after a restart") });
-  if (s.webcam !== null && s.webcam !== undefined) item("Webcam", "When off, the built-in camera is disconnected from the USB bus and no program can use it.", "webcam", s.webcam);
-  if (s.wifi !== null) item("Wi-Fi", "Wireless network (rfkill).", "wifi", s.wifi);
-  if (s.bluetooth !== null) item("Bluetooth", "Bluetooth adapter (rfkill).", "bluetooth", s.bluetooth);
+  // 1. system: the program itself
+  group("System switches");
   item("On-screen notifications", "Show a notification when the mode changes and hotkeys are pressed.", "osd", s.osd);
-  item("Debug logging", "Write detailed messages to the service log (for bug reports).", "debug", s.debug);
-  item("Record sensor history", "Charts on the Monitor page: 15 minutes every 2 s, an hour every 5 s, 24 hours as per-minute averages (kept on disk). Turn off to stop recording.", "history_record", s.history_record);
   item("Check for updates automatically", "Once a day the service asks GitHub for the latest release of open-uniwill-cc. Nothing else is sent.", "update_check", s.update_check);
-  if (S.keyboard && S.keyboard.picture_modes_switch) {
-    const c = h("input", { type: "checkbox" }); c.checked = !S.keyboard.picture_modes_blocked;
-    c.addEventListener("change", () => act(() => api("setting", { key: "kb_picture_modes", value: c.checked })));
-    L.append(h("div", { class: "item" }, h("div", {}, h("h4", {}, t("Per-key keyboard pictures")),
-      h("p", {}, t("Single colour, User mode, Gaming and the software effects (Neon, Stack, Impact, Alphabet) are drawn key by key, as in the original Control Center. Turn off if the keyboard ignores them: single colour then uses the firmware effect and the others are hidden."))), h("label", { class: "sw" }, c, h("span"))));
-  }
   if (S.power && S.power.limits && S.power.limits.tjmax && !S.platform.amd)
     item("Extended CPU temperature limit range", "Allow a CPU temperature limit down to 60 °C in the profiles (default: down to 85 °C).", "tcc_extended", s.tcc_extended);
+  item("Record sensor history", HIST_REC_DESC, "history_record", s.history_record);
+  item("Debug logging", "Write detailed messages to the service log (for bug reports).", "debug", s.debug);
   if (S.power && S.power.manager) {
     const auto = S.platform.commercial ? "cml" : "std";
     const names = { cml: t("Commercial (_CML): Office / Gaming / Turbo"), std: t("RamFan 1.5: Office / Gaming / Turbo / Custom") };
@@ -1097,6 +1085,24 @@ function renderSwitches() {
     });
     L.append(h("div", { class: "item" }, h("div", {}, h("h4", {}, t("Fan manager")),
       h("p", {}, t("How modes, profiles and fan tables are driven. The original Control Center picks it by the project; change it only if modes or fan curves do not work on your laptop. Now running: {0}.", names[S.power.manager] || S.power.manager))), fm));
+  }
+  // 2. functions of the laptop: keyboard, touchpad, power, graphics
+  group("Laptop functions");
+  item("Windows key lock", "Disable the Super (Windows) key on the keyboard.", "winkey_lock", s.winkey_lock);
+  item("Fn Key Lock", "F1–F12 functions without pressing Fn (primary/secondary function set).", "fn_lock", s.fn_lock);
+  item("USB power in sleep", "When the computer is off or asleep, the USB port keeps charging devices.", "usb_charger", s.usb_charger);
+  item("Touchpad", "Turn the touchpad on or off.", "touchpad_enabled", s.touchpad_enabled);
+  item("Touchpad toggle", "Button/gesture on the touchpad itself that turns it on and off.", "touchpad_toggle", s.touchpad_toggle);
+  item("Power on with AC", "The laptop turns on when the power adapter is connected.", "ac_recovery", s.ac_recovery);
+  if (s.dgpu_direct !== null) item("NVIDIA Optimus off (discrete GPU direct mode)", "The internal display is wired directly to the discrete GPU. Restart required.", "dgpu_direct", s.dgpu_direct, { confirm: t("The MUX switch takes effect after a restart. Continue?"), ok: t("The change takes effect after a restart") });
+  if (s.webcam !== null && s.webcam !== undefined) item("Webcam", "When off, the built-in camera is disconnected from the USB bus and no program can use it.", "webcam", s.webcam);
+  if (s.wifi !== null) item("Wi-Fi", "Wireless network (rfkill).", "wifi", s.wifi);
+  if (s.bluetooth !== null) item("Bluetooth", "Bluetooth adapter (rfkill).", "bluetooth", s.bluetooth);
+  if (S.keyboard && S.keyboard.picture_modes_switch) {
+    const c = h("input", { type: "checkbox" }); c.checked = !S.keyboard.picture_modes_blocked;
+    c.addEventListener("change", () => act(() => api("setting", { key: "kb_picture_modes", value: c.checked })));
+    L.append(h("div", { class: "item" }, h("div", {}, h("h4", {}, t("Per-key keyboard pictures")),
+      h("p", {}, t("Single colour, User mode, Gaming and the software effects (Neon, Stack, Impact, Alphabet) are drawn key by key, as in the original Control Center. Turn off if the keyboard ignores them: single colour then uses the firmware effect and the others are hidden."))), h("label", { class: "sw" }, c, h("span"))));
   }
   const sel = h("select", {}, ...[[0, t("Never")], [10, t("{0} seconds", 10)], [30, t("{0} seconds", 30)], [60, t("1 minute")], [300, t("{0} minutes", 5)], [600, t("{0} minutes", 10)]].map(([v, txt]) => { const o = h("option", { value: v }, txt); if (+s.kb_timeout === v) o.selected = true; return o; }));
   sel.addEventListener("change", () => act(() => api("setting", { key: "kb_timeout", value: +sel.value })));
@@ -1128,6 +1134,18 @@ $("#bind-add").addEventListener("click", () => {
 // ---------------------------------------------------------------- info
 $("#rep-debug").addEventListener("change", e => act(() => api("setting", { key: "debug", value: e.target.checked }),
   e.target.checked ? t("Debug logging on") : t("Debug logging off")));
+// a label with ⓘ: click (or Enter) opens the explanation under it; a click elsewhere closes it
+function tipLabel(label, text) {
+  const el = h("span", { class: "has-tip", tabindex: "0", role: "button", "aria-expanded": "false" }, label + " ⓘ",
+    h("span", { class: "tip-body", role: "tooltip" }, text));
+  const toggle = e => { e.stopPropagation(); const on = !el.classList.contains("open");
+    $$(".has-tip.open").forEach(x => { x.classList.remove("open"); x.setAttribute("aria-expanded", "false"); });
+    el.classList.toggle("open", on); el.setAttribute("aria-expanded", String(on)); };
+  el.addEventListener("click", toggle);
+  el.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(e); } });
+  return el;
+}
+document.addEventListener("click", () => $$(".has-tip.open").forEach(x => { x.classList.remove("open"); x.setAttribute("aria-expanded", "false"); }));
 function renderInfo() {
   if (S.settings) $("#rep-debug").checked = !!S.settings.debug;
   const i = S.info, p = S.platform;
@@ -1137,7 +1155,7 @@ function renderInfo() {
     [t("Processor"), i.cpu], [t("Memory"), `${(i.memory.total_mb / 1024).toFixed(1)} ${t("GB")}`], [t(p.os === "windows" ? "Operating system" : "Linux kernel"), i.kernel]]);
   dl($("#info-svc"), [[t("Project (Project ID)"), `${p.display_name || p.project_name} (0x${p.project_id.toString(16).toUpperCase()})`], [t("Support"), t({ tested: "tested", known: "known platform", experimental: "experimental" }[p.support] || "—")], [t("EC access"), p.ec_backend],
     [t("Hotkeys"), p.hotkeys ? (p.os === "windows" ? "WMI (AcpiTest_EventULong)" : t("uwcc kernel module")) : t("EC polling (no module)")], ["NVRAM (UniWillVariable)", p.nvram ? t("available") : t("unavailable")],
-    [h("span", { title: t("Fan control of the EC firmware (name from the original Uniwill service): fan curves in the EC memory, Custom mode, power limits. Without it the program does not control the fans."), class: "has-tip" }, "RamFan 1.5 ⓘ"), p.ramfan15 ? t("yes") : t("no")], [t("Turbo mode"), p.turbo_support ? t("supported") : t("no")], [t("NVIDIA graphics"), p.nv_gpu ? t("yes") : t("no")],
+    [tipLabel("RamFan 1.5", t("Fan control of the EC firmware (name from the original Uniwill service): fan curves in the EC memory, Custom mode, power limits. Without it the program does not control the fans.")), p.ramfan15 ? t("yes") : t("no")], [t("Turbo mode"), p.turbo_support ? t("supported") : t("no")], [t("NVIDIA graphics"), p.nv_gpu ? t("yes") : t("no")],
     [t("Platform"), p.amd ? "AMD" : "Intel"], [t("Power adapter"), `${p.adapter_watt} ${t("W")}`],
     [t("Liquid cooling (EC)"), lc.ec_support ? (lc.ec_table ? t("supported, EC targets") : t("supported")) : t("not declared")]]);
   const d = $("#info-disks"); d.innerHTML = "";
@@ -2151,12 +2169,12 @@ function renderAuto() {
 }
 // ---- automatic profile switching (load rules, 1.6.8)
 const AU_METRIC = { cpu_power: "CPU power", gpu_power: "GPU power", total_power: "CPU + GPU power", cpu_temp: "CPU temperature",
-  gpu_temp: "GPU temperature", cpu_load: "CPU load", gpu_load: "GPU load" };
-const AU_TEMPLATES = [
+  gpu_temp: "GPU temperature", cpu_load: "CPU load", gpu_load: "GPU load", battery: "Battery charge", ac: "Power source" };
+const AU_TEMPLATES = [                                   // the first one is chosen by default
+  ["empty", "Empty rule", { name: "", conditions: [{ metric: "cpu_power", op: ">", value: 50 }], hold: 30, mode: 1, slot: null, back: false, back_after: 60 }],
   ["heavy", "Heavy load → Turbo", { name: "Heavy load", conditions: [{ metric: "total_power", op: ">", value: 120 }], hold: 30, mode: 2, slot: null, back: true, back_after: 60 }],
   ["light", "Light load → Office", { name: "Light load", conditions: [{ metric: "cpu_power", op: "<", value: 15 }], hold: 60, mode: 0, slot: null, back: false, back_after: 60 }],
   ["hot", "Hot → Gaming", { name: "Hot", conditions: [{ metric: "cpu_temp", op: ">", value: 90 }, { metric: "gpu_temp", op: ">", value: 85 }], join: "or", hold: 20, mode: 1, slot: null, back: true, back_after: 120 }],
-  ["empty", "Empty rule", { name: "", conditions: [{ metric: "cpu_power", op: ">", value: 50 }], hold: 30, mode: 1, slot: null, back: false, back_after: 60 }],
 ];
 let auRules = null, auDirty = false;
 function renderLoadRules() {
@@ -2166,6 +2184,7 @@ function renderLoadRules() {
   const tpl = $("#au-rule-tpl"); if (!tpl.options.length || tpl.dataset.lang !== LANG) {
     tpl.innerHTML = ""; tpl.dataset.lang = LANG; for (const [id, n] of AU_TEMPLATES) tpl.append(h("option", { value: id }, t(n)));
   }
+  renderRulesLog(R);
   const box = $("#au-rules"); if (box.contains(document.activeElement) && document.activeElement.tagName !== "BUTTON") return;
   box.innerHTML = "";
   if (!auRules.length) { box.append(h("p", { class: "muted" }, t("No rules yet"))); return; }
@@ -2185,10 +2204,14 @@ function renderLoadRules() {
     const conds = h("div", { class: "au-conds" });
     r.conditions.forEach((c, k) => {
       if (k) conds.append(sel([["and", t("and")], ["or", t("or")]], r.join || "and", v => { r.join = v; }));
-      conds.append(h("span", { class: "au-cond" },
-        sel(Object.entries(AU_METRIC).map(([v, n]) => [v, t(n)]), c.metric, v => { c.metric = v; }),
-        sel([[">", t("above")], ["<", t("below")]], c.op, v => { c.op = v; }),
-        num(c.value, 0, 1000, v => { c.value = v; }), h("span", { class: "muted" }, t(R.metrics[c.metric] === "W" ? "W" : R.metrics[c.metric] || "")),
+      const metric = sel(Object.entries(AU_METRIC).map(([v, n]) => [v, t(n)]), c.metric, v => {
+        if (v === "ac") { c.op = "="; c.value = 0; } else if (c.metric === "ac") { c.op = "<"; c.value = 30; }
+        c.metric = v;
+      });
+      conds.append(h("span", { class: "au-cond" }, metric,
+        ...(c.metric === "ac" ? [sel([[1, t("from the mains")], [0, t("on battery")]], c.value ? 1 : 0, v => { c.value = +v; })]
+          : [sel([[">", ">"], ["<", "<"]], c.op, v => { c.op = v; }),
+            num(c.value, 0, 1000, v => { c.value = v; }), h("span", { class: "muted" }, t(R.metrics[c.metric] === "W" ? "W" : R.metrics[c.metric] || ""))]),
         r.conditions.length > 1 ? h("button", { class: "btn ghost sm", onclick: () => { r.conditions.splice(k, 1); change(); renderLoadRules(); } }, "✕") : ""));
     });
     if (r.conditions.length < 3) conds.append(h("button", { class: "btn ghost sm", onclick: () => { r.conditions.push({ metric: "gpu_power", op: ">", value: 50 }); change(); renderLoadRules(); } }, t("+ condition")));
@@ -2196,12 +2219,31 @@ function renderLoadRules() {
     const slotOpts = [["", t("current profile")], ...Array.from({ length: nslots }, (_, j) => [j, r.mode === 3 ? slotName(S.profiles["Mode4_Profile" + (j + 1)], j + 1) : t("profile {0}", j + 1)])];
     const act1 = h("div", { class: "row wrap au-line" }, h("span", {}, t("for")), num(r.hold, 1, 3600, v => { r.hold = v; }), h("span", {}, t("s → switch to")),
       sel(modes.map(m => [m.id, t(m.name)]), r.mode, v => { r.mode = +v; r.slot = null; }),
-      sel(slotOpts, r.slot ?? "", v => { r.slot = v === "" ? null : +v; }));
+      sel(slotOpts, r.slot ?? "", v => { r.slot = v === "" ? null : +v; }),
+      ...(S.liquid && S.liquid.profiles ? [h("span", {}, t("cooler")),
+        sel([["", t("keep its curves")], ...S.liquid.profiles.map(p => [p.id, p.builtin ? t(LC_PROFILE_NAME[p.id] || p.name) : p.name])],
+          r.lc_profile ?? "", v => { r.lc_profile = v || null; })] : []));
     const bk = h("input", { type: "checkbox", ...(r.back ? { checked: true } : {}) }); bk.addEventListener("change", () => { r.back = bk.checked; change(); });
-    const act2 = h("div", { class: "row wrap au-line" }, h("label", { class: "chk" }, bk, " ", h("span", {}, t("then return to the previous mode when it has not held for"))),
+    const act2 = h("div", { class: "row wrap au-line" }, h("label", { class: "chk" }, bk, " ", h("span", {}, t(r.lc_profile ? "then return to the previous mode and cooler curves when it has not held for" : "then return to the previous mode when it has not held for"))),
       num(r.back_after, 1, 3600, v => { r.back_after = v; }), h("span", {}, t("s")));
     box.append(h("div", { class: "au-rule" + (active ? " on" : "") }, head, h("div", { class: "au-line" }, h("b", {}, t("If")), " ", conds), act1, act2));
   });
+}
+// what the rules did (newest first): kept by the service since it started
+function renderRulesLog(R) {
+  const box = $("#au-log"); if (!box) return;
+  const L = R.log || [];
+  box.classList.toggle("hidden", !L.length);
+  if (!L.length) return;
+  const mname = m => (MODES[m] ? t(MODES[m].name) : "");
+  const lcn = id => { const p = ((S.liquid || {}).profiles || []).find(x => x.id === id); return p ? (p.builtin ? t(LC_PROFILE_NAME[p.id] || p.name) : p.name) : id; };
+  const rows = L.map(x => {
+    const tm = new Date(x.t * 1000).toLocaleTimeString(LANG === "ru" ? "ru-RU" : undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    const what = x.what === "on" ? `→ ${mname(x.mode)}${x.slot != null ? ", " + t("profile {0}", x.slot + 1) : ""}${x.lc_profile ? " · " + t("cooler") + " " + lcn(x.lc_profile) : ""}`
+      : x.what === "back" ? t("over — back to {0}", mname(x.mode)) + (x.lc_profile ? " · " + t("cooler curves back") : "") : t("over");
+    return h("li", {}, h("span", { class: "muted" }, tm), " ", h("b", {}, x.rule || t("rule")), " ", what);
+  });
+  box.replaceChildren(h("h4", {}, t("What the rules did")), h("ul", { class: "au-log" }, ...rows));
 }
 $("#au-rule-add").addEventListener("click", () => {
   const tp = AU_TEMPLATES.find(x => x[0] === $("#au-rule-tpl").value) || AU_TEMPLATES[0];
@@ -2720,6 +2762,8 @@ function renderMonitoring(a) {
   const set = (key, value) => act(() => api("setting", { key, value }));
   const item = (label, ctl, wide) => h("div", { class: "dm-item" + (wide ? " wide" : "") }, h("span", {}, label), ctl);
   const dir = h("input", { type: "text", value: hi.dir || "", spellcheck: "false" });
+ const rec = h("input", { type: "checkbox" }); rec.checked = !!(S.settings && S.settings.history_record);
+  rec.addEventListener("change", () => set("history_record", rec.checked));
   box.replaceChildren(
     h("div", { class: "dm-grid" },
       item(t("Monitoring"), sel(MON_MODES.map(([v, l]) => [v, t(l)]), mode, v => set("monitoring", v))),
@@ -2727,11 +2771,13 @@ function renderMonitoring(a) {
         hi.interval_setting || 0, v => set("monitor_interval", +v)))),
     h("p", { class: "muted tiny" }, t(MON_HINT[mode])),
     h("h4", {}, t("History")),
+    h("div", { class: "dm-item wide dm-sw" }, h("div", {}, h("span", {}, t("Record sensor history")), h("p", { class: "muted tiny" }, t(HIST_REC_DESC))),
+      h("label", { class: "sw" }, rec, h("span"))),
     h("div", { class: "dm-grid" },
       item(t("Size on disk"), h("span", {}, `${fmtSize(hi.size || 0)} · ${t("{0} min of 24 h", (hi.points || {}).day || 0)}`)),
       item(t("Maximum size"), sel(HIST_SIZES.map(v => [v, fmtSize(v * 1024)]).concat(HIST_SIZES.includes(hi.max_kb) ? [] : [[hi.max_kb, fmtSize((hi.max_kb || 0) * 1024)]]),
         hi.max_kb, v => set("history_max_kb", +v))),
-      item(t("Folder"), h("div", { class: "row" }, dir, h("button", { class: "btn ghost", onclick: () => act(async () => {
+      item(t("Folder"), h("div", { class: "row dm-dir" }, dir, h("button", { class: "btn ghost", onclick: () => act(async () => {
         await adminApi("history/config", { dir: dir.value.trim() }); await refresh();
       }, t("Saved")) }, t("Move"))), true)),
     h("p", { class: "muted tiny" }, t("File: {0}. The oldest minutes are dropped when it grows beyond the maximum size. Moving the folder needs administrator rights.", hi.path || "")),

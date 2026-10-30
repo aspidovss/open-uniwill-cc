@@ -20,6 +20,8 @@ import sys
 import threading
 import time
 
+from . import lc_curves as LCV
+
 log = logging.getLogger("uwccd.auto")
 
 HOLD = 30            # s above the limit before a notice
@@ -437,7 +439,10 @@ class PowerSourceRules:
 LOAD_METRICS = {                     # key -> (unit, max value)
     "cpu_power": ("W", 500), "gpu_power": ("W", 500), "total_power": ("W", 1000),
     "cpu_temp": ("°C", 110), "gpu_temp": ("°C", 110), "cpu_load": ("%", 100), "gpu_load": ("%", 100),
+    "battery": ("%", 100),           # charge level
+    "ac": ("", 1),                   # power source: op "=", value 1 = from the mains, 0 = on battery
 }
+LOAD_LOG_LEN = 30
 MAX_LOAD_RULES = 12
 
 
@@ -460,6 +465,11 @@ def load_metric(m, key):
         return cpu.get("usage")
     if key == "gpu_load":
         return 0 if asleep else gpu.get("usage")
+    if key == "battery":
+        b = m.get("battery") or {}
+        return b.get("percent") if b.get("present", True) else None
+    if key == "ac":
+        return None if m.get("ac") is None else (1 if m.get("ac") else 0)
     return None
 
 
@@ -477,7 +487,9 @@ def check_load_rules(rules):
             if k not in LOAD_METRICS:
                 raise ValueError(f"rule {i + 1}: metric {k} ({', '.join(LOAD_METRICS)})")
             op = str(c.get("op", ">"))
-            if op not in (">", "<"):
+            if k == "ac":
+                op = "="
+            elif op not in (">", "<"):
                 raise ValueError(f"rule {i + 1}: operator > or <")
             v = float(c.get("value"))
             if not 0 <= v <= LOAD_METRICS[k][1]:
@@ -496,8 +508,10 @@ def check_load_rules(rules):
         slot = None if slot in (None, "", "current") else int(slot)
         if slot is not None and not 0 <= slot <= 4:
             raise ValueError(f"rule {i + 1}: profile slot 0..4")
+        lcp = r.get("lc_profile")
+        lcp = None if lcp in (None, "", "keep") else str(lcp)[:60]
         out.append({"enabled": bool(r.get("enabled", True)), "name": str(r.get("name") or "")[:40],
-                    "conditions": cc, "join": join, "hold": hold, "mode": mode, "slot": slot,
+                    "conditions": cc, "join": join, "hold": hold, "mode": mode, "slot": slot, "lc_profile": lcp,
                     "back": bool(r.get("back", False)), "back_after": back_after})
     return out
 
@@ -518,7 +532,39 @@ class LoadRules:
         self.active = None       # index of the active rule
         self.applied = None      # (mode, slot) the active rule set
         self.prev = None         # (mode, slot) before the first rule became active
+        self.lc_prev = None      # the cooler's curves / profile before a rule applied a cooler profile
+        self.lc_applied = None   # the cooler profile a rule applied
+        self.log = collections.deque(maxlen=LOAD_LOG_LEN)    # what the rules did, newest last
         self.lock = threading.Lock()
+
+    def _note(self, what, r, mode=None, slot=None, lcp=None, now=None):
+        self.log.append({"t": round(now or time.time()), "what": what, "rule": r.get("name") or "",
+                         "mode": mode, "slot": slot, "lc_profile": lcp})
+
+    def _apply_lc(self, pid):
+        """A cooler profile (Liquid cooling) with the rule; the curves before are kept for the return."""
+        lc = getattr(self.svc, "liquid", None)
+        if not pid or lc is None:
+            return False
+        try:
+            if lc.cfg.get("profile") == pid and not LCV.modified(lc.cfg):
+                return True
+            if self.lc_prev is None:
+                self.lc_prev = lc.curves_snapshot()
+            lc.profile({"action": "apply", "id": pid})
+            self.lc_applied = pid
+            log.info("load rule: cooler profile %s", pid)
+            return True
+        except (KeyError, ValueError) as e:
+            log.warning("load rule: cooler profile %s: %s", pid, e)
+            return False
+
+    def _restore_lc(self):
+        lc = getattr(self.svc, "liquid", None)
+        if lc is not None and self.lc_prev is not None and self.lc_applied:
+            if lc.cfg.get("profile") == self.lc_applied and not LCV.modified(lc.cfg):    # not changed by hand
+                lc.curves_restore(self.lc_prev)
+        self.lc_prev = self.lc_applied = None
 
     def rules(self):
         return self.svc.settings_store.get("load_rules", []) or []
@@ -528,7 +574,8 @@ class LoadRules:
         res = []
         for c in rule["conditions"]:
             v = load_metric(m, c["metric"])
-            res.append(v is not None and (v > c["value"] if c["op"] == ">" else v < c["value"]))
+            op = c["op"]
+            res.append(v is not None and (v == c["value"] if op == "=" else v > c["value"] if op == ">" else v < c["value"]))
         return all(res) if rule.get("join", "and") == "and" else any(res)
 
     def _current(self):
@@ -580,6 +627,8 @@ class LoadRules:
                         self.prev = self._current()
                     if self._apply(r["mode"], r.get("slot"), r.get("name") or f"rule {hit + 1}"):
                         self.active, self.applied, self.false_since = hit, (r["mode"], r.get("slot")), None
+                        lcp = r.get("lc_profile") if self._apply_lc(r.get("lc_profile")) else None
+                        self._note("on", r, r["mode"], r.get("slot"), lcp, now)
                 elif self.active is not None and self.active < len(rules):
                     r = rules[self.active]
                     if self.active in self.since:
@@ -587,15 +636,22 @@ class LoadRules:
                     else:
                         self.false_since = self.false_since or now
                         if not r.get("back"):
+                            self._note("end", r, now=now)
                             self.active = None
+                            self.lc_prev = self.lc_applied = None
                         elif now - self.false_since >= r["back_after"]:
                             cur = self._current()
                             if self.prev and cur[0] == self.applied[0]:
                                 log.info("load rule %s over: back to mode %s", r.get("name") or self.active + 1, self.prev[0])
                                 self._apply(self.prev[0], self.prev[1], "back")
+                                self._note("back", r, self.prev[0], self.prev[1], self.lc_applied, now)
+                            else:
+                                self._note("end", r, now=now)
+                            self._restore_lc()
                             self.active = self.prev = self.applied = None
                 elif self.active is not None:            # the rule was removed
                     self.active = self.prev = self.applied = None
+                    self.lc_prev = self.lc_applied = None
             except Exception:  # noqa: BLE001
                 log.exception("load rules")
 
@@ -603,6 +659,7 @@ class LoadRules:
         now = time.time() if now is None else now
         with self.lock:
             return {"rules": self.rules(), "active": self.active, "metrics": {k: v[0] for k, v in LOAD_METRICS.items()},
+                    "log": list(reversed(self.log)),
                     "held": {str(i): round(now - t) for i, t in self.since.items()},
                     "back_in": (round(self.rules()[self.active]["back_after"] - (now - self.false_since))
                                 if self.active is not None and self.false_since and self.active < len(self.rules())

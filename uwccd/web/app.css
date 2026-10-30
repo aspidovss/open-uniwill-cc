@@ -232,9 +232,16 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 .choice .tag.bad{background:rgba(255,80,80,.12);color:var(--bad)}
 .choice.risky.on{border-color:var(--bad);box-shadow:0 0 0 1px var(--bad) inset}
 .dm-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:8px 18px;margin:6px 0 14px}
+#dm-monitor .dm-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 24px}
+@media (max-width:900px){#dm-monitor .dm-grid{grid-template-columns:1fr}}
 .dm-item{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid var(--line)}
 .dm-item.wide{grid-column:1/-1}
-.dm-item input[type=number]{width:90px}.dm-item input[type=text]{flex:1;max-width:420px}
+.dm-item input[type=number]{width:90px}.dm-item input[type=text]{flex:1;min-width:0}
+#dm-monitor .dm-item select{min-width:180px}
+.dm-item .dm-dir{flex:1;justify-content:flex-end;max-width:640px}
+.dm-item.dm-sw{margin:4px 0 8px}.dm-item.dm-sw p{margin:2px 0 0}
+.list .sw-group{margin:22px 0 10px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.list .sw-group:first-child{margin-top:4px}
 .wmi-warn p{margin:0 0 8px}
 .red-warn{color:var(--bad);font-weight:700}
 .eula-card a,#page-driver a,#info-ec a{color:var(--acc)}
@@ -316,7 +323,10 @@ pre.code{margin:0;padding:10px 12px;background:var(--bg0);border:1px solid var(-
 .chart.hist *{pointer-events:none}      /* the chart is redrawn between the clicks of a double-click: events go to the svg itself */
 .btn.sm{padding:4px 10px;font-size:12.5px}
 
-.has-tip{cursor:help;border-bottom:1px dotted var(--muted)}
+.has-tip{cursor:pointer;border-bottom:1px dotted var(--muted);position:relative}
+.has-tip:hover,.has-tip.open{color:var(--acc);border-bottom-color:var(--acc)}
+.has-tip .tip-body{display:none;position:absolute;left:0;top:calc(100% + 6px);z-index:30;width:min(340px,70vw);padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg2);color:var(--fg);font-size:12.5px;line-height:1.45;box-shadow:0 8px 24px rgba(0,0,0,.45);white-space:normal;cursor:default}
+.has-tip.open .tip-body{display:block}
 
 /* untested keyboard effects */
 .eff.untested:not(.na){border-style:dashed}
@@ -374,3 +384,5 @@ svg.lc-curve .pt.pt-off.idle{fill:#101418;stroke:#ff8a3d;stroke-width:2.5}
 svg.lc-curve text.draglbl{font-size:16px}
 .lc-prof-h{margin:16px 0 6px}
 #lc-prof-hint{margin:6px 0 0}
+.au-log{list-style:none;margin:6px 0 0;padding:0;font-size:13px;max-height:220px;overflow:auto}.au-log li{padding:4px 0;border-bottom:1px solid var(--line)}
+#au-log h4{margin:14px 0 4px}

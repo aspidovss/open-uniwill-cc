@@ -47,7 +47,9 @@ WhisperMode.
 **Automatic profile switching** (1.6.8): rules like *"CPU + GPU power above 120 W for 30 s → Turbo, profile 2;
 back to the previous mode when it has not held for 60 s"*, *"CPU power below 15 W for 60 s → Office"* or *"CPU above
 90 °C or GPU above 85 °C for 20 s → Gaming"*. Up to 3 conditions per rule (and / or) on CPU, GPU or CPU + GPU power,
-CPU / GPU temperature and load; the target is a mode and a profile slot (or the current one). Rules are checked from
+CPU / GPU temperature and load, battery charge and the power source (mains / battery); the target is a mode and a
+profile slot (or the current one) and, optionally, a cooler profile (its curves come back with the mode). The card
+lists what the rules did (since the service started). Rules are checked from
 the top; the first that held long enough is applied once. While a rule is active, App binding and the power-source
 settings do not change the mode. Needs full monitoring. `uwccctl rules …`.
 

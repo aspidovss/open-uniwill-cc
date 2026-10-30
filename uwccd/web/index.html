@@ -538,9 +538,10 @@
       <div class="card" id="au-rules-card">
         <div class="row between wrap"><h3 data-i>Automatic profile switching</h3>
           <div class="row wrap"><select id="au-rule-tpl"></select><button class="btn ghost" id="au-rule-add" data-i>Add rule</button><button class="btn" id="au-rules-save" data-i>Save</button></div></div>
-        <p class="muted tiny" data-i>Switch the mode and profile when power, temperature or load stays past a limit. The rules are checked from the top; the first one that held long enough is applied. While a rule is active, App binding and the power source settings do not change the mode. Needs full monitoring (EC Manager → Monitoring).</p>
+        <p class="muted tiny" data-i>Switch the mode, the profile and the cooler profile when power, temperature, load, battery charge or the power source stays past a limit. The rules are checked from the top; the first one that held long enough is applied. While a rule is active, App binding and the power source settings do not change the mode. Needs full monitoring (EC Manager → Monitoring).</p>
         <p class="warn-text tiny hidden" id="au-rules-mon" data-i>Monitoring is not complete — the rules are paused.</p>
         <div id="au-rules"></div>
+        <div id="au-log" class="hidden"></div>
       </div>
       <div class="card">
         <h3 data-i>Power source</h3>

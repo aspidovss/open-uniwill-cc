@@ -172,8 +172,9 @@ HELP = {
         "uwccctl rules export FILE / import FILE   the rules as JSON (import replaces them)\n"
         "uwccctl rules enable N / disable N / clear\n"
         "  A rule: {\"name\": \"Heavy load\", \"conditions\": [{\"metric\": \"total_power\", \"op\": \">\", \"value\": 120}],\n"
-        "  \"join\": \"and\", \"hold\": 30, \"mode\": 2, \"slot\": null, \"back\": true, \"back_after\": 60}\n"
-        "  metrics: cpu_power gpu_power total_power (W), cpu_temp gpu_temp (°C), cpu_load gpu_load (%);\n"
+        "  \"join\": \"and\", \"hold\": 30, \"mode\": 2, \"slot\": null, \"lc_profile\": null, \"back\": true, \"back_after\": 60}\n"
+        "  metrics: cpu_power gpu_power total_power (W), cpu_temp gpu_temp (°C), cpu_load gpu_load battery (%),\n"
+        "  ac (op \"=\", value 1 = on AC, 0 = on battery); lc_profile = a cooler profile id or null;\n"
         "  mode 0 office, 1 gaming, 2 turbo, 3 custom; slot = profile 0..4 or null (current)"),
     "clevo": (
         "Control Center 3.0 / Clevo — experimental, separate module (laptops with Control Center 3.x)\n"
@@ -988,12 +989,19 @@ def rules_text(d):
     names = {0: "office", 1: "gaming", 2: "turbo", 3: "custom"}
     out = []
     for i, r in enumerate(d["rules"]):
-        cond = f" {r.get('join', 'and')} ".join(f"{c['metric']} {c['op']} {c['value']:g}" for c in r["conditions"])
+        cond = f" {r.get('join', 'and')} ".join(("on AC" if c["value"] else "on battery") if c["metric"] == "ac"
+                                               else f"{c['metric']} {c['op']} {c['value']:g}" for c in r["conditions"])
         state = " [active]" if d.get("active") == i else (f" [holds {d['held'][str(i)]} s]" if str(i) in (d.get("held") or {}) else "")
         out.append(f"{i + 1}. {'on ' if r.get('enabled', True) else 'off'} {r.get('name') or ''}: if {cond} for {r['hold']} s"
                    f" -> {names.get(r['mode'])}{'' if r.get('slot') is None else ' profile ' + str(r['slot'])}"
+                   f"{', cooler ' + r['lc_profile'] if r.get('lc_profile') else ''}"
                    f"{', back after ' + str(r['back_after']) + ' s' if r.get('back') else ''}{state}")
-    return out or ["no rules"]
+    out = out or ["no rules"]
+    for x in (d.get("log") or [])[:10]:                 # what the rules did, newest first
+        what = {"on": f"-> {names.get(x.get('mode'))}", "back": f"over, back to {names.get(x.get('mode'))}"}.get(x["what"], "over")
+        out.append(f"  {time.strftime('%H:%M:%S', time.localtime(x['t']))} {x.get('rule') or 'rule'} {what}"
+                   f"{' (cooler ' + x['lc_profile'] + ')' if x.get('lc_profile') else ''}")
+    return out
 
 
 def cmd_rules(a):

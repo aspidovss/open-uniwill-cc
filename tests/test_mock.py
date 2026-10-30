@@ -1879,5 +1879,41 @@ class LoadRulesUnit(unittest.TestCase):
                 self.A.check_load_rules(bad)
 
 
+    def test_battery_condition_cooler_profile_and_log(self):
+        from uwccd import lc_curves as LCV
+
+        class Lc:
+            def __init__(c):
+                c.cfg = {"curves": LCV.full(None), "profile": "default"}
+
+            def curves_snapshot(c):
+                return dict(c.cfg["curves"]), c.cfg["profile"]
+
+            def curves_restore(c, snap):
+                c.cfg["curves"], c.cfg["profile"] = snap[0], snap[1]
+
+            def profile(c, b):
+                LCV.profile_action(c.cfg, b)
+        self.svc.liquid = Lc()
+        rules = self.A.check_load_rules([{"name": "low battery", "conditions": [
+            {"metric": "ac", "op": ">", "value": 0}, {"metric": "battery", "op": "<", "value": 30}],
+            "hold": 5, "mode": 0, "lc_profile": "quiet", "back": True, "back_after": 10}])
+        self.assertEqual(rules[0]["conditions"][0]["op"], "=")                # the power source compares with =
+        self.svc.settings_store.set("load_rules", rules)
+        self.svc.power.option["OperatingMode"] = 1
+        bat = lambda ac, pct: {**self.m(), "ac": ac, "battery": {"present": True, "percent": pct}}
+        self.lr.tick(bat(True, 20), now=0)
+        self.lr.tick(bat(True, 20), now=6)
+        self.assertIsNone(self.lr.active)                                      # on the mains: no
+        self.lr.tick(bat(False, 20), now=10)
+        self.lr.tick(bat(False, 20), now=15)
+        self.assertEqual((self.svc.power.option["OperatingMode"], self.svc.liquid.cfg["profile"]), (0, "quiet"))
+        self.lr.tick(bat(True, 25), now=20)
+        self.lr.tick(bat(True, 25), now=31)
+        self.assertEqual((self.svc.power.option["OperatingMode"], self.svc.liquid.cfg["profile"]), (1, "default"))
+        log = self.lr.status()["log"]
+        self.assertEqual([x["what"] for x in log], ["back", "on"])             # newest first
+        self.assertEqual(log[1]["lc_profile"], "quiet")
+
 if __name__ == "__main__":
     unittest.main()

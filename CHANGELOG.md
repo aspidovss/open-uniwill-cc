@@ -8,8 +8,17 @@
   optionally back to the previous mode when the condition has not held for N s. Rules are checked from the top, the
   first that held long enough is applied; while one is active, App binding and the power-source settings do not
   change the mode. Templates, reordering; `uwccctl rules [list|export|import|enable|disable|clear]`.
+  Also: conditions on the battery charge and the power source (mains / battery); a **cooler profile** with the
+  mode (its curves come back with the return); **what the rules did** — a log in the card and in `uwccctl rules`;
+  the comparisons are shown as > and <.
 - **Fan settings: a red dot shows the fan's current temperature and speed** on the curve of the active table
   (CPU or GPU, with full monitoring): it lies on the curve at the sensor's temperature, the label has the real rpm.
+- **Switches** in two groups: *System* (notifications, updates, CPU temperature limit range, sensor history, debug
+  log, fan manager) and *Laptop functions* (keys, USB, touchpad, power-on, NVIDIA, webcam / radios, keyboard).
+  *Record sensor history* is also in EC Manager → Monitoring, with a corrected description; the Monitoring block is
+  laid out in two even columns.
+- **Information:** *RamFan 1.5 ⓘ* opens its explanation on a click (the hover tooltip did not show in the app
+  window).
 - **Dragging a point** on any chart (fan settings, cooler fan, pump, Off) shows its temperature and value next to it.
 - **Fan settings: the *Off, °C* row is hidden.** The return to the lower level follows the next level's *On* by
   itself (keeping the distance the table had); *Show the return temperatures* brings the row back.
