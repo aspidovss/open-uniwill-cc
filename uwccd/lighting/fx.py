@@ -164,6 +164,12 @@ class Effect:
     def feed(self, image):
         pass
 
+    def update_metrics(self, metrics):
+        pass
+
+    def status(self):
+        return {}
+
     def frame(self, t, k):           # t: seconds since start, k: frames of the original at 30 fps since last frame
         raise NotImplementedError
 
@@ -718,6 +724,66 @@ class ScreenAmbient(Effect):
         return [tuple(c) for c in self.prev]
 
 
+class Temperature(Effect):
+    """Two solid halves driven by the sampler, with colour smoothing in real time."""
+    COLORS = ((0, 180, 255), (0, 218, 255), (0, 255, 255), (0, 255, 200), (0, 255, 120),
+              (0, 255, 40), (80, 255, 0), (160, 255, 0), (220, 255, 0), (255, 230, 0),
+              (255, 190, 0), (255, 145, 0), (255, 95, 0), (255, 45, 0), (255, 0, 0))
+    # Equally spaced 40..85 °C, rounded to integer sensor temperatures; identical for CPU and GPU.
+    DEFAULT_TEMPS = (40, 43, 46, 50, 53, 56, 59, 62, 66, 69, 72, 75, 79, 82, 85)
+
+    def __init__(self, p):
+        super().__init__(p)
+        self.temperatures = {"cpu": None, "gpu": None}
+        self.previous = {"cpu": None, "gpu": None}
+        self.last_t = None
+        self.points = {sensor: [(point["temp"], lin(point["color"])) for point in p[sensor + "_points"]]
+                       for sensor in ("cpu", "gpu")}
+
+    def update_metrics(self, metrics):
+        temperatures = {}
+        for sensor in ("cpu", "gpu"):
+            v = metrics.get(sensor + "_temp")
+            valid = (isinstance(v, (int, float)) and not isinstance(v, bool)
+                     and math.isfinite(v) and 0 <= v <= 150)
+            temperatures[sensor] = v if valid else None
+        self.temperatures = temperatures
+
+    def status(self):
+        return {"temperatures": dict(self.temperatures)}
+
+    def _color(self, sensor, temp):
+        points = self.points[sensor]
+        if temp <= points[0][0]:
+            return points[0][1]
+        for i in range(1, len(points)):
+            if temp <= points[i][0]:
+                low, a = points[i - 1]
+                high, b = points[i]
+                mix = (temp - low) / (high - low)
+                return tuple(a[j] + (b[j] - a[j]) * mix for j in range(3))
+        return points[-1][1]
+
+    def frame(self, t, k):
+        dt = max(0.0, t - self.last_t) if self.last_t is not None else 0.0
+        self.last_t = t
+        tau = self.p["smoothing_ms"] / 1000.0
+        alpha = -math.expm1(-dt / tau) if tau else 1.0
+        colors = {}
+        for sensor, temp in self.temperatures.items():
+            if temp is None:
+                self.previous[sensor] = None
+                colors[sensor] = (0.0, 0.0, 0.0)
+                continue
+            target = self._color(sensor, temp)
+            prev = self.previous[sensor]
+            color = target if prev is None else tuple(prev[j] + (target[j] - prev[j]) * alpha for j in range(3))
+            self.previous[sensor] = colors[sensor] = color
+        left = self.p["left"]
+        right = "gpu" if left == "cpu" else "cpu"
+        return [colors[left if x < COLS // 2 else right] for x, _ in POS]
+
+
 def decode_screen(d):
     """{"w", "h", "rgb": base64 of w*h*3 sRGB bytes} from the user-session program -> (w, h, bytes)"""
     w, h = int(d["w"]), int(d["h"])
@@ -757,6 +823,12 @@ EFFECTS = {
     114: ("Reactive current", TouchCurrent, [P_SPEED, ("width", "int", 1, 5, 2),
                                              ("colors", "colors", 3, 3, [list(c) for c in RGB3])]),
     115: ("Screen ambient", ScreenAmbient, [("blur", "int", 1, 8, 3), ("response", "int", 1, 10, 5)]),
+    116: ("CPU / GPU temperature", Temperature,
+          [("left", "choice", ["cpu", "gpu"], None, "cpu")]
+          + [(sensor + "_points", "temperature_points", 2, 15,
+              [{"temp": temp, "color": list(color)} for temp, color in zip(Temperature.DEFAULT_TEMPS, Temperature.COLORS)])
+             for sensor in ("cpu", "gpu")]
+          + [("smoothing_ms", "int", 0, 5000, 1000)]),
 }
 CHOICE_INDEX = {"style": ["streaks", "columns", "lasers", "ripples"]}
 
@@ -774,7 +846,7 @@ def clean_params(idx, params):
         if kind == "int":
             try:
                 v = int(round(float(v)))
-            except (TypeError, ValueError):
+            except (TypeError, ValueError, OverflowError):
                 v = default
             v = max(lo, min(hi, v))
         elif kind == "bool":
@@ -789,6 +861,23 @@ def clean_params(idx, params):
                 if isinstance(c, (list, tuple)) and len(c) >= 3:
                     cols.append([max(0, min(255, int(x))) for x in c[:3]])
             v = (cols or default)[:hi]
+        elif kind == "temperature_points":
+            if not isinstance(v, list) or not lo <= len(v) <= hi:
+                raise ValueError("temperature curve needs 2 to 15 points")
+            points = []
+            for point in v:
+                temp = point.get("temp") if isinstance(point, dict) else None
+                color = point.get("color") if isinstance(point, dict) else None
+                if (isinstance(temp, bool) or not isinstance(temp, (int, float))
+                        or not math.isfinite(temp) or not 0 <= temp <= 120 or int(temp) != temp):
+                    raise ValueError("temperature points need integer temperatures from 0 to 120 °C")
+                if (not isinstance(color, (list, tuple)) or len(color) != 3
+                        or any(isinstance(c, bool) or not isinstance(c, int) or not 0 <= c <= 255 for c in color)):
+                    raise ValueError("temperature points need RGB colours from 0 to 255")
+                if points and temp <= points[-1]["temp"]:
+                    raise ValueError("temperature points must have strictly increasing temperatures")
+                points.append({"temp": int(temp), "color": list(color)})
+            v = points
         out[key] = v
     return out
 
@@ -1035,7 +1124,8 @@ class FxEngine(threading.Thread):
 
     def info(self):
         return {"id": self.idx, "name": EFFECTS[self.idx][0], "fps": self.effective, "target_fps": self.fps,
-                "needs": self.needs(), "idle": self.idle, "calibrating": self.calibrating, "frames": self.frames}
+                "needs": self.needs(), "idle": self.idle, "calibrating": self.calibrating, "frames": self.frames,
+                **self.effect.status()}
 
     # -- frame pipeline -------------------------------------------------------------------
     def _cfg(self):
@@ -1152,6 +1242,7 @@ class FxEngine(threading.Thread):
             k = 1.0 if last is None else max(0.0, min(4.0, (now - last) * 30.0))
             last = now
             try:
+                self.effect.update_metrics(env.get("metrics") or {})
                 frame = self.effect.frame(now - t0, k)
                 if self.idle == "asleep" and not self.calibrating and self.last_out is not None:
                     self._halt.wait(0.1)           # keys are dark: keep the effect state, send nothing

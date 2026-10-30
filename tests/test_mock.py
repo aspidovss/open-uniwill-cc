@@ -121,6 +121,20 @@ class MockService(unittest.TestCase):
         self.assertEqual(self.post("keyboard/effect", {"effect": 1, "colors": [[0, 255, 0]]})[0], 200)
         self.assertIsNone(self.get("state")["keyboard"]["fx"])
 
+    def test_temperature_fx_api(self):
+        points = [{"temp": 40, "color": [0, 180, 255]}, {"temp": 100, "color": [255, 0, 0]}]
+        body = {"effect": 116, "light": 3, "fx": {"left": "gpu", "cpu_points": points, "smoothing_ms": 500}}
+        self.assertEqual(self.post("keyboard/effect", body)[0], 200)
+        k = self.get("state")["keyboard"]
+        self.assertEqual((k["effect"]["idx"], k["effect"]["fx"]["left"], k["effect"]["fx"]["cpu_points"]),
+                         (116, "gpu", points))
+        self.assertEqual(self.post("keyboard/effect", {"effect": 116, "fx": {"cpu_points": points[::-1]}})[0], 400)
+        self.assertEqual(self.get("state")["keyboard"]["effect"], k["effect"])  # rejected before replacing the effect
+        self.post("keyboard/power", {"on": False})
+        self.post("keyboard/power", {"on": True})
+        self.assertEqual(self.get("state")["keyboard"]["effect"], k["effect"])
+        self.post("keyboard/effect", {"effect": 4})
+
     def test_auth_required(self):
         code, _ = self.post("mode", {"mode": 0}, token=None)
         self.assertEqual(code, 401)
