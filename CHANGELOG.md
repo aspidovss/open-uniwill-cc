@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.6.9
+
+- **New keyboard effect: CPU / GPU temperature** (BetterRGB engine, per-key keyboards) — contributed by
+  [noteMASTER11](https://github.com/noteMASTER11) in pull request #3. The keyboard is split in two halves, CPU and GPU
+  (which one is on the left is a setting); each half takes its colour from a temperature colour curve of 2–15 points
+  (default: blue at 40 °C to red at 85 °C), with smoothing of 0–5000 ms. The temperatures come from the monitoring
+  (no extra sensor reads); while a reading is missing or stale the last colour stays. Curve editor on the Keyboard
+  backlight page: drag a point, click the colour band to add one, Remove point, Reset curve; the current temperature
+  is marked. `uwccctl kb fx 116 cpu_points=40:00B4FF,85:FF0000 …`. Needs full monitoring.
+- **Light bar `048D:7001` (experimental):** the RGB light bar of XMG NEO 16 (E25) / MECHREVO on project 0x1A
+  (board X6AR5xxY) is now opened like the other ITE light bars (page *Laptop light bar*). It was found in a
+  diagnostic report (the OEM Control Center on that laptop drives a light bar too) but is not checked on the laptop
+  yet — a report or a note whether it works is welcome.
+
 ## 1.6.8
 
 - **Automation: automatic profile switching.** Rules like *CPU + GPU power above 120 W for 30 s → Turbo, profile 2*,

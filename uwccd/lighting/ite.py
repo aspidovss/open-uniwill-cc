@@ -35,7 +35,10 @@ VID = 0x048D
 KB_PIDS = [0xCE00, 0x6000, 0x6001, 0x6002, 0x6003, 0x6004, 0x6006, 0x6007, 0x600A, 0x600B]
 # vendor collections of the keyboard controller, best first (GCUService: FF02, FF12, FF03)
 KB_USAGE_PAGES = (0xFF03, 0xFF12, 0xFF02)
-LB_PIDS = [0x7000, 0x6005, 0x6008, 0x6010]
+# 0x7001: the RGB light bar of the newer chassis (XMG NEO 16 E25 / MECHREVO, project 0x1A, board X6AR5xxY; 1.6.8
+# report): same vendor collection FF03 with 9-byte feature and 65-byte output reports as 0x7000, and the OEM Control
+# Center 5.56 on that laptop starts "MyRgbLightbar". Not in the GCUService 1.0.2.70 tables; not yet checked by a user.
+LB_PIDS = [0x7000, 0x7001, 0x6005, 0x6008, 0x6010]
 
 # LightingModel.RGBKB_Effect -> ITE effect code (Translate_ITE_EffectIndex)
 EFFECTS = {

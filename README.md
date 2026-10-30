@@ -91,7 +91,7 @@ Super / XMG NEO 16 (E23); on other models every function stays off until the sel
 - **Keyboard lighting**: 17 hardware effects, per-key colours, gaming zones, software effects, auto-off;
   **chassis light bar** (rear / base / logo zones)
 - **BetterRGB effects** (new in 1.6.3): 16 effects drawn by the service — Rain, Matrix, Flame, Lightning, Quicksand,
-  Screen ambient, reactive ripples … — with transitions, white calibration and a top-row bar (battery, volume, CPU,
+  Screen ambient, reactive ripples, CPU / GPU temperature colours (1.6.9) … — with transitions, white calibration and a top-row bar (battery, volume, CPU,
   GPU): [docs/LIGHTING.md](docs/LIGHTING.md)
 - **Battery**: protection modes, custom charge limits, USB-C charging priority
 - **Switches**: Win-key lock, Fn lock, touchpad, USB power in sleep, power-on with AC, MUX (dGPU direct), webcam
