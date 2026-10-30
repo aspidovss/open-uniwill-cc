@@ -9,7 +9,10 @@
   first that held long enough is applied; while one is active, App binding and the power-source settings do not
   change the mode. Templates, reordering; `uwccctl rules [list|export|import|enable|disable|clear]`.
 - **Fan settings: a red dot shows the fan's current temperature and speed** on the curve of the active table
-  (CPU or GPU, with full monitoring), labelled with the temperature and the rpm.
+  (CPU or GPU, with full monitoring): it lies on the curve at the sensor's temperature, the label has the real rpm.
+  When the fan runs clearly faster than its own curve, the label says *(driven by CPU / GPU)* — on many models the EC
+  runs both fans by the hotter side.
+- **Dragging a point** on any chart (fan settings, cooler fan, pump, Off) shows its temperature and value next to it.
 - **Fan settings: the *Off, °C* row is hidden.** The return to the lower level follows the next level's *On* by
   itself (keeping the distance the table had); *Show the return temperatures* brings the row back.
 - **Liquid cooling: curves instead of temperature tiers.**
@@ -22,9 +25,11 @@
     still ramps. The Controller mode falls back to the common curve when the EC publishes no targets.
   - Kept: temperature averaging, up / down delays, ramping, flow guard, emergency rise (95 °C, or the curve asking
     25 % more at once), pump stop when cool. A curve has no 12 V.
-  - **Pump start temperature:** the first pump level can be *Off*; the next step (7 V or more), dragged to any
-    temperature, is where the pump starts. Below it again (3 °C hysteresis) the pump stops, but not before it ran the
-    minimum run time of *Stop the pump when it is cool* (120 s by default).
+  - **Pump chart:** one point per allowed voltage (7 / 8 / 11 V, or the own limits), moved along the temperature —
+    where that voltage starts; a voltage whose point sits on the next one is not used. The **Off** point is *Stop the
+    pump when it is cool*: at the left edge it is off; dragged right (30..85 °C) the pump stops below that temperature
+    (after the minimum run time) and starts again a few degrees above it. The pump curve itself has no Off level any
+    more (an older curve's leading Off step is dropped).
   - **Cooler profiles:** Default (the factory steps of 1.6.7), Quiet, Balanced, Performance and your own — Apply / Save /
     Copy / Remove (a profile holds the common and the per-mode curves); a profile picked in the list is shown on the
     charts before Apply; `uwccctl lc profile …`.

@@ -367,3 +367,8 @@ svg.lc-curve .crossdot{fill:#ff4d3d;stroke:#2a0b07;stroke-width:2}
 .au-rule .num{width:72px}
 .badge-on{font-size:11px;padding:2px 8px;border-radius:99px;background:var(--acc);color:#002b25;font-weight:700}
 .btn.sm{padding:4px 9px;font-size:12.5px}
+svg.lc-curve .pt.fixed{cursor:default}
+svg.lc-curve .pt.pt-off{fill:#ff8a3d}
+svg.lc-curve .pt.pt-off.idle{fill:#101418;stroke:#ff8a3d;stroke-width:2.5}
+.curve text.draglbl{fill:#e8f3f1;font-size:13px;font-weight:600;stroke:#101418;stroke-width:3px;paint-order:stroke;pointer-events:none}
+svg.lc-curve text.draglbl{font-size:16px}

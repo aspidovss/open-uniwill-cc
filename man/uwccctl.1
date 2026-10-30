@@ -369,7 +369,7 @@ Fan 0..100 %, pump 7, 8, 11 or 12 V (0 = off).
 Show the curves: common (Automatic, and Follow the laptop for modes without their own) and per laptop mode.
 .TP
 .BI "lc curve " "KEY " "fan " T:D " ... [pump " T:V " ...]"
-Set a curve: fan 2..17 points, pump 1..4 steps of 7, 8 or 11 V; a first step of 0 V keeps the pump off below the next one.
+Set a curve: fan 2..17 points, pump 1..4 steps of 7, 8 or 11 V. The pump is stopped by \fBlc idle\fR (the Off point on the chart), not by the curve.
 .TP
 .BI "lc curve " "KEY " "flat " "FAN \fR[\fIPUMP\fR]"
 A flat curve;

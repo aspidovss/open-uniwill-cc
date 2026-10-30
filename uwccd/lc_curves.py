@@ -85,6 +85,9 @@ def full(curves):
     """All keys present; missing per-mode sets are None."""
     out = {k: None for k in CURVE_KEYS}
     out.update(copy.deepcopy(curves or {}))
+    for k, v in out.items():
+        if v and v.get("pump") and v["pump"][0][1] == 0 and len(v["pump"]) > 1:
+            v["pump"] = drop_off(v["pump"])
     if not out.get("common"):
         out["common"] = copy.deepcopy(BUILTIN_PROFILES[DEFAULT_PROFILE]["curves"]["common"])
     return out
@@ -127,7 +130,17 @@ def check_set(s, where="curve", running=None):
             raise ValueError(f"{where}: the pump can be off only below its first running step")
         out_p.append([t, v])
         last_t, last_v = t, v
-    return {"fan": out_f, "pump": out_p}
+    return {"fan": out_f, "pump": drop_off(out_p, where)}
+
+
+def drop_off(pump, where="curve"):
+    """1.6.8: the pump is switched off by "Stop the pump when it is cool" (the Off point on the chart), not by the
+    curve. A leading off step of an older curve is dropped: the first running voltage starts from the beginning."""
+    if pump and pump[0][1] == 0:
+        if len(pump) == 1:
+            raise ValueError(f"{where}: the pump curve needs a running voltage")
+        pump = [[0, pump[1][1]]] + [list(p) for p in pump[2:]]
+    return pump
 
 
 def check_curves(curves, base=None, running=None):

@@ -832,8 +832,11 @@ Object.assign(RU, {
   "at once from 95 °C or when the curve asks 25 % more": "сразу при 95 °C или когда кривая требует на 25 % больше",
   "Stop the pump at low load (the cooler fan keeps following the curve)": "Останавливать помпу при низкой нагрузке (вентилятор охладителя продолжает следовать кривой)",
   "Now: {0} °C · {1} %": "Сейчас: {0} °C · {1} %",
-  "The fan follows the curve between its points; the pump switches at the temperature of each step and goes down only 3 °C below it. Drag the first pump point to Off to set the temperature the pump starts at.":
-    "Вентилятор следует кривой между точками; помпа переключается на температуре каждой ступени, а вниз — только на 3 °C ниже неё. Перетащите первую точку помпы в «Выкл», чтобы задать температуру, с которой помпа включается.",
+  "The fan follows the curve between its points. Pump: one point per allowed voltage — drag it to the temperature it starts at (a step down waits until 3 °C below it); drag Off to the right to stop the pump below that temperature (Stop the pump when it is cool).":
+    "Вентилятор следует кривой между точками. Помпа: по точке на каждое разрешённое напряжение — перетащите её на температуру, с которой оно включается (вниз — только на 3 °C ниже); перетащите «Выкл» вправо, чтобы помпа останавливалась ниже этой температуры («Останавливать помпу, когда прохладно»).",
+  "(driven by {0})": "(ведёт {0})", "Off: never": "Выкл: никогда", "Off below {0} °C": "Выкл ниже {0} °C",
+  "Off: drag to the right to stop the pump when it is cool": "Выкл: перетащите вправо, чтобы помпа останавливалась, когда прохладно",
+  "Off below {0} °C, on again from {1} °C (Stop the pump when it is cool)": "Выкл ниже {0} °C, снова вкл с {1} °C («Останавливать помпу, когда прохладно»)",
   "Own pump voltage limits": "Свои границы напряжения помпы", "At least one voltage must stay": "Должно остаться хотя бы одно напряжение",
   "Allowed: {0} V (from {1} to {2} V)": "Разрешено: {0} В (от {1} до {2} В)", "Own pump limits on": "Свои границы помпы включены",
   "Pump limits: 7–11 V": "Границы помпы: 7–11 В",

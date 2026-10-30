@@ -158,7 +158,7 @@ Automatic profile switching (power / temperature / load): `rules` (list and stat
 | `lc mode auto\|laptop\|ec\|manual\|high\|medium\|low\|off` | mode |
 | `lc manual FAN PUMP` | fan 0..100 %, pump 7/8/11/12 V (0 = off) |
 | `lc curve [KEY]` | show the curves; KEY `common` (Automatic, and Follow the laptop by default) or `office` `gaming` `turbo` `custom` |
-| `lc curve KEY fan T:D ... [pump T:V ...]` | set a curve: fan 2..17 points (°C:%), pump 1..4 steps (from °C:V, 0/7/8/11 V; 0 = off, only as the first: e.g. `pump 0:0 45:7 70:11`) |
+| `lc curve KEY fan T:D ... [pump T:V ...]` | set a curve: fan 2..17 points (°C:%), pump 1..4 steps (from °C:V, 7/8/11 V: e.g. `pump 0:7 50:8 70:11`); the pump is stopped by `lc idle` (the Off point) |
 | `lc curve KEY flat FAN [PUMP]` / `lc curve MODE off` | a flat curve / the mode uses the common curve |
 | `lc profile [list\|apply ID\|save ID\|copy NAME\|remove ID\|rename ID NAME]` | cooler profiles (built-in: default, quiet, balanced, performance) |
 | `lc tiers BELOW:FAN:PUMP ...` | old tier form (1.6.7), becomes the common curve |

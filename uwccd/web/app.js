@@ -497,7 +497,13 @@ function drawCurve() {
   const col = fanKind === "GPU" ? "var(--gpu)" : "var(--acc)";
   let circles = "";
   pts.forEach(p => { circles += `<circle class="pt ${fanKind === "GPU" ? "gpu" : ""}" data-i="${p.i}" r="7" cx="${CX(Math.max(20, p.i === 0 ? 20 : p.UpT))}" cy="${CY(p.Duty)}"><title>${t("Level")} ${p.i}: ${p.i ? p.UpT + "°C" : t("start")} → ${p.Duty}%</title></circle>`; });
-  svg.innerHTML = g + `<path d="${path}" fill="none" stroke="${col}" stroke-width="2.5"/>` + circles;
+  let dl = "";
+  const dp = curveDrag != null ? pts.find(p => p.i === curveDrag) : null;
+  if (dp) {                                       // while dragging: the point's temperature and speed next to it
+    const x = CX(Math.max(20, dp.i === 0 ? 20 : dp.UpT)), y = CY(dp.Duty), right = x < 170, down = y < 45;
+    dl = `<text class="draglbl" x="${right ? x + 12 : x - 12}" y="${down ? y + 28 : y - 14}" text-anchor="${right ? "start" : "end"}">${dp.i ? dp.UpT + " °C" : t("start")} · ${dp.Duty} %</text>`;
+  }
+  svg.innerHTML = g + `<path d="${path}" fill="none" stroke="${col}" stroke-width="2.5"/>` + circles + dl;
   drawCurveNow();
   // the drag state lives outside drawCurve(): the SVG is re-rendered on every move
   svg.onpointerdown = e => {
@@ -523,7 +529,8 @@ function drawCurve() {
   };
   svg.onpointerup = svg.onpointercancel = e => {
     if (curveDrag != null && svg.hasPointerCapture(e.pointerId)) svg.releasePointerCapture(e.pointerId);
-    curveDrag = null;
+    const was = curveDrag; curveDrag = null;
+    if (was != null) drawCurve();
   };
 }
 // red dot: the fan's current temperature and speed, on the table that is active now (needs full monitoring)
@@ -536,12 +543,18 @@ function drawCurveNow() {
   const temp = gpu ? (m.gpu && !m.gpu.asleep ? m.gpu.temp : null) : m.cpu && m.cpu.temp;
   const duty = gpu ? m.fans.gpu_duty : m.fans.cpu_duty, rpm = gpu ? m.fans.gpu_rpm : m.fans.cpu_rpm;
   if (temp == null || duty == null) return;
-  const x = CX(Math.max(20, Math.min(100, temp))), y = CY(Math.max(0, Math.min(100, duty)));
-  const label = `${temp} °C · ${rpm != null ? rpm + " " + t("rpm") : duty + " %"}`;
+  // the dot lies on the curve at this sensor's temperature; the label has the real speed. When the fan runs clearly
+  // faster than its own curve, the EC drives it by the other side (on many models both fans follow the hotter one).
+  const pts = activePts(); let lvl = pts[0];
+  for (const p of pts) if (p.i === 0 || p.UpT <= temp) lvl = p;
+  const own = lvl ? lvl.Duty : duty;
+  const x = CX(Math.max(20, Math.min(100, temp))), y = CY(Math.max(0, Math.min(100, own)));
+  const by = duty > own + 3 ? " " + t("(driven by {0})", gpu ? "CPU" : "GPU") : "";
+  const label = `${temp} °C · ${rpm != null ? rpm + " " + t("rpm") : duty + " %"}${by}`;
   const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
   c.setAttribute("class", "now"); c.setAttribute("r", "6"); c.setAttribute("cx", x); c.setAttribute("cy", y);
   const tt = document.createElementNS("http://www.w3.org/2000/svg", "title");
-  tt.textContent = t("Now: {0} °C · {1} %", temp, duty) + (rpm != null ? ` · ${rpm} ${t("rpm")}` : ""); c.append(tt);
+  tt.textContent = t("Now: {0} °C · {1} %", temp, duty) + (rpm != null ? ` · ${rpm} ${t("rpm")}` : "") + by; c.append(tt);
   const tx = document.createElementNS("http://www.w3.org/2000/svg", "text"), left = x > 470, up = y > 246;
   tx.setAttribute("class", "now nowlbl"); tx.setAttribute("x", left ? x - 10 : x + 10); tx.setAttribute("y", up ? y - 12 : y + 22);
   tx.setAttribute("text-anchor", left ? "end" : "start"); tx.textContent = label;
@@ -1306,7 +1319,7 @@ function drawCurves(L) {
   $("#lc-own-label").textContent = t("Own curve for the mode “{0}” (otherwise the common curve)", t(LC_CURVE_NAME[lcTab] || lcTab));
   $("#lc-curves-title").textContent = laptop ? t("Curves — Follow the laptop") : c.mode === "ec" ? t("Curves — view only (Controller: used when the EC publishes no targets)") : t("Curves — Automatic");
   $("#lc-curves-hint").textContent = laptop ? t("The cooler uses the curve of the laptop's current mode (●) if it has its own (✎), otherwise the common curve. The common curve is also the curve of the Automatic mode.")
-    : t("The fan follows the curve between its points; the pump switches at the temperature of each step and goes down only 3 °C below it. Drag the first pump point to Off to set the temperature the pump starts at.");
+    : t("The fan follows the curve between its points. Pump: one point per allowed voltage — drag it to the temperature it starts at (a step down waits until 3 °C below it); drag Off to the right to stop the pump below that temperature (Stop the pump when it is cool).");
   const src = pick ? pick.curves : L.curves;
   const key = own && src[lcTab] ? lcTab : "common";
   const set = JSON.parse(JSON.stringify(src[key] || src.common));
@@ -1370,6 +1383,10 @@ function lcFanAt(set, tc) {
   return f[f.length - 1][1];
 }
 function lcPumpAt(set, tc) { let v = set.pump[0][1]; for (const [t0, v0] of set.pump.slice(1)) if (tc >= t0) v = v0; return v; }
+function lcDragLabel(g, P, x, y, text) {          // while dragging: the point's values next to it
+  const right = x < P.left + 150, down = y < P.top + 30;     // above-left: the curves rise to the right
+  g.append(lcEl("text", { x: right ? x + 12 : x - 12, y: down ? y + 28 : y - 14, class: "draglbl", "text-anchor": right ? "start" : "end" }, text));
+}
 function lcPlot(w, hgt, ymin, ymax) {
   const P = { left: 62, right: 606, top: 20, bot: hgt - 30 };
   P.x = tc => P.left + (tc - LCX0) / (LCX1 - LCX0) * (P.right - P.left);
@@ -1394,13 +1411,16 @@ function lcFanEditor(set, key, readonly, L) {
       d.append(lcEl("title", {}, `${p[0]} °C · ${p[1]} %`));
       dots.append(d);
     });
+    if (lcDrag && lcDrag.svg === svg && pts[lcDrag.i]) {
+      const p = pts[lcDrag.i]; lcDragLabel(dots, P, P.x(Math.max(LCX0, p[0])), P.y(p[1]), `${p[0]} °C · ${p[1]} %`);
+    }
   };
   redraw();
   // the dots are redrawn on every move: the svg itself holds the pointer (as in the laptop fan curve)
   if (!readonly) {
     svg.addEventListener("pointerdown", ev => {
       const c = ev.target.closest && ev.target.closest(".pt"); if (!c) return;
-      ev.preventDefault(); svg.setPointerCapture(ev.pointerId); lcDrag = { i: +c.dataset.i };
+      ev.preventDefault(); svg.setPointerCapture(ev.pointerId); lcDrag = { i: +c.dataset.i, svg };
     });
     svg.addEventListener("pointermove", ev => {
       if (!lcDrag) return;
@@ -1432,63 +1452,94 @@ function lcFanEditor(set, key, readonly, L) {
   });
   return h("div", { class: "lc-ed" }, h("h4", {}, t("Cooler fan")), svg);
 }
+// Pump: one point per allowed voltage (7 / 8 / 11 V, or the own limits), moved only along the temperature: the
+// temperature from which the pump runs at that voltage or more. A voltage whose point sits on the next one is not used.
+// The Off point is "Stop the pump when it is cool": at the left edge it is off; dragged right (30..85 °C) the pump
+// stops below that temperature and starts again a few degrees above it.
+function lcPumpSlots(st, run) {                  // curve steps -> start temperature of every allowed voltage
+  const steps = st.filter(s0 => s0[1]);
+  const slots = run.map(v => { const s0 = steps.find(x => x[1] >= v); return s0 ? Math.max(LCX0, s0[0]) : LCX1; });
+  slots[0] = LCX0;
+  for (let k = 1; k < slots.length; k++) slots[k] = Math.max(slots[k], slots[k - 1]);
+  return slots;
+}
+function lcSlotsToSteps(slots, run) {            // start temperatures -> curve steps (unused voltages dropped)
+  const out = [];
+  run.forEach((v, k) => { if (k === run.length - 1 || slots[k + 1] > slots[k]) out.push([out.length ? slots[k] : 0, v]); });
+  return out;
+}
 function lcPumpEditor(set, key, readonly, L) {
-  const W = 640, H = 230, lv = S.liquid.pump_levels, P = lcPlot(W, H, 0, lv.length - 1), svg = lcSvg(W, H), st = set.pump;
-  const yi = v => lv.indexOf(v);
+  const W = 640, H = 230, run = S.liquid.pump_running || [7, 8, 11], lv = [0, ...run];
+  const P = lcPlot(W, H, 0, lv.length - 1), svg = lcSvg(W, H), yi = v => Math.max(0, lv.indexOf(v));
+  const slots = lcPumpSlots(set.pump, run);
+  const calm = lcCalm || { pump_idle: { ...(S.liquid.config.pump_idle || {}) } }, pi = calm.pump_idle;
+  let off = pi.enabled ? pi.off_below : null;
   lcAxes(svg, P, lv.map((v, i) => [i, v ? `${v} V` : t("Off")]));
   const path = lcEl("polyline", { class: "line pump" + (readonly === true ? " ro" : "") }); svg.append(path);
   const dots = lcEl("g", {}); svg.append(dots);
+  const ro = readonly === true ? " ro" : readonly ? " pv" : "";
   const redraw = () => {
     const xs = [];
-    st.forEach((s0, i) => {
-      const x0 = i === 0 ? LCX0 : Math.max(LCX0, s0[0]), x1 = i < st.length - 1 ? Math.max(LCX0, st[i + 1][0]) : LCX1;
-      if (i) xs.push([x0, yi(st[i - 1][1])]);
-      xs.push([x0, yi(s0[1])], [x1, yi(s0[1])]);
+    const o = off != null ? off : LCX0;
+    if (off != null) xs.push([LCX0, 0], [o, 0]);
+    run.forEach((v, k) => {
+      const a = Math.max(slots[k], o), b = k < run.length - 1 ? Math.max(slots[k + 1], o) : LCX1;
+      if (b > a || k === run.length - 1) { if (xs.length) xs.push([a, xs[xs.length - 1][1]]); xs.push([a, k + 1], [b, k + 1]); }
     });
     path.setAttribute("points", xs.map(([a, b]) => `${P.x(a)},${P.y(b)}`).join(" "));
     dots.innerHTML = "";
-    st.forEach((s0, i) => {
-      const d = lcEl("circle", { cx: P.x(i === 0 ? LCX0 : Math.max(LCX0, s0[0])), cy: P.y(yi(s0[1])), r: 7, class: "pt gpu" + (readonly === true ? " ro" : readonly ? " pv" : "") });
-      const vtxt = s0[1] ? `${s0[1]} V` : t("off");
-      d.dataset.i = i;
-      d.append(lcEl("title", {}, i === 0 ? `${t("from the start")} · ${vtxt}` : `${t("from")} ${s0[0]} °C · ${vtxt}`));
-      if (i) dots.append(lcEl("text", { x: P.x(Math.max(LCX0, s0[0])) - 10, y: P.y(yi(s0[1])) - 10, "text-anchor": "end" }, `${s0[0]}°`));
+    const od = lcEl("circle", { cx: P.x(o), cy: P.y(0), r: 7, class: "pt gpu pt-off" + (off == null ? " idle" : "") + ro });
+    od.dataset.i = "off";
+    od.append(lcEl("title", {}, off == null ? t("Off: drag to the right to stop the pump when it is cool")
+      : t("Off below {0} °C, on again from {1} °C (Stop the pump when it is cool)", off, pi.on_above)));
+    if (off != null) dots.append(lcEl("text", { x: P.x(o) + 10, y: P.y(0) - 10 }, `${off}°`));
+    dots.append(od);
+    run.forEach((v, k) => {
+      const x = Math.max(k ? slots[k] : LCX0, o);
+      const d = lcEl("circle", { cx: P.x(x), cy: P.y(k + 1), r: 7, class: "pt gpu" + (k ? "" : " fixed") + ro });
+      d.dataset.i = k;
+      d.append(lcEl("title", {}, k ? `${v} V ${t("from")} ${slots[k]} °C` : `${v} V ${t("from the start")}`));
+      if (k && slots[k] > Math.max(LCX0, o) && slots[k] < LCX1 && !(lcDrag && lcDrag.svg === svg && +lcDrag.i === k)) dots.append(lcEl("text", { x: P.x(x) - 10, y: P.y(k + 1) - 10, "text-anchor": "end" }, `${slots[k]}°`));
       dots.append(d);
     });
+    if (lcDrag && lcDrag.svg === svg) {
+      if (lcDrag.i === "off") lcDragLabel(dots, P, P.x(o), P.y(0), off == null ? t("Off: never") : t("Off below {0} °C", off));
+      else { const k = +lcDrag.i; lcDragLabel(dots, P, P.x(Math.max(slots[k], o)), P.y(k + 1), `${t("from")} ${slots[k]} °C · ${run[k]} V`); }
+    }
   };
   redraw();
+  const postIdle = () => {
+    const was = S.liquid.config.pump_idle || {}, gap = Math.max(2, (pi.on_above ?? 55) - (pi.off_below ?? 50));
+    const nx = off == null ? { ...pi, enabled: false }
+      : { ...pi, enabled: true, off_below: off, on_above: Math.min(95, off + gap) };
+    Object.assign(pi, nx); if (lcCalm) lcCalm.pump_idle = pi;
+    if (nx.enabled !== !!was.enabled || nx.off_below !== was.off_below || nx.on_above !== was.on_above)
+      lcPost("config", { pump_idle: nx }).then(() => drawCalm(S.liquid));
+  };
   if (!readonly) {
     svg.addEventListener("pointerdown", ev => {
-      const c = ev.target.closest && ev.target.closest(".pt"); if (!c) return;
-      ev.preventDefault(); svg.setPointerCapture(ev.pointerId); lcDrag = { i: +c.dataset.i };
+      const c = ev.target.closest && ev.target.closest(".pt"); if (!c || c.dataset.i === "0") return;
+      ev.preventDefault(); svg.setPointerCapture(ev.pointerId); lcDrag = { i: c.dataset.i, svg };
     });
     svg.addEventListener("pointermove", ev => {
       if (!lcDrag) return;
-      const i = lcDrag.i, s0 = st[i], [mx, my] = lcPointer(svg, ev);
-      if (i) { const lo = st[i - 1][0] + 1, hi = i < st.length - 1 ? st[i + 1][0] - 1 : LCX1; s0[0] = Math.max(lo, Math.min(hi, P.tx(mx))); }
-      // "off" only for the first level: the next step is then where the pump starts (7 V and up)
-      const vlo = i ? Math.max(1, yi(st[i - 1][1])) : 0, vhi = i < st.length - 1 ? yi(st[i + 1][1]) : lv.length - 1;
-      s0[1] = lv[Math.max(vlo, Math.min(vhi, Math.round(P.vy(my))))];
+      const [mx] = lcPointer(svg, ev), tc = Math.max(LCX0, Math.min(LCX1, P.tx(mx)));
+      if (lcDrag.i === "off") off = tc < 30 ? null : Math.min(85, tc);
+      else {
+        const k = +lcDrag.i, hi = k < run.length - 1 ? slots[k + 1] : LCX1;
+        slots[k] = Math.max(slots[k - 1], Math.min(hi, tc));
+      }
       redraw();
     });
-    const end = ev => { if (!lcDrag) return; if (svg.hasPointerCapture(ev.pointerId)) svg.releasePointerCapture(ev.pointerId); lcDrag = null; lcPostCurve(key, set); };
+    const end = ev => {
+      if (!lcDrag) return; if (svg.hasPointerCapture(ev.pointerId)) svg.releasePointerCapture(ev.pointerId);
+      const which = lcDrag.i; lcDrag = null;
+      if (which === "off") postIdle(); else { set.pump = lcSlotsToSteps(slots, run); lcPostCurve(key, set); }
+    };
     svg.addEventListener("pointerup", end); svg.addEventListener("pointercancel", end);
-    dots.addEventListener("dblclick", ev => {
-      const c = ev.target.closest && ev.target.closest(".pt"); if (!c) return;
-      ev.stopPropagation(); const i = +c.dataset.i; if (i && st.length > 1) { st.splice(i, 1); lcPostCurve(key, set); }
-    });
   }
-  if (!readonly) svg.addEventListener("dblclick", ev => {
-    if (st.length >= S.liquid.max_pump_steps) return toast(t("At most {0} steps", S.liquid.max_pump_steps), true);
-    const [mx] = lcPointer(svg, ev); const tc = Math.max(LCX0 + 1, Math.min(LCX1, P.tx(mx)));
-    if (st.some(s0 => s0[0] === tc)) return;
-    const k = st.findIndex(s0 => s0[0] > tc), ins = k < 0 ? st.length : k;
-    const prevV = st[ins - 1][1], nextV = st[ins] ? st[ins][1] : lv[lv.length - 1];
-    const v = lv[Math.max(1, Math.min(yi(nextV), yi(prevV) + 1))];
-    st.splice(ins, 0, [tc, v]); lcPostCurve(key, set);
-  });
   if (L && L.pump != null) lcSensorDots(L).forEach((d, k) => {
-    const v = d.main ? L.pump : lcPumpAt(set, d.temp);
+    const v = d.main ? L.pump : off != null && d.temp < off ? 0 : lcPumpAt(set, d.temp);
     lcCross(svg, P, d.temp, Math.max(0, yi(v)), `${d.who ? d.who + " " : ""}${d.temp} °C · ${v ? v + " V" : t("off")}`, k > 0);
   });
   return h("div", { class: "lc-ed" }, h("h4", {}, t("Pump")), svg);

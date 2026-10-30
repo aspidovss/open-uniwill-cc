@@ -81,7 +81,7 @@ the system sleeps the cooler is put to sleep. Needs `python3-bleak` (installed b
 | Feature | How |
 |---|---|
 | Modes, first row: **Automatic** (curves by CPU/GPU temperature), **Follow the laptop** (curve of the laptop's mode), **Controller** (EC targets), **Manual**; second row: High 90 %/11 V, Medium 50 %/8 V, Low 25 %/7 V, Off | fan `0x1B`, pump `0x1C` |
-| **Curves** (1.6.8): a fan curve (2..17 points, linear between them) and pump steps (off / 7 / 8 / 11 V, down only 3 °C below a step; *off* as the first level sets the temperature the pump starts at), edited by dragging; a red dot shows the current temperature and value. One **common** curve (Automatic, and Follow the laptop for modes without their own); in Follow the laptop each mode — Office, Gaming, Turbo, Custom — can have **its own curve**; a change of the laptop's mode switches the curve at once (the fan still ramps) | |
+| **Curves** (1.6.8): a fan curve (2..17 points, linear between them) and pump steps (one draggable point per allowed voltage, down only 3 °C below a step; the *Off* point is *Stop the pump when it is cool*), edited by dragging; a red dot shows the current temperature and value. One **common** curve (Automatic, and Follow the laptop for modes without their own); in Follow the laptop each mode — Office, Gaming, Turbo, Custom — can have **its own curve**; a change of the laptop's mode switches the curve at once (the fan still ramps) | |
 | **Own pump voltage limits** (after a risk warning): choose which of 7 / 8 / 11 / 12 V may be used — the cooler firmware knows only these and cannot report what a pump supports; a voltage outside the choice becomes the nearest allowed one in every mode | |
 | **Controller** mode: the curves are shown but cannot be edited (the EC drives the cooler; the common curve is used only when the EC publishes no targets) | |
 | **Cooler profiles**: Default (factory steps), Quiet, Balanced, Performance and your own (Apply / Save / Copy / Remove) — a profile holds the common and the per-mode curves | |
@@ -104,9 +104,10 @@ uwccctl lc prime                     # filling cycle
 ```
 
 The built-in curves start at 8 V: on some units the flow does not hold at 7 V and the cooler switches itself off
-(the OEM service never goes below 8 V either). 7 V is still available on a curve and by hand. A curve has no 12 V. With
-*Off* as its first level the pump starts at the next step and stops below it (3 °C lower) only after the minimum run
-time of *Stop the pump when it is cool* (120 s by default).
+(the OEM service never goes below 8 V either). 7 V is still available on a curve and by hand. A curve has no 12 V (only with own
+pump limits). The pump is stopped by *Stop the pump when it is cool* — the *Off* point on the pump chart: dragged to a
+temperature, the pump stops below it (after the minimum run time, 120 s by default) and starts again a few degrees
+above it; at the left edge it is off.
 
 **Update from 1.6.7 or older:** the temperature tiers become the common curve with the same behaviour, and the old
 fixed duties of *Follow the laptop* (Office 40 %, Gaming 60 %, Turbo / Custom 90 %, pump 11 V) become flat curves of

@@ -755,15 +755,15 @@ class LiquidCoolerUnit(unittest.TestCase):
                            "curves": {"common": {"fan": [[20, 0], [100, 0]], "pump": [[0, 7]]}}})
         self.assertEqual(self._step(45), (0, 7))
 
-    def test_curve_pump_start_temperature(self):
-        """Pump off below a start temperature, 7 V from it; off again only after the minimum run time."""
+    def test_curve_pump_off_is_pump_idle(self):
+        """The pump is not switched off by a curve any more (the Off point is "Stop the pump when it is cool"):
+        a leading off step is dropped and the first running voltage starts from the beginning."""
         self._fake_clock()
-        self.lc.configure({"pump_idle": {"min_run": 60}})
         self._curve([[20, 30], [100, 30]], [[0, 0], [45, 7], [70, 11]])
-        self.assertEqual(self._step(40, 61)[1], 0)             # the pump ran long enough since the connect
-        self.assertEqual(self._step(46, 1)[1], 7)                 # starts at 45 °C with 7 V
-        self.assertEqual(self._step(40, 10)[1], 7)                # below again, but ran only 10 s
-        self.assertEqual(self._step(40, 61)[1], 0)
+        self.assertEqual(self.lc.status()["curves"]["common"]["pump"], [[0, 7], [70, 11]])
+        self.assertEqual(self._step(40)[1], 7)
+        with self.assertRaises(ValueError):
+            self._curve([[20, 30], [100, 30]], [[0, 0]])
         with self.assertRaises(ValueError):
             self._curve([[20, 30], [100, 30]], [[0, 7], [50, 0]])    # off only below the first running step
 
