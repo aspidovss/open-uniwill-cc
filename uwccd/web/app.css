@@ -372,3 +372,5 @@ svg.lc-curve .pt.pt-off{fill:#ff8a3d}
 svg.lc-curve .pt.pt-off.idle{fill:#101418;stroke:#ff8a3d;stroke-width:2.5}
 .curve text.draglbl{fill:#e8f3f1;font-size:13px;font-weight:600;stroke:#101418;stroke-width:3px;paint-order:stroke;pointer-events:none}
 svg.lc-curve text.draglbl{font-size:16px}
+.lc-prof-h{margin:16px 0 6px}
+#lc-prof-hint{margin:6px 0 0}

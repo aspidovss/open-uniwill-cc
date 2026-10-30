@@ -377,8 +377,8 @@ mode_on_battery
 .BI "lc curve " "РЕЖИМ " off
 — режим берёт общую кривую.
 .TP
-.BR "lc profile " [ list | apply | save | copy | remove | rename ]
-Профили охладителя: default, quiet, balanced, performance и свои.
+.BR "lc profile " [ list | apply | save | copy | remove | rename | export | import ]
+Профили охладителя: default, quiet, balanced, performance и свои; \fBexport \fIID\fR [\fIФАЙЛ\fR] и \fBimport \fIФАЙЛ\fR [\fIИМЯ\fR] переносят профиль файлом JSON.
 .TP
 .BI "lc tiers " НИЖЕ : ВЕНТ : ПОМПА " ..."
 Форма ступеней из 1.6.7; превращается в общую кривую.

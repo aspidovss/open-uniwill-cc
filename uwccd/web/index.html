@@ -314,18 +314,22 @@
         </div>
 
         <div class="card" id="lc-curves-card">
-          <div class="row between wrap"><h3 id="lc-curves-title" data-i>Curves</h3>
-            <div class="row wrap lc-prof"><select id="lc-prof"></select>
-              <button class="btn ghost" id="lc-prof-apply" data-i>Apply</button>
-              <button class="btn ghost" id="lc-prof-save" data-i>Save</button>
-              <button class="btn ghost" id="lc-prof-copy" data-i>Copy</button>
-              <button class="btn ghost" id="lc-prof-remove" data-i>Remove</button></div></div>
+          <h3 id="lc-curves-title" data-i>Curves</h3>
           <p class="muted tiny" id="lc-curves-hint"></p>
           <div class="seg sm hidden" id="lc-curve-tabs"></div>
           <label class="chk hidden" id="lc-own-row"><input type="checkbox" id="lc-own"> <span id="lc-own-label"></span></label>
           <div class="lc-editors" id="lc-editors"></div>
-          <div class="row wrap" style="margin-top:6px"><button class="btn ghost" id="lc-flat" data-i>Flat line…</button>
-            <span class="muted tiny" data-i>Drag the points. Double-click on the chart: add a point; double-click on a point: remove it.</span></div>
+          <p class="muted tiny" style="margin:6px 0 0" data-i>Drag the points. Double-click on the chart: add a point; double-click on a point: remove it.</p>
+          <h4 class="lc-prof-h" data-i>Profiles</h4>
+          <div class="row wrap lc-prof"><select id="lc-prof"></select>
+            <button class="btn ghost" id="lc-prof-apply" data-i>Apply</button>
+            <button class="btn ghost" id="lc-prof-save" data-i>Save</button>
+            <button class="btn ghost" id="lc-prof-copy" data-i title="A new profile from the current curves">New…</button>
+            <button class="btn ghost" id="lc-prof-remove" data-i>Remove</button>
+            <button class="btn ghost" id="lc-prof-export" data-i>Export</button>
+            <button class="btn ghost" id="lc-prof-import" data-i>Import…</button>
+            <input type="file" id="lc-prof-file" accept=".json,application/json" class="hidden"></div>
+          <p class="muted tiny" id="lc-prof-hint" data-i>A profile holds the common curve and the curves of the laptop's modes. Choose one to see it on the charts, Apply to use it; New… saves the current curves as a profile.</p>
           <div class="lc-calm" id="lc-calm"></div>
           <div class="row" style="justify-content:flex-end;margin-top:8px"><button class="btn ghost" id="lc-calm-reset" data-i>Default</button><button class="btn" id="lc-calm-save" data-i>Save</button></div>
         </div>

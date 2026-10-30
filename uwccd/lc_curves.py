@@ -278,7 +278,7 @@ def modified(cfg):
 
 
 def profile_action(cfg, b):
-    """apply / save / copy / remove / rename -> changes cfg in place, returns the profile id concerned."""
+    """apply / save / copy / import / remove / rename -> changes cfg in place, returns the profile id concerned."""
     a = str(b.get("action", ""))
     user = cfg.setdefault("profiles", [])
     if a == "apply":
@@ -286,7 +286,7 @@ def profile_action(cfg, b):
         cfg["curves"] = copy.deepcopy(p["curves"])
         cfg["profile"] = p["id"]
         return p["id"]
-    if a == "copy":
+    if a in ("copy", "import"):
         name = str(b.get("name") or "").strip()[:40]
         if not name:
             raise ValueError("a name is needed")
@@ -297,8 +297,16 @@ def profile_action(cfg, b):
         ids = {p["id"] for p in profiles(cfg)}
         while pid in ids:
             pid, n = f"{base}-{n}", n + 1
-        user.append({"id": pid, "name": name, "curves": full(cfg.get("curves"))})
-        cfg["profile"] = pid
+        if a == "import":                         # a profile file: {"name": ..., "curves": {"common": ..., ...}}
+            cs = b.get("curves")
+            if not isinstance(cs, dict) or not cs.get("common"):
+                raise ValueError("a cooler profile needs curves with a common curve")
+            curves = check_curves(cs, None, ALL_VOLTAGES)
+        else:
+            curves = full(cfg.get("curves"))
+        user.append({"id": pid, "name": name, "curves": curves})
+        if a == "copy":                           # the current curves now are this profile; an import is only added
+            cfg["profile"] = pid
         return pid
     pid = str(b.get("id", ""))
     if pid in BUILTIN_PROFILES:

@@ -123,7 +123,7 @@ _uwccctl() {
                 case $sub in
                     mode) COMPREPLY=($(compgen -W "auto laptop ec manual high medium low off" -- "$cur")) ;;
                     curve) COMPREPLY=($(compgen -W "common office gaming turbo custom" -- "$cur")) ;;
-                    profile) COMPREPLY=($(compgen -W "list apply save copy remove rename" -- "$cur")) ;;
+                    profile) COMPREPLY=($(compgen -W "list apply save copy remove rename export import" -- "$cur")) ;;
                     set) COMPREPLY=($(compgen -W "temp_source delay_up delay_down smooth notify_flow flow_guard boost_fan boost_pump" -- "$cur")) ;;
                     idle) COMPREPLY=($(compgen -W "$onoff" -- "$cur")) ;;
                     rgb) COMPREPLY=($(compgen -W "off" -- "$cur")) ;;

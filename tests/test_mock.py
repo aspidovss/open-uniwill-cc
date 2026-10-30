@@ -825,6 +825,16 @@ class LiquidCoolerUnit(unittest.TestCase):
         lc.profile({"action": "apply", "id": "quiet"})
         lc.profile({"action": "apply", "id": "my-silent"})
         self.assertEqual(lc.status()["curves"]["common"]["fan"], [[40, 50], [60, 60]])
+        imp = lc.profile({"action": "import", "name": "From file",
+                          "curves": {"common": {"fan": [[30, 20], [90, 100]], "pump": [[0, 8], [60, 11]]}}})
+        self.assertEqual(imp, "from-file")
+        self.assertEqual(lc.status()["profile"], "my-silent")                  # an import is only added
+        self.assertEqual(LCV.find(lc.cfg, "from-file")["curves"]["common"]["fan"], [[30, 20], [90, 100]])
+        with self.assertRaises(ValueError):
+            lc.profile({"action": "import", "name": "Bad", "curves": {"common": {"fan": [[30, 50]], "pump": [[0, 8]]}}})
+        with self.assertRaises(ValueError):
+            lc.profile({"action": "import", "name": "Empty", "curves": {}})
+        lc.profile({"action": "remove", "id": "from-file"})
         lc.profile({"action": "rename", "id": "my-silent", "name": "Night"})
         lc.profile({"action": "remove", "id": "my-silent"})
         self.assertNotIn("my-silent", [p["id"] for p in lc.status()["profiles"]])

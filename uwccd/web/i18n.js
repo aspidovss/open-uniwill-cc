@@ -461,7 +461,7 @@ const RU = {
   // liquid cooler: calm control
   "Pump stopped: cool": "Помпа остановлена: прохладно",
   "Behaviour": "Поведение",
-  "GPU only: while the graphics card sleeps, the CPU is used": "Только GPU: пока видеокарта спит, используется CPU",
+  "GPU: while the graphics card sleeps, the CPU is used": "GPU: пока видеокарта спит, используется CPU",
   "Raise the speed after": "Повышать скорость через",
   "at once from 95 °C or 8 °C above the tier": "сразу при 95 °C или на 8 °C выше ступени",
   "Lower the speed after": "Понижать скорость через",
@@ -477,7 +477,6 @@ const RU = {
   "CPU + GPU": "CPU + GPU",
   "Switching to a lower tier also waits for the temperature to drop 3 °C below the threshold. In the Controller mode the table is used when the EC publishes no targets; the settings below apply to both modes.": "Переход на ступень ниже также ждёт, пока температура опустится на 3 °C ниже порога. В режиме «Контроллер» таблица используется, когда EC не публикует значения; настройки ниже действуют в обоих режимах.",
   "Hotter of CPU and GPU": "Более горячий из CPU и GPU",
-  "GPU only": "Только GPU",
   "Faster in {0} s if the temperature holds": "Быстрее через {0} с, если температура удержится",
   "Slower in {0} s if the temperature holds": "Медленнее через {0} с, если температура удержится",
   // 1.4.2: updates, report
@@ -834,7 +833,11 @@ Object.assign(RU, {
   "Now: {0} °C · {1} %": "Сейчас: {0} °C · {1} %",
   "The fan follows the curve between its points. Pump: one point per allowed voltage — drag it to the temperature it starts at (a step down waits until 3 °C below it); drag Off to the right to stop the pump below that temperature (Stop the pump when it is cool).":
     "Вентилятор следует кривой между точками. Помпа: по точке на каждое разрешённое напряжение — перетащите её на температуру, с которой оно включается (вниз — только на 3 °C ниже); перетащите «Выкл» вправо, чтобы помпа останавливалась ниже этой температуры («Останавливать помпу, когда прохладно»).",
-  "(driven by {0})": "(ведёт {0})", "Off: never": "Выкл: никогда", "Off below {0} °C": "Выкл ниже {0} °C",
+  "Profiles": "Профили", "New…": "Новый…", "Import…": "Импорт…", "Current curves": "Текущие кривые",
+  "A new profile from the current curves": "Новый профиль из текущих кривых", "Profile imported": "Профиль импортирован",
+  "This is not a cooler profile file": "Это не файл профиля охладителя",
+  "A profile holds the common curve and the curves of the laptop's modes. Choose one to see it on the charts, Apply to use it; New… saves the current curves as a profile.": "Профиль хранит общую кривую и кривые режимов ноутбука. Выберите профиль, чтобы увидеть его на графиках, «Применить» — чтобы включить; «Новый…» сохраняет текущие кривые как профиль.",
+  "Off: never": "Выкл: никогда", "Off below {0} °C": "Выкл ниже {0} °C",
   "Off: drag to the right to stop the pump when it is cool": "Выкл: перетащите вправо, чтобы помпа останавливалась, когда прохладно",
   "Off below {0} °C, on again from {1} °C (Stop the pump when it is cool)": "Выкл ниже {0} °C, снова вкл с {1} °C («Останавливать помпу, когда прохладно»)",
   "Own pump voltage limits": "Свои границы напряжения помпы", "At least one voltage must stay": "Должно остаться хотя бы одно напряжение",

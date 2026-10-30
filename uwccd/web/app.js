@@ -543,18 +543,17 @@ function drawCurveNow() {
   const temp = gpu ? (m.gpu && !m.gpu.asleep ? m.gpu.temp : null) : m.cpu && m.cpu.temp;
   const duty = gpu ? m.fans.gpu_duty : m.fans.cpu_duty, rpm = gpu ? m.fans.gpu_rpm : m.fans.cpu_rpm;
   if (temp == null || duty == null) return;
-  // the dot lies on the curve at this sensor's temperature; the label has the real speed. When the fan runs clearly
-  // faster than its own curve, the EC drives it by the other side (on many models both fans follow the hotter one).
+  // the dot lies on the curve at this sensor's temperature; the label has the real speed (on many models the EC runs
+  // both fans by the hotter side, so the speed can be above this curve)
   const pts = activePts(); let lvl = pts[0];
   for (const p of pts) if (p.i === 0 || p.UpT <= temp) lvl = p;
   const own = lvl ? lvl.Duty : duty;
   const x = CX(Math.max(20, Math.min(100, temp))), y = CY(Math.max(0, Math.min(100, own)));
-  const by = duty > own + 3 ? " " + t("(driven by {0})", gpu ? "CPU" : "GPU") : "";
-  const label = `${temp} °C · ${rpm != null ? rpm + " " + t("rpm") : duty + " %"}${by}`;
+  const label = `${temp} °C · ${rpm != null ? rpm + " " + t("rpm") : duty + " %"}`;
   const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
   c.setAttribute("class", "now"); c.setAttribute("r", "6"); c.setAttribute("cx", x); c.setAttribute("cy", y);
   const tt = document.createElementNS("http://www.w3.org/2000/svg", "title");
-  tt.textContent = t("Now: {0} °C · {1} %", temp, duty) + (rpm != null ? ` · ${rpm} ${t("rpm")}` : "") + by; c.append(tt);
+  tt.textContent = t("Now: {0} °C · {1} %", temp, duty) + (rpm != null ? ` · ${rpm} ${t("rpm")}` : ""); c.append(tt);
   const tx = document.createElementNS("http://www.w3.org/2000/svg", "text"), left = x > 470, up = y > 246;
   tx.setAttribute("class", "now nowlbl"); tx.setAttribute("x", left ? x - 10 : x + 10); tx.setAttribute("y", up ? y - 12 : y + 22);
   tx.setAttribute("text-anchor", left ? "end" : "start"); tx.textContent = label;
@@ -1329,14 +1328,8 @@ function drawCurves(L) {
   const active = !pick && L.connected && ["auto", "laptop", "ec"].includes(c.mode) && L.curve_key === key ? L : null;
   const ed = $("#lc-editors"); ed.innerHTML = "";
   ed.append(lcFanEditor(set, key, readonly, active), lcPumpEditor(set, key, readonly, active));
-  $("#lc-flat").disabled = readonly;
-  for (const id of ["lc-prof", "lc-prof-apply", "lc-prof-save", "lc-prof-copy", "lc-prof-remove"]) if (viewOnly) $("#" + id).disabled = true;
-  if (!viewOnly) { $("#lc-prof").disabled = false; $("#lc-prof-copy").disabled = !!pick; }
-  $("#lc-flat").onclick = () => {
-    const v = prompt(t("Fan duty for the whole curve, %"), String(set.fan[set.fan.length - 1][1]));
-    if (v === null) return; const n = Math.max(0, Math.min(100, parseInt(v, 10) || 0));
-    lcPostCurve(key, { fan: [[LCX0, n], [LCX1, n]], pump: set.pump });
-  };
+  for (const id of ["lc-prof", "lc-prof-apply", "lc-prof-save", "lc-prof-copy", "lc-prof-remove", "lc-prof-import"]) if (viewOnly) $("#" + id).disabled = true;
+  if (!viewOnly) { $("#lc-prof").disabled = $("#lc-prof-import").disabled = false; $("#lc-prof-copy").disabled = !!pick; if (pick) $("#lc-prof-save").disabled = true; }
 }
 $("#lc-own").addEventListener("change", e => {
   const L = S.liquid; lcPostCurve(lcTab, e.target.checked ? JSON.parse(JSON.stringify(L.curves.common)) : null);
@@ -1363,7 +1356,7 @@ function lcCross(svg, P, temp, yv, label, flip) {      // the current point: a r
   d.append(lcEl("title", {}, label)); svg.append(d);
   lcNowLabel(svg, x, y, label, P.right, P.bot, flip);
 }
-// The red dots follow the temperature source: CPU only / GPU only (the CPU while the GPU sleeps) / both — two dots.
+// The red dots follow the temperature source: CPU / GPU (the CPU while the GPU sleeps) / both — two dots.
 // The sensor that drives the cooler shows the cooler's real output; the other one shows its point on the curve.
 function lcSensorDots(L) {
   const src = (lcCalm && lcCalm.temp_source) || L.config.temp_source || "max", m = lastMonitor;
@@ -1552,6 +1545,27 @@ $("#lc-prof-copy").addEventListener("click", () => {
   const n = prompt(t("Name of the new cooler profile"), ""); if (n && n.trim()) lcProf("copy", { name: n.trim() }, t("Profile saved"));
 });
 $("#lc-prof-remove").addEventListener("click", () => { if (confirm(t("Remove this cooler profile?"))) lcProf("remove", {}, t("Removed")); });
+// export: the chosen profile (or the current curves) as a JSON file; import: such a file becomes an own profile
+$("#lc-prof-export").addEventListener("click", () => {
+  const L = S.liquid, sel = $("#lc-prof"), p = L.profiles.find(x => x.id === sel.value);
+  const name = p ? sel.options[sel.selectedIndex].textContent.replace(/ · .*$/, "") : t("Current curves");
+  const data = { format: "uwcc-cooler-profile", version: 1, name, curves: p ? p.curves : L.curves };
+  const blob = new Blob([JSON.stringify(data, null, 2) + "\n"], { type: "application/json" });
+  const fn = "uwcc-cooler-" + (name.toLowerCase().replace(/[^a-z0-9а-яё]+/gi, "-").replace(/^-+|-+$/g, "") || "profile") + ".json";
+  const el = h("a", { href: URL.createObjectURL(blob), download: fn }); document.body.append(el); el.click(); el.remove();
+});
+$("#lc-prof-import").addEventListener("click", () => { const f = $("#lc-prof-file"); f.value = ""; f.click(); });
+$("#lc-prof-file").addEventListener("change", async e => {
+  const f = e.target.files && e.target.files[0]; if (!f) return;
+  let d;
+  try { d = JSON.parse(await f.text()); } catch (_) { return toast(t("This is not a cooler profile file"), true); }
+  if (!d || typeof d !== "object" || !d.curves) return toast(t("This is not a cooler profile file"), true);
+  const name = prompt(t("Name of the new cooler profile"), String(d.name || f.name.replace(/\.json$/i, "")).slice(0, 40));
+  if (!name || !name.trim()) return;
+  let rid = null;
+  await act(async () => { rid = (await api("lc/profile", { action: "import", name: name.trim(), curves: d.curves })).id; }, t("Profile imported"));
+  if (rid) { lcPick = rid; drawCurves(S.liquid); }      // shown on the charts; Apply uses it
+});
 // delays, smoothing, temperature source, pump stop when cool (auto / Controller modes)
 let lcCalm = null;
 function drawCalm(L) {
@@ -1570,12 +1584,12 @@ function drawCalm(L) {
     return h("label", { class: "chk" }, e, " ", h("span", {}, label));
   };
   const line = (label, ...ctrl) => h("div", { class: "calm-row" }, h("span", {}, label), h("div", { class: "row wrap", style: "gap:10px" }, ...ctrl));
-  const src = h("select", {}, ...[["max", "Hotter of CPU and GPU"], ["cpu", "CPU"], ["gpu", "GPU only"]].map(([v, n]) => {
+  const src = h("select", {}, ...[["max", "Hotter of CPU and GPU"], ["cpu", "CPU"], ["gpu", "GPU"]].map(([v, n]) => {
     const o = h("option", { value: v }, t(n)); if (k.temp_source === v) o.selected = true; return o; }));
   src.addEventListener("change", () => { k.temp_source = src.value; if (!lcDrag) drawCurves(S.liquid); });
   box.append(
     h("h4", {}, t("Behaviour")),
-    line(t("Temperature"), src, h("span", { class: "muted tiny" }, t("GPU only: while the graphics card sleeps, the CPU is used"))),
+    line(t("Temperature"), src, h("span", { class: "muted tiny" }, t("GPU: while the graphics card sleeps, the CPU is used"))),
     line(t("Raise the speed after"), num(k, "delay_up", 0, 300, t("s")), h("span", { class: "muted tiny" }, t("at once from 95 °C or when the curve asks 25 % more"))),
     line(t("Lower the speed after"), num(k, "delay_down", 0, 300, t("s"))),
     chk(k, "smooth", t("Smooth: average the temperature over 10 s, change the fan by 10 % and the pump by one voltage step at a time")),

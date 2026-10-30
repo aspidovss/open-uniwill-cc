@@ -251,7 +251,8 @@ HELP = {
         "uwccctl lc curve [common|office|gaming|turbo|custom]   show a curve (common: Automatic + Follow the laptop)\n"
         "uwccctl lc curve KEY fan T:D ... [pump T:V ...]       set it, e.g. fan 40:25 60:45 80:80 95:100 pump 0:8 70:11\n"
         "uwccctl lc curve KEY flat FAN% [PUMP_V]   a flat curve;  uwccctl lc curve MODE off   use the common curve\n"
-        "uwccctl lc profile [list|apply ID|save ID|copy NAME|remove ID|rename ID NAME]   cooler profiles\n"
+        "uwccctl lc profile [list|apply ID|save ID|copy NAME|remove ID|rename ID NAME|export ID [FILE]|import FILE [NAME]]\n"
+        "                                                          cooler profiles\n"
         "uwccctl lc tiers BELOW:FAN:PUMP ...      old tier form, becomes the common curve\n"
         "uwccctl lc pump-limits 7,8,11,12 --accept-risks | off   own pump voltages (the cooler knows 7/8/11/12 V)\n"
         "uwccctl lc set KEY VALUE                 temp_source max|cpu|gpu, delay_up/delay_down 0..300 s,\n"
@@ -1290,6 +1291,26 @@ def lc_profile(a):
         body = {"action": "copy", "name": " ".join(a[1:])}
     elif op == "rename" and a[2:]:
         body = {"action": "rename", "id": a[1], "name": " ".join(a[2:])}
+    elif op == "export" and a[1:]:                # a profile as a file: {"format", "name", "curves"}
+        p = next((x for x in call("state")["liquid"]["profiles"] if x["id"] == a[1]), None)
+        if p is None:
+            fail(f"no cooler profile {a[1]}", 1)
+        data = json.dumps({"format": "uwcc-cooler-profile", "version": 1, "name": p["name"], "curves": p["curves"]},
+                          indent=2, ensure_ascii=False)
+        if a[2:]:
+            with open(a[2], "w", encoding="utf-8") as f:
+                f.write(data + "\n")
+            return out({"file": os.path.abspath(a[2])}, a[2])
+        sys.stdout.write(data + "\n")
+        return None
+    elif op == "import" and a[1:]:
+        try:
+            with open(a[1], encoding="utf-8-sig") as f:
+                d = json.load(f)
+        except (OSError, ValueError) as e:
+            fail(f"{a[1]}: {e}", 1)
+        body = {"action": "import", "name": " ".join(a[2:]) or d.get("name") or os.path.splitext(os.path.basename(a[1]))[0],
+                "curves": d.get("curves")}
     else:
         usage("lc")
     r = call("lc/profile", body)

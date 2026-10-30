@@ -163,6 +163,7 @@ Control Center 3.0 / Clevo (экспериментально): `uwccctl clevo �
 | `lc curve КЛЮЧ fan T:D ... [pump T:V ...]` | задать кривую: вентилятор 2..17 точек (°C:%), помпа 1..4 ступени (с °C:В, 7/8/11 В: например `pump 0:7 50:8 70:11`); помпу останавливает `lc idle` (точка «Выкл») |
 | `lc curve КЛЮЧ flat ВЕНТ [ПОМПА]` / `lc curve РЕЖИМ off` | ровная кривая / режим берёт общую кривую |
 | `lc profile [list\|apply ID\|save ID\|copy ИМЯ\|remove ID\|rename ID ИМЯ]` | профили охладителя (встроенные: default, quiet, balanced, performance) |
+| `lc profile export ID [ФАЙЛ]` / `lc profile import ФАЙЛ [ИМЯ]` | профиль охладителя как файл JSON (`{"name", "curves"}`); импорт добавляется как свой профиль |
 | `lc tiers НИЖЕ:ВЕНТ:ПОМПА ...` | старая форма ступеней (1.6.7), превращается в общую кривую |
 | `lc pump-limits 7,8,11,12 --accept-risks` / `lc pump-limits off` | свои напряжения помпы (из 7/8/11/12 В) / обратно 7–11 В |
 | `lc set КЛЮЧ ЗНАЧЕНИЕ` | `temp_source max\|cpu\|gpu`, `delay_up`/`delay_down` 0..300 с, `smooth` `notify_flow` `flow_guard` `boost_fan` `boost_pump` on/off |

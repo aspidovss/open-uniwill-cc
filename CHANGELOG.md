@@ -10,8 +10,6 @@
   change the mode. Templates, reordering; `uwccctl rules [list|export|import|enable|disable|clear]`.
 - **Fan settings: a red dot shows the fan's current temperature and speed** on the curve of the active table
   (CPU or GPU, with full monitoring): it lies on the curve at the sensor's temperature, the label has the real rpm.
-  When the fan runs clearly faster than its own curve, the label says *(driven by CPU / GPU)* — on many models the EC
-  runs both fans by the hotter side.
 - **Dragging a point** on any chart (fan settings, cooler fan, pump, Off) shows its temperature and value next to it.
 - **Fan settings: the *Off, °C* row is hidden.** The return to the lower level follows the next level's *On* by
   itself (keeping the distance the table had); *Show the return temperatures* brings the row back.
@@ -19,7 +17,7 @@
   - **Modes in two rows:** Automatic, Follow the laptop, Controller, Manual / High, Medium, Low, Off.
   - **Automatic** follows a **fan curve** (2..17 points, linear between them) and **pump steps** (off / 7 / 8 / 11 V; a step
     down waits until 3 °C below it). Both are edited by dragging the points (double-click adds / removes a point);
-    a red dot shows the current temperature and value, labelled with them. *Flat line…* makes a fixed duty.
+    a red dot shows the current temperature and value, labelled with them.
   - **Follow the laptop** uses the same **common** curve, or **its own curve** for each laptop mode (tabs Common /
     Office / Gaming / Turbo / Custom, *Own curve for this mode*). A mode change switches the curve at once; the fan
     still ramps. The Controller mode falls back to the common curve when the EC publishes no targets.
@@ -31,12 +29,13 @@
     (after the minimum run time) and starts again a few degrees above it. The pump curve itself has no Off level any
     more (an older curve's leading Off step is dropped).
   - **Cooler profiles:** Default (the factory steps of 1.6.7), Quiet, Balanced, Performance and your own — Apply / Save /
-    Copy / Remove (a profile holds the common and the per-mode curves); a profile picked in the list is shown on the
-    charts before Apply; `uwccctl lc profile …`.
+    New… / Remove / Export / Import… (a profile holds the common and the per-mode curves; a profile file is JSON),
+    in the *Profiles* block under the charts; a profile picked in the list is shown on the charts before Apply;
+    `uwccctl lc profile … | export ID [FILE] | import FILE [NAME]`.
   - `uwccctl lc curve [KEY] [fan T:D … pump T:V …]`, `lc curve KEY flat N`, `lc curve MODE off`; `lc tiers` still
     works and becomes the common curve.
   - The charts look like the fan curve of *Fan settings*; fan and pump side by side on a wide window.
-  - The red dots follow *Temperature*: CPU only — the CPU dot, GPU only — the GPU dot (the CPU while the GPU
+  - The red dots follow *Temperature*: CPU — the CPU dot, GPU — the GPU dot (the CPU while the GPU
     sleeps), hotter of CPU and GPU — two dots. The sensor that drives the cooler shows its real output, the other its
     point on the curve.
   - **Own pump voltage limits** (after a risk warning): choose which of 7 / 8 / 11 / 12 V may be used — the cooler
