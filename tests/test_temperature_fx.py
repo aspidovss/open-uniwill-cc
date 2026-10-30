@@ -51,7 +51,7 @@ class TemperatureEffect(unittest.TestCase):
 
     def test_missing_invalid_and_returning_sensor(self):
         e = self.make(smoothing_ms=1000)
-        for invalid in (None, float("nan"), float("inf"), -1, 151, True, "55"):
+        for invalid in (None, float("nan"), float("inf"), -1, 151, 10 ** 400, True, "55"):
             e.update_metrics({"cpu_temp": invalid, "gpu_temp": 85})
             f = e.frame(0, 1)
             self.assertEqual(f[0], (0.0, 0.0, 0.0))
@@ -82,6 +82,7 @@ class TemperatureEffect(unittest.TestCase):
                       [{"temp": 60, "color": [0, 0, 0]}, {"temp": 40, "color": [255, 255, 255]}],
                       [{"temp": i, "color": [0, 0, 0]} for i in range(16)],
                       [{"temp": float("nan"), "color": [0, 0, 0]}, {"temp": 90, "color": [255, 255, 255]}],
+                      [{"temp": 10 ** 400, "color": [0, 0, 0]}, {"temp": 90, "color": [255, 255, 255]}],
                       [{"temp": 30, "color": [256, 0, 0]}, {"temp": 90, "color": [255, 255, 255]}],
                       [{"temp": True, "color": [0, 0, 0]}, {"temp": 90, "color": [255, 255, 255]}]]
         for points in bad_points:

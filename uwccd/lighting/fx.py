@@ -745,7 +745,7 @@ class Temperature(Effect):
         for sensor in ("cpu", "gpu"):
             v = metrics.get(sensor + "_temp")
             valid = (isinstance(v, (int, float)) and not isinstance(v, bool)
-                     and math.isfinite(v) and 0 <= v <= 150)
+                     and 0 <= v <= 150 and math.isfinite(v))
             temperatures[sensor] = v if valid else None
         self.temperatures = temperatures
 
@@ -869,7 +869,7 @@ def clean_params(idx, params):
                 temp = point.get("temp") if isinstance(point, dict) else None
                 color = point.get("color") if isinstance(point, dict) else None
                 if (isinstance(temp, bool) or not isinstance(temp, (int, float))
-                        or not math.isfinite(temp) or not 0 <= temp <= 120 or int(temp) != temp):
+                        or not 0 <= temp <= 120 or not math.isfinite(temp) or int(temp) != temp):
                     raise ValueError("temperature points need integer temperatures from 0 to 120 °C")
                 if (not isinstance(color, (list, tuple)) or len(color) != 3
                         or any(isinstance(c, bool) or not isinstance(c, int) or not 0 <= c <= 255 for c in color)):
