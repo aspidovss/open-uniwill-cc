@@ -153,7 +153,8 @@ Clevo laptops with Control Center 3.x: only the experimental *Control Center 3.0
 |---|---|---|---|---|---|
 | MAIBENBEN Tsunami Series | i9-12900HX / NVIDIA | `0x10` | N.1.23A14 / 1.13 | ✅ Ubuntu 24.04 | ✅ Windows 11 24H2 |
 | MECHREVO Aurora X (Kuangshi / Jiguang B2) — user report | i7-13700HX / RTX 5060 | `0x1A` | N.1.25MRO33 / 1.31 | — | ✅ Windows 11 (OEM driver): modes, fans, limits, monitoring; single-colour backlight from 1.6.4; BIOS-variable features not yet |
-| MECHREVO Yaoshi (X6AR55xY) — user report | Core Ultra 9 275HX / RTX 5080 | `0x1A` | N.1.13MRO16 / 2.6 | — | ✅ Windows 10 (OEM driver): self-check stage 2 all OK (modes, Fan Boost, limits, cTGP, battery, fan tables), liquid cooler LCT22002; per-key RGB keyboard ITE `600B` recognised from 1.6.7 (not checked yet) |
+| MECHREVO Yaoshi (X6AR55xY) — user report | Core Ultra 9 275HX / RTX 5080 | `0x1A` | N.1.13MRO16 / 2.6 | — | ✅ Windows 10 (OEM driver): self-check stage 2 all OK (modes, Fan Boost, limits, cTGP, battery, fan tables), liquid cooler LCT22002; per-key RGB keyboard ITE `600B` works from 1.6.7 |
+| XMG NEO 16 (E25) — user report | Core Ultra 9 275HX / NVIDIA | `0x1A` | N.1.33A27 / 2.11 | — | ✅ Windows 11 (OEM driver): per-key RGB keyboard ITE `600B` works from 1.6.7; light bar ITE `7001` from 1.6.9 (not checked yet) |
 
 Tested yours? Please open a [model report](https://github.com/aspidovss/open-uniwill-cc/issues/new?template=model_report.yml).
 
