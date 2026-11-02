@@ -71,6 +71,7 @@ Super / XMG NEO 16 (E23); on other models every function stays off until the sel
   <img src="docs/screenshots/modes.png" width="49%" alt="Modes and power limits">
   <img src="docs/screenshots/fans.png" width="49%" alt="Fan curves">
   <img src="docs/screenshots/liquid.png" width="49%" alt="Liquid cooler">
+  <img src="docs/screenshots/automation.png" width="49%" alt="Automatic profile switching">
   <img src="docs/screenshots/betterrgb.png" width="49%" alt="Keyboard lighting with the BetterRGB effects">
   <img src="docs/screenshots/battery.png" width="49%" alt="Battery care">
   <img src="docs/screenshots/info-windows.png" width="49%" alt="System information on Windows">
