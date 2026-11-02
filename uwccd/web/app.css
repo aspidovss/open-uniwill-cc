@@ -209,6 +209,8 @@ table.bind td,table.bind th{padding:8px;border-bottom:1px solid var(--line);text
 .menu.hidden{display:none}.menu button{background:none;border:0;color:var(--fg);text-align:left;padding:8px 10px;border-radius:7px;cursor:pointer;font-size:13px}
 .menu button:hover{background:var(--bg3)}
 .menu{min-width:0}.menu button{white-space:nowrap}
+.menu.left{left:0;right:auto}.menu button.on{color:var(--acc);font-weight:600}
+.hist-range-btn{white-space:nowrap;display:inline-flex;align-items:center;gap:4px}.hist-range-btn svg{flex:none}.hist-range-btn .caret{opacity:.6;font-size:11px}
 .btn.busy{opacity:.7;cursor:progress}.btn.done{background:var(--acc2);color:#fff;border-color:var(--acc2)}
 .btn-err{color:var(--bad);font-size:12.5px;max-width:420px;align-self:center;margin:0 4px;line-height:1.35}
 .lc-calm{margin-top:14px;display:grid;gap:10px}.lc-calm h4{margin:8px 0 0;font-size:13.5px}

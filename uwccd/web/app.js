@@ -1734,7 +1734,7 @@ const HIST = {
 const HIST_RANGES = [[60, "1 min"], [300, "5 min"], [900, "15 min"], [3600, "1 hour"], [86400, "24 hours"]];
 let histKey = "temp", histData = [], histT = 0, histNow = Date.now() / 1000, histPin = null, histBase = "", histMax = 1;
 let histZoom = null;                     // {t0, t1}: a period chosen by dragging across the chart (refresh paused)
-let histRange = 3600;
+let histRange = 86400;                    // default: the last 24 hours
 try { const r = +localStorage.getItem("uwcc-hist-range"); if (HIST_RANGES.some(x => x[0] === r)) histRange = r; } catch (_) {}
 const histStep = () => histRange <= 900 ? 2 : histRange <= 3600 ? 5 : 60;
 const HIST_W = 800, HIST_H = 180;
@@ -1742,12 +1742,19 @@ function renderHistSeg() {
   const seg = $("#hist-seg"); seg.innerHTML = "";
   for (const [k, d] of Object.entries(HIST)) seg.append(h("button", { class: k === histKey ? "on" : "", onclick: () => { histKey = k; renderHistSeg(); drawHistory(); } }, t(d.name)));
   $("#hist-export-btn").title = t("Export");
+  const cur = HIST_RANGES.find(r => r[0] === histRange) || HIST_RANGES[HIST_RANGES.length - 1];
+  const rb = $("#hist-range-btn"); rb.title = t("Period");                // clock + the period; a click opens the list
+  rb.innerHTML = '<svg class="hist-clock" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
+  rb.append(" " + t(cur[1]) + " ", h("span", { class: "caret" }, "▾"));
   const rs = $("#hist-range"); rs.innerHTML = "";
   for (const [sec, name] of HIST_RANGES) rs.append(h("button", { class: sec === histRange ? "on" : "", onclick: () => {
+    rs.classList.add("hidden");
     histRange = sec; try { localStorage.setItem("uwcc-hist-range", sec); } catch (_) {}
     histZoom = null; unpinHistory(false); renderHistSeg(); loadHistory(true);
   } }, t(name)));
 }
+$("#hist-range-btn").addEventListener("click", e => { e.stopPropagation(); $("#hist-export-menu").classList.add("hidden"); $("#hist-range").classList.toggle("hidden"); });
+document.addEventListener("click", () => $("#hist-range").classList.add("hidden"));
 async function loadHistory(force) {
   if (histPin || histZoom) return drawHistory();           // paused on a point / on a zoomed period
   const age = histRange <= 900 ? 1900 : histRange <= 3600 ? 9000 : 55000;
@@ -2000,7 +2007,7 @@ function downloadChartPng() {
   };
   img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(xml.replace("<svg", `<svg width="${W}" height="${H}"`));
 }
-$("#hist-export-btn").addEventListener("click", e => { e.stopPropagation(); $("#hist-export-menu").classList.toggle("hidden"); });
+$("#hist-export-btn").addEventListener("click", e => { e.stopPropagation(); $("#hist-range").classList.add("hidden"); $("#hist-export-menu").classList.toggle("hidden"); });
 $$("#hist-export-menu button").forEach(b => b.addEventListener("click", () => {
   $("#hist-export-menu").classList.add("hidden");
   if (b.dataset.fmt === "png") downloadChartPng(); else downloadHistory(b.dataset.fmt);

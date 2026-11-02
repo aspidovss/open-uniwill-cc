@@ -16,6 +16,8 @@
   profile files carry it too. Profiles saved by 1.6.8–1.6.10 keep the current Behaviour when applied.
 - **Help:** *Features and how they work* in Russian (`docs/FEATURES.ru.md`); the features page and the command line
   reference describe the 1.6.10–1.6.11 additions (rule fields, `rules clear-log`, `profile_autoapply`, profile Behaviour).
+- **Monitor → History:** the period is a clock button (*24 hours* by default) with a drop-down list; the cooler
+  chart is called *СЖО* in Russian, so the chart tabs fit in one row.
 - **Sliders** in the look of the app: a filled track and a round thumb like the points of the charts.
 
 ## 1.6.10
