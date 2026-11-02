@@ -489,6 +489,9 @@ const RU = {
   "The last 100 events are kept; older ones are dropped.": "Хранятся последние 100 событий, более старые удаляются.",
   "This profile has no Behaviour of its own (saved before 1.6.11): applying it keeps the current one.": "У этого профиля нет своего «Поведения» (сохранён до 1.6.11): при применении остаётся текущее.",
   "The Behaviour is part of the cooler profile: Save stores it with the curves, applying a profile sets both.": "«Поведение» входит в профиль охладителя: «Сохранить» записывает его вместе с кривыми, применение профиля ставит и то и другое.",
+  "keep it": "не менять",
+  "turn on": "включить",
+  "turn off": "выключить",
   "System switches": "Системные", "Laptop functions": "Функциональные",
   // liquid cooler: calm control
   "Pump stopped: cool": "Помпа остановлена: прохладно",

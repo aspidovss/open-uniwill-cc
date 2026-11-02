@@ -2321,9 +2321,9 @@ function renderLoadRules(force) {                 // force: our own change, redr
       h("span", { class: "muted tiny" }, r.hold ? "" : t("(at once)")), h("span", {}, t("→ switch to")),
       sel([["", t("keep the mode")], ...modes.map(m => [m.id, t(m.name)])], r.mode ?? "", v => { r.mode = v === "" ? null : +v; r.slot = null; }),
       ...(r.mode != null ? [sel(slotOpts, r.slot ?? "", v => { r.slot = v === "" ? null : +v; })] : []));
-    const fb = h("input", { type: "checkbox", ...(r.fan_boost ? { checked: true } : {}) });
-    fb.addEventListener("change", () => { r.fan_boost = fb.checked; change(); });
-    const act1b = h("div", { class: "row wrap au-line" }, h("label", { class: "chk" }, fb, " ", h("span", {}, t("Fan Boost"))),
+    if (r.fan_boost === true) r.fan_boost = "on"; else if (r.fan_boost === false || r.fan_boost == null) r.fan_boost = "keep";
+    const act1b = h("div", { class: "row wrap au-line" }, h("span", {}, t("Fan Boost")),
+      sel([["keep", t("keep it")], ["on", t("turn on")], ["off", t("turn off")]], r.fan_boost, v => { r.fan_boost = v; }),
       ...(S.liquid && S.liquid.profiles ? [h("span", { class: "au-sep" }, t("Liquid cooler")),
         sel([["", t("keep its mode")], ...LC_MODES.map(m => [m.id, t(m.name)])], r.lc_mode ?? "", v => { r.lc_mode = v || null; }),
         sel([["", t("keep its curves")], ...S.liquid.profiles.map(p => [p.id, p.builtin ? t(LC_PROFILE_NAME[p.id] || p.name) : p.name])],

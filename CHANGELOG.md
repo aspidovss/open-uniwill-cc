@@ -5,7 +5,7 @@
 - **Automatic profile switching:**
   - times in **s / min / h** (up to 24 h); *for 0* switches **at once**, on the first sample that meets the conditions;
   - **Then:** *stay (do not return)*, *return as soon as the condition stops*, or *return when it has not held for N*;
-  - besides the mode (now also *keep the mode*) a rule can turn on **Fan Boost** and set the **liquid cooler's mode**
+  - besides the mode (now also *keep the mode*) a rule can turn **Fan Boost** on or off and set the **liquid cooler's mode**
     (Automatic, Follow the laptop, Controller, Manual, High, Medium, Low, Off) and **profile**; on the return each of
     them is put back only if nobody changed it meanwhile;
   - **What the rules did:** the last 10 events, *Show all*, the service keeps the last 100; *Clear* (also

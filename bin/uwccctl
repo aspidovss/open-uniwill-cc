@@ -173,9 +173,9 @@ HELP = {
         "uwccctl rules export FILE / import FILE   the rules as JSON (import replaces them)\n"
         "uwccctl rules enable N / disable N / clear / clear-log\n"
         "  A rule: {\"name\": \"Heavy load\", \"conditions\": [{\"metric\": \"total_power\", \"op\": \">\", \"value\": 120}],\n"
-        "  \"join\": \"and\", \"hold\": 30, \"mode\": 2, \"slot\": null, \"fan_boost\": false, \"lc_mode\": null,\n"
+        "  \"join\": \"and\", \"hold\": 30, \"mode\": 2, \"slot\": null, \"fan_boost\": \"keep\", \"lc_mode\": null,\n"
         "  \"lc_profile\": null, \"back\": \"after\", \"back_after\": 60}   hold / back_after in s (0..86400, hold 0 = at once);\n"
-        "  mode null = keep; back never | while | after; lc_mode auto laptop ec manual high medium low off;\n"
+        "  mode null = keep; fan_boost keep | on | off; back never | while | after; lc_mode auto laptop ec manual high medium low off;\n"
         "  metrics: cpu_power gpu_power total_power (W), cpu_temp gpu_temp (°C), cpu_load gpu_load battery (%),\n"
         "  ac (op \"=\", value 1 = on AC, 0 = on battery), sys_profile (op \"=\", 0 power-saver / 1 balanced /\n"
         "  2 performance), saver (Windows battery saver, op \"=\", 1 / 0); lc_profile = a cooler profile id or null;\n"
@@ -1019,7 +1019,8 @@ def rules_text(d):
         back = r.get("back")
         back = "after" if back is True else "never" if back in (False, None) else back
         acts = [f"{names.get(r['mode'])}{'' if r.get('slot') is None else ' profile ' + str(r['slot'])}"] if r.get("mode") is not None else []
-        acts += ["Fan Boost"] if r.get("fan_boost") else []
+        fb = "on" if r.get("fan_boost") is True else r.get("fan_boost")
+        acts += [f"Fan Boost {fb}"] if fb in ("on", "off") else []
         acts += [f"liquid cooler {r['lc_mode']}"] if r.get("lc_mode") else []
         acts += [f"cooler profile {r['lc_profile']}"] if r.get("lc_profile") else []
         out.append(f"{i + 1}. {'on ' if r.get('enabled', True) else 'off'} {r.get('name') or ''}: if {cond}"

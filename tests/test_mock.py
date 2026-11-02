@@ -2023,6 +2023,17 @@ class LoadRulesUnit(unittest.TestCase):
         self.lr.tick(self.m(ct=85), now=200)
         self.lr.tick(self.m(ct=50), now=300)
         self.assertEqual(pw.option["OperatingMode"], 2)                # "never": stays
+        pw.option["FanBoostEnable"] = 1                               # fan_boost "off": turns it off, back on later
+        off = self.A.check_load_rules([{"conditions": [{"metric": "cpu_temp", "op": "<", "value": 60}], "mode": "keep",
+                                        "hold": 0, "fan_boost": "off", "back": "while"}])
+        self.assertEqual(off[0]["fan_boost"], "off")
+        self.assertEqual(self.A.check_load_rules([{"conditions": [{"metric": "cpu_temp", "op": "<", "value": 60}],
+                                                   "mode": 1, "fan_boost": False}])[0]["fan_boost"], "keep")
+        self.svc.settings_store.set("load_rules", off)
+        self.lr.tick(self.m(ct=50), now=400)
+        self.assertEqual(pw.option["FanBoostEnable"], 0)
+        self.lr.tick(self.m(ct=70), now=401)
+        self.assertEqual(pw.option["FanBoostEnable"], 1)
 
 if __name__ == "__main__":
     unittest.main()

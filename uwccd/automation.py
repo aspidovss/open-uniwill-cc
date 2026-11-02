@@ -567,8 +567,11 @@ def check_load_rules(rules):
         lcm = None if lcm in (None, "", "keep") else str(lcm)
         if lcm is not None and lcm not in LC_RULE_MODES:
             raise ValueError(f"rule {i + 1}: cooler mode {' | '.join(LC_RULE_MODES)}")
-        fb = bool(r.get("fan_boost", False))
-        if mode is None and lcp is None and lcm is None and not fb:
+        fb = r.get("fan_boost", "keep")         # keep | on | off (1.6.11 before this: true = on, false = keep)
+        fb = "on" if fb is True else "keep" if fb in (False, None, "") else str(fb)
+        if fb not in ("keep", "on", "off"):
+            raise ValueError(f"rule {i + 1}: fan_boost keep | on | off")
+        if mode is None and lcp is None and lcm is None and fb == "keep":
             raise ValueError(f"rule {i + 1}: nothing to switch (mode, Fan Boost or the liquid cooler)")
         out.append({"enabled": bool(r.get("enabled", True)), "name": str(r.get("name") or "")[:40],
                     "conditions": cc, "join": join, "hold": hold, "mode": mode, "slot": slot if mode is not None else None,
@@ -702,9 +705,11 @@ class LoadRules:
         did = {}
         if r.get("mode") is not None:
             did["mode"] = (r["mode"], r.get("slot"))
-        if r.get("fan_boost"):
-            self._fan_boost(True)
-            did["fan_boost"] = True
+        fb = r.get("fan_boost")
+        fb = "on" if fb is True else fb
+        if fb in ("on", "off"):
+            self._fan_boost(fb == "on")
+            did["fan_boost"] = fb == "on"
         did.update(self._apply_lc(r))
         self.did.update(did)
         self.active, self.false_since = i, None
@@ -720,9 +725,10 @@ class LoadRules:
             log.info("load rule %s over: back to mode %s", r.get("name") or "", sv["mode"][0])
             self._apply(sv["mode"][0], sv["mode"][1], "back")
             back["mode"], back["slot"] = sv["mode"]
-        if did.get("fan_boost") and not sv.get("fan_boost") and self.svc.power.option.get("FanBoostEnable"):
-            self._fan_boost(False)
-            back["fan_boost"] = False
+        if "fan_boost" in did and did["fan_boost"] != sv.get("fan_boost") \
+                and bool(self.svc.power.option.get("FanBoostEnable")) == did["fan_boost"]:
+            self._fan_boost(bool(sv.get("fan_boost")))
+            back["fan_boost"] = bool(sv.get("fan_boost"))
         if lc is not None:
             try:
                 if did.get("lc_profile") and sv.get("lc_curves") and lc.cfg.get("profile") == did["lc_profile"] \
