@@ -171,9 +171,11 @@ HELP = {
     "rules": (
         "uwccctl rules [list]                     automatic profile switching rules (Automation) and their state\n"
         "uwccctl rules export FILE / import FILE   the rules as JSON (import replaces them)\n"
-        "uwccctl rules enable N / disable N / clear\n"
+        "uwccctl rules enable N / disable N / clear / clear-log\n"
         "  A rule: {\"name\": \"Heavy load\", \"conditions\": [{\"metric\": \"total_power\", \"op\": \">\", \"value\": 120}],\n"
-        "  \"join\": \"and\", \"hold\": 30, \"mode\": 2, \"slot\": null, \"lc_profile\": null, \"back\": true, \"back_after\": 60}\n"
+        "  \"join\": \"and\", \"hold\": 30, \"mode\": 2, \"slot\": null, \"fan_boost\": false, \"lc_mode\": null,\n"
+        "  \"lc_profile\": null, \"back\": \"after\", \"back_after\": 60}   hold / back_after in s (0..86400, hold 0 = at once);\n"
+        "  mode null = keep; back never | while | after; lc_mode auto laptop ec manual high medium low off;\n"
         "  metrics: cpu_power gpu_power total_power (W), cpu_temp gpu_temp (°C), cpu_load gpu_load battery (%),\n"
         "  ac (op \"=\", value 1 = on AC, 0 = on battery), sys_profile (op \"=\", 0 power-saver / 1 balanced /\n"
         "  2 performance), saver (Windows battery saver, op \"=\", 1 / 0); lc_profile = a cooler profile id or null;\n"
@@ -1014,10 +1016,15 @@ def rules_text(d):
         cond = f" {r.get('join', 'and')} ".join(("on AC" if c["value"] else "on battery") if c["metric"] == "ac"
                                                else f"{c['metric']} {c['op']} {c['value']:g}" for c in r["conditions"])
         state = " [active]" if d.get("active") == i else (f" [holds {d['held'][str(i)]} s]" if str(i) in (d.get("held") or {}) else "")
-        out.append(f"{i + 1}. {'on ' if r.get('enabled', True) else 'off'} {r.get('name') or ''}: if {cond} for {r['hold']} s"
-                   f" -> {names.get(r['mode'])}{'' if r.get('slot') is None else ' profile ' + str(r['slot'])}"
-                   f"{', cooler ' + r['lc_profile'] if r.get('lc_profile') else ''}"
-                   f"{', back after ' + str(r['back_after']) + ' s' if r.get('back') else ''}{state}")
+        back = r.get("back")
+        back = "after" if back is True else "never" if back in (False, None) else back
+        acts = [f"{names.get(r['mode'])}{'' if r.get('slot') is None else ' profile ' + str(r['slot'])}"] if r.get("mode") is not None else []
+        acts += ["Fan Boost"] if r.get("fan_boost") else []
+        acts += [f"liquid cooler {r['lc_mode']}"] if r.get("lc_mode") else []
+        acts += [f"cooler profile {r['lc_profile']}"] if r.get("lc_profile") else []
+        out.append(f"{i + 1}. {'on ' if r.get('enabled', True) else 'off'} {r.get('name') or ''}: if {cond}"
+                   f"{' for ' + str(r['hold']) + ' s' if r.get('hold') else ' (at once)'} -> {', '.join(acts)}"
+                   f"{', back after ' + str(r['back_after']) + ' s' if back == 'after' else ', back when it stops' if back == 'while' else ''}{state}")
     out = out or ["no rules"]
     for x in (d.get("log") or [])[:10]:                 # what the rules did, newest first
         what = {"on": f"-> {names.get(x.get('mode'))}", "back": f"over, back to {names.get(x.get('mode'))}"}.get(x["what"], "over")
@@ -1042,6 +1049,8 @@ def cmd_rules(a):
                 rules = json.load(f)
         except (OSError, ValueError) as e:
             fail(str(e), 1)
+    elif op == "clear-log":                      # what the rules did
+        return out(call("load-rules/clear-log", {}), rules_text)
     elif op == "clear":
         rules = []
     elif op in ("enable", "disable") and a[1:]:
@@ -1325,7 +1334,8 @@ def lc_profile(a):
         p = next((x for x in call("state")["liquid"]["profiles"] if x["id"] == a[1]), None)
         if p is None:
             fail(f"no cooler profile {a[1]}", 1)
-        data = json.dumps({"format": "uwcc-cooler-profile", "version": 1, "name": p["name"], "curves": p["curves"]},
+        data = json.dumps({"format": "uwcc-cooler-profile", "version": 2, "name": p["name"], "curves": p["curves"],
+                           "behaviour": p.get("behaviour")},
                           indent=2, ensure_ascii=False)
         if a[2:]:
             with open(a[2], "w", encoding="utf-8") as f:
@@ -1340,7 +1350,7 @@ def lc_profile(a):
         except (OSError, ValueError) as e:
             fail(f"{a[1]}: {e}", 1)
         body = {"action": "import", "name": " ".join(a[2:]) or d.get("name") or os.path.splitext(os.path.basename(a[1]))[0],
-                "curves": d.get("curves")}
+                "curves": d.get("curves"), "behaviour": d.get("behaviour")}
     else:
         usage("lc")
     r = call("lc/profile", body)

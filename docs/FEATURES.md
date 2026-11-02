@@ -48,8 +48,9 @@ WhisperMode.
 back to the previous mode when it has not held for 60 s"*, *"CPU power below 15 W for 60 s → Office"* or *"CPU above
 90 °C or GPU above 85 °C for 20 s → Gaming"*. Up to 3 conditions per rule (and / or) on CPU, GPU or CPU + GPU power,
 CPU / GPU temperature and load, battery charge and the power source (mains / battery); the target is a mode and a
-profile slot (or the current one) and, optionally, a cooler profile (its curves come back with the mode). The card
-lists what the rules did (since the service started). Rules are checked from
+profile slot (or the current one, or *keep the mode*), Fan Boost, and the liquid cooler's mode and profile. Times in
+s / min / h, *for 0* = at once; then *stay*, *return as soon as the condition stops* or *return after N*. The card
+lists what the rules did (the last 10, *Show all*: up to 100 kept since the service started; *Clear*). Rules are checked from
 the top; the first that held long enough is applied once. While a rule is active, App binding and the power-source
 settings do not change the mode. Needs full monitoring. `uwccctl rules …`.
 

@@ -172,6 +172,21 @@ function gauge(label, value, unit, max, sub, color) {
       `<path d="M19 80 A56 56 0 0 1 131 80" fill="none" stroke="${color || "var(--acc)"}" stroke-width="12" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${off}" style="transition:stroke-dashoffset .6s"/></svg>`),
     h("div", { class: "v" }, value == null ? "—" : `${value}${unit}`), h("div", { class: "l" }, label), h("div", { class: "s" }, sub || ""));
 }
+// slider fill: --p follows the value however it changes (typing, dragging, or set from the code)
+function rangeFill(el) {
+  const lo = +el.min || 0, hi = el.max === "" ? 100 : +el.max, v = +el.value;
+  el.style.setProperty("--p", hi > lo ? `${Math.max(0, Math.min(100, (v - lo) / (hi - lo) * 100))}%` : "0%");
+}
+(function () {
+  const d = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
+  Object.defineProperty(HTMLInputElement.prototype, "value", { configurable: true, enumerable: d.enumerable, get: d.get,
+    set(v) { d.set.call(this, v); if (this.type === "range") rangeFill(this); } });
+  document.addEventListener("input", e => { if (e.target.type === "range") rangeFill(e.target); }, true);
+  new MutationObserver(ms => { for (const m of ms) for (const n of m.addedNodes) if (n.nodeType === 1)
+    (n.matches?.("input[type=range]") ? [n] : n.querySelectorAll?.("input[type=range]") || []).forEach(rangeFill); })
+    .observe(document.documentElement, { childList: true, subtree: true });
+  document.querySelectorAll("input[type=range]").forEach(rangeFill);
+})();
 function svgEl(markup) { const d = document.createElement("div"); d.innerHTML = markup; return d.firstChild; }
 function onMonitor(m) {
   if (m.keyboard_fx !== undefined && S?.keyboard) {
@@ -1591,8 +1606,8 @@ function lcPumpEditor(set, key, readonly, L) {
   });
   return h("div", { class: "lc-ed" }, h("h4", {}, t("Pump")), svg);
 }
-$("#lc-prof").addEventListener("change", e => { lcPick = e.target.value || null; drawCurves(S.liquid); });
-const lcProf = (action, extra, ok) => { const id = $("#lc-prof").value; lcPick = null; return lcPost("profile", { action, id, ...(extra || {}) }, ok); };
+$("#lc-prof").addEventListener("change", e => { lcPick = e.target.value || null; drawCurves(S.liquid); drawCalm(S.liquid); });
+const lcProf = (action, extra, ok) => { const id = $("#lc-prof").value; lcPick = null; if (action === "apply") lcCalm = null; return lcPost("profile", { action, id, ...(extra || {}) }, ok); };
 $("#lc-prof-apply").addEventListener("click", () => lcProf("apply", {}, t("Profile applied")));
 $("#lc-prof-save").addEventListener("click", () => lcProf("save", {}, t("Saved")));
 $("#lc-prof-copy").addEventListener("click", () => {
@@ -1603,7 +1618,8 @@ $("#lc-prof-remove").addEventListener("click", () => { if (confirm(t("Remove thi
 $("#lc-prof-export").addEventListener("click", () => {
   const L = S.liquid, sel = $("#lc-prof"), p = L.profiles.find(x => x.id === sel.value);
   const name = p ? sel.options[sel.selectedIndex].textContent.replace(/ · .*$/, "") : t("Current curves");
-  const data = { format: "uwcc-cooler-profile", version: 1, name, curves: p ? p.curves : L.curves };
+  const beh = p ? p.behaviour : Object.fromEntries(["temp_source", "delay_up", "delay_down", "smooth", "pump_idle"].map(k => [k, L.config[k]]));
+  const data = { format: "uwcc-cooler-profile", version: 2, name, curves: p ? p.curves : L.curves, behaviour: beh || null };
   const blob = new Blob([JSON.stringify(data, null, 2) + "\n"], { type: "application/json" });
   const fn = "uwcc-cooler-" + (name.toLowerCase().replace(/[^a-z0-9а-яё]+/gi, "-").replace(/^-+|-+$/g, "") || "profile") + ".json";
   const el = h("a", { href: URL.createObjectURL(blob), download: fn }); document.body.append(el); el.click(); el.remove();
@@ -1617,7 +1633,7 @@ $("#lc-prof-file").addEventListener("change", async e => {
   const name = prompt(t("Name of the new cooler profile"), String(d.name || f.name.replace(/\.json$/i, "")).slice(0, 40));
   if (!name || !name.trim()) return;
   let rid = null;
-  await act(async () => { rid = (await api("lc/profile", { action: "import", name: name.trim(), curves: d.curves })).id; }, t("Profile imported"));
+  await act(async () => { rid = (await api("lc/profile", { action: "import", name: name.trim(), curves: d.curves, behaviour: d.behaviour || null })).id; }, t("Profile imported"));
   if (rid) { lcPick = rid; drawCurves(S.liquid); }      // shown on the charts; Apply uses it
 });
 // delays, smoothing, temperature source, pump stop when cool (auto / Controller modes)
@@ -1626,7 +1642,9 @@ function drawCalm(L) {
   const c = L.config;
   if (!lcCalm) lcCalm = { temp_source: c.temp_source || "max", delay_up: c.delay_up ?? 10, delay_down: c.delay_down ?? 30,
     smooth: c.smooth !== false, pump_idle: { ...(c.pump_idle || {}) } };
-  const k = lcCalm, pi = k.pump_idle, box = $("#lc-calm"); box.innerHTML = "";
+  // a cooler profile picked in the list (not applied yet): its own Behaviour is shown, read-only
+  const pick = lcPick ? (L.profiles || []).find(p => p.id === lcPick) : null, pv = pick && pick.behaviour;
+  const k = pv ? JSON.parse(JSON.stringify(pv)) : lcCalm, pi = k.pump_idle, box = $("#lc-calm"); box.innerHTML = "";
   const num = (obj, key, min, max, unit) => {
     const e = h("input", { type: "number", min, max, value: obj[key], class: "num" });
     e.addEventListener("change", () => { obj[key] = +e.value; });
@@ -1653,6 +1671,10 @@ function drawCalm(L) {
     line(t("Stop below"), num(pi, "off_below", 30, 85, "°C"), h("span", { class: "muted" }, t("for")), num(pi, "off_after", 10, 900, t("s"))),
     line(t("Start again above"), num(pi, "on_above", 32, 95, "°C"), h("span", { class: "muted" }, t("for")), num(pi, "on_after", 0, 120, t("s"))),
     line(t("Run at least"), num(pi, "min_run", 0, 1800, t("s")), h("span", { class: "muted tiny" }, t("after each start, so the pump does not cycle"))));
+  box.prepend(h("p", { class: "muted tiny lc-beh-note" }, pick && !pv ? t("This profile has no Behaviour of its own (saved before 1.6.11): applying it keeps the current one.")
+    : t("The Behaviour is part of the cooler profile: Save stores it with the curves, applying a profile sets both.")));
+  box.querySelectorAll("input,select").forEach(e => { e.disabled = !!pv; });
+  for (const id of ["lc-calm-save", "lc-calm-reset"]) { const b = $("#" + id); if (b) b.disabled = !!pv; }
 }
 $("#lc-scan").addEventListener("click", async () => {
   lcScanning = true; renderLiquid();
@@ -2235,6 +2257,7 @@ const AU_METRIC = { cpu_power: "CPU power", gpu_power: "GPU power", total_power:
   gpu_temp: "GPU temperature", cpu_load: "CPU load", gpu_load: "GPU load", battery: "Battery charge", ac: "Power source",
   sys_profile: "System power profile", saver: "Battery saver (Windows)" };
 const AU_EQ = ["ac", "sys_profile", "saver"];          // compared with "=": a choice instead of > / < and a number
+const AU_UNIT_S = { s: 1, min: 60, h: 3600 }, AU_UNIT_NAME = { s: "s", min: "min", h: "h" };
 const AU_UNIT = { cpu_power: "W", gpu_power: "W", total_power: "W", cpu_temp: "°C", gpu_temp: "°C", cpu_load: "%", gpu_load: "%", battery: "%" };
 const AU_TEMPLATES = [                                   // the first one is chosen by default
   ["empty", "Empty rule", { name: "", conditions: [{ metric: "cpu_power", op: ">", value: 50 }], hold: 30, mode: 1, slot: null, back: false, back_after: 60 }],
@@ -2285,19 +2308,35 @@ function renderLoadRules(force) {                 // force: our own change, redr
     if (r.conditions.length < 3) conds.append(h("button", { class: "btn ghost sm", onclick: () => { r.conditions.push({ metric: "gpu_power", op: ">", value: 50 }); change(); renderLoadRules(true); } }, t("+ condition")));
     const key = { 0: "office", 1: "gaming", 2: "turbo", 3: "custom" }[r.mode], nslots = (S.power.slots || {})[key] || 1;
     const slotOpts = [["", t("current profile")], ...Array.from({ length: nslots }, (_, j) => [j, r.mode === 3 ? slotName(S.profiles["Mode4_Profile" + (j + 1)], j + 1) : t("profile {0}", j + 1)])];
-    const act1 = h("div", { class: "row wrap au-line" }, h("span", {}, t("for")), num(r.hold, 1, 3600, v => { r.hold = v; }), h("span", {}, t("s → switch to")),
-      sel(modes.map(m => [m.id, t(m.name)]), r.mode, v => { r.mode = +v; r.slot = null; }),
-      sel(slotOpts, r.slot ?? "", v => { r.slot = v === "" ? null : +v; }),
-      ...(S.liquid && S.liquid.profiles ? [h("span", {}, t("cooler")),
+    // a time in s / min / h (stored in seconds; the unit is kept with the rule)
+    const timeIn = (secKey, unitKey, min) => {
+      const u = r[unitKey] || "s", f = AU_UNIT_S[u];
+      const n = h("input", { type: "number", class: "num", min, max: Math.round(86400 / f), step: u === "s" ? 1 : "any", value: +((r[secKey] ?? 0) / f).toFixed(2) });
+      n.addEventListener("change", () => { r[secKey] = Math.max(min, Math.min(86400, Math.round(+n.value * f))); change(); });
+      const us = sel(Object.keys(AU_UNIT_S).map(k => [k, t(AU_UNIT_NAME[k])]), u, v => { r[unitKey] = v; });
+      return [n, us];
+    };
+    if (r.back === true) r.back = "after"; else if (r.back === false || r.back == null) r.back = "never";
+    const act1 = h("div", { class: "row wrap au-line" }, h("span", {}, t("for")), ...timeIn("hold", "hold_unit", 0),
+      h("span", { class: "muted tiny" }, r.hold ? "" : t("(at once)")), h("span", {}, t("→ switch to")),
+      sel([["", t("keep the mode")], ...modes.map(m => [m.id, t(m.name)])], r.mode ?? "", v => { r.mode = v === "" ? null : +v; r.slot = null; }),
+      ...(r.mode != null ? [sel(slotOpts, r.slot ?? "", v => { r.slot = v === "" ? null : +v; })] : []));
+    const fb = h("input", { type: "checkbox", ...(r.fan_boost ? { checked: true } : {}) });
+    fb.addEventListener("change", () => { r.fan_boost = fb.checked; change(); });
+    const act1b = h("div", { class: "row wrap au-line" }, h("label", { class: "chk" }, fb, " ", h("span", {}, t("Fan Boost"))),
+      ...(S.liquid && S.liquid.profiles ? [h("span", { class: "au-sep" }, t("Liquid cooler")),
+        sel([["", t("keep its mode")], ...LC_MODES.map(m => [m.id, t(m.name)])], r.lc_mode ?? "", v => { r.lc_mode = v || null; }),
         sel([["", t("keep its curves")], ...S.liquid.profiles.map(p => [p.id, p.builtin ? t(LC_PROFILE_NAME[p.id] || p.name) : p.name])],
           r.lc_profile ?? "", v => { r.lc_profile = v || null; })] : []));
-    const bk = h("input", { type: "checkbox", ...(r.back ? { checked: true } : {}) }); bk.addEventListener("change", () => { r.back = bk.checked; change(); });
-    const act2 = h("div", { class: "row wrap au-line" }, h("label", { class: "chk" }, bk, " ", h("span", {}, t(r.lc_profile ? "then return to the previous mode and cooler curves when it has not held for" : "then return to the previous mode when it has not held for"))),
-      num(r.back_after, 1, 3600, v => { r.back_after = v; }), h("span", {}, t("s")));
-    box.append(h("div", { class: "au-rule" + (active ? " on" : "") }, head, h("div", { class: "au-line" }, h("b", {}, t("If")), " ", conds), act1, act2));
+    const act2 = h("div", { class: "row wrap au-line" }, h("span", {}, t("Then")),
+      sel([["never", t("stay (do not return)")], ["while", t("return as soon as the condition stops")], ["after", t("return when the condition has not held for")]],
+        r.back, v => { r.back = v; }),
+      ...(r.back === "after" ? timeIn("back_after", "back_unit", 0) : []));
+    box.append(h("div", { class: "au-rule" + (active ? " on" : "") }, head, h("div", { class: "au-line" }, h("b", {}, t("If")), " ", conds), act1, act1b, act2));
   });
 }
-// what the rules did (newest first): kept by the service since it started
+// what the rules did (newest first): the service keeps the last 100 events; 10 are shown unless "all" is asked for
+let auLogAll = false;
 function renderRulesLog(R) {
   const box = $("#au-log"); if (!box) return;
   const L = R.log || [];
@@ -2305,13 +2344,22 @@ function renderRulesLog(R) {
   if (!L.length) return;
   const mname = m => (MODES[m] ? t(MODES[m].name) : "");
   const lcn = id => { const p = ((S.liquid || {}).profiles || []).find(x => x.id === id); return p ? (p.builtin ? t(LC_PROFILE_NAME[p.id] || p.name) : p.name) : id; };
-  const rows = L.map(x => {
+  const lcm = id => { const m = LC_MODES.find(x => x.id === id); return m ? t(m.name) : id; };
+  const extra = x => [x.fan_boost === true ? t("Fan Boost on") : x.fan_boost === false ? t("Fan Boost off") : "",
+    x.lc_mode ? t("Liquid cooler") + ": " + lcm(x.lc_mode) : "",
+    x.lc_profile ? (x.what === "back" ? t("cooler curves back") : t("Liquid cooler") + " " + lcn(x.lc_profile)) : ""].filter(Boolean).join(" · ");
+  const rows = (auLogAll ? L : L.slice(0, 10)).map(x => {
     const tm = new Date(x.t * 1000).toLocaleTimeString(LANG === "ru" ? "ru-RU" : undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-    const what = x.what === "on" ? `→ ${mname(x.mode)}${x.slot != null ? ", " + t("profile {0}", x.slot + 1) : ""}${x.lc_profile ? " · " + t("cooler") + " " + lcn(x.lc_profile) : ""}`
-      : x.what === "back" ? t("over — back to {0}", mname(x.mode)) + (x.lc_profile ? " · " + t("cooler curves back") : "") : t("over");
+    const ex = extra(x);
+    const what = x.what === "on" ? `→ ${x.mode != null ? mname(x.mode) : ""}${x.slot != null ? ", " + t("profile {0}", x.slot + 1) : ""}${ex ? (x.mode != null ? " · " : "") + ex : ""}`
+      : x.what === "back" ? (x.mode != null ? t("over — back to {0}", mname(x.mode)) : t("over")) + (ex ? " · " + ex : "") : t("over");
     return h("li", {}, h("span", { class: "muted" }, tm), " ", h("b", {}, x.rule || t("rule")), " ", what);
   });
-  box.replaceChildren(h("h4", {}, t("What the rules did")), h("ul", { class: "au-log" }, ...rows));
+  const more = L.length > 10 ? h("button", { class: "btn ghost sm", onclick: () => { auLogAll = !auLogAll; renderRulesLog(R); } },
+    auLogAll ? t("Show the last 10") : t("Show all ({0})", L.length)) : "";
+  const clear = h("button", { class: "btn ghost sm", onclick: () => { if (confirm(t("Clear what the rules did?"))) act(() => api("load-rules/clear-log", {}), t("Cleared")); } }, t("Clear"));
+  box.replaceChildren(h("div", { class: "row between wrap" }, h("h4", {}, t("What the rules did")), h("div", { class: "row" }, more, clear)),
+    h("ul", { class: "au-log" + (auLogAll ? " all" : "") }, ...rows), h("p", { class: "muted tiny" }, t("The last 100 events are kept; older ones are dropped.")));
 }
 $("#au-rule-add").addEventListener("click", () => {
   const tp = AU_TEMPLATES.find(x => x[0] === $("#au-rule-tpl").value) || AU_TEMPLATES[0];

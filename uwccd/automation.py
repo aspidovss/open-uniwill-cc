@@ -475,7 +475,11 @@ LOAD_METRICS = {                     # key -> (unit, max value)
     "saver": ("", 1),                # Windows battery saver: op "=", 1 on / 0 off
 }
 EQ_METRICS = ("ac", "sys_profile", "saver")
-LOAD_LOG_LEN = 30
+LOAD_LOG_LEN = 100                  # what the rules did: the last 100 events
+MAX_RULE_S = 86400                  # hold / return times up to 24 h
+TIME_UNITS = ("s", "min", "h")      # how the window shows a time (stored in seconds)
+BACK_MODES = ("never", "while", "after")    # never return / while the conditions hold / N after they stop
+LC_RULE_MODES = ("auto", "laptop", "ec", "manual", "high", "medium", "low", "off")
 MAX_LOAD_RULES = 12
 
 
@@ -537,30 +541,51 @@ def check_load_rules(rules):
         if join not in ("and", "or"):
             raise ValueError(f"rule {i + 1}: join and / or")
         hold, back_after = int(r.get("hold", 30)), int(r.get("back_after", 60))
-        if not 1 <= hold <= 3600 or not 1 <= back_after <= 3600:
-            raise ValueError(f"rule {i + 1}: times 1..3600 s")
-        mode = int(r["mode"])
-        if mode not in (0, 1, 2, 3):
-            raise ValueError(f"rule {i + 1}: mode 0..3")
+        if not 0 <= hold <= MAX_RULE_S or not 0 <= back_after <= MAX_RULE_S:
+            raise ValueError(f"rule {i + 1}: times 0..{MAX_RULE_S} s (24 h)")
+        back = r.get("back", "never")              # 1.6.8 and older: true / false
+        back = "after" if back is True else "never" if back in (False, None) else str(back)
+        if back not in BACK_MODES:
+            raise ValueError(f"rule {i + 1}: back {' | '.join(BACK_MODES)}")
+        units = {}
+        for k in ("hold_unit", "back_unit"):
+            u = r.get(k) or "s"
+            if u not in TIME_UNITS:
+                raise ValueError(f"rule {i + 1}: {k} s | min | h")
+            units[k] = u
+        mode = r.get("mode")
+        mode = None if mode in (None, "", "keep") else int(mode)
+        if mode is not None and mode not in (0, 1, 2, 3):
+            raise ValueError(f"rule {i + 1}: mode 0..3 or keep")
         slot = r.get("slot")
         slot = None if slot in (None, "", "current") else int(slot)
         if slot is not None and not 0 <= slot <= 4:
             raise ValueError(f"rule {i + 1}: profile slot 0..4")
         lcp = r.get("lc_profile")
         lcp = None if lcp in (None, "", "keep") else str(lcp)[:60]
+        lcm = r.get("lc_mode")
+        lcm = None if lcm in (None, "", "keep") else str(lcm)
+        if lcm is not None and lcm not in LC_RULE_MODES:
+            raise ValueError(f"rule {i + 1}: cooler mode {' | '.join(LC_RULE_MODES)}")
+        fb = bool(r.get("fan_boost", False))
+        if mode is None and lcp is None and lcm is None and not fb:
+            raise ValueError(f"rule {i + 1}: nothing to switch (mode, Fan Boost or the liquid cooler)")
         out.append({"enabled": bool(r.get("enabled", True)), "name": str(r.get("name") or "")[:40],
-                    "conditions": cc, "join": join, "hold": hold, "mode": mode, "slot": slot, "lc_profile": lcp,
-                    "back": bool(r.get("back", False)), "back_after": back_after})
+                    "conditions": cc, "join": join, "hold": hold, "mode": mode, "slot": slot if mode is not None else None,
+                    "fan_boost": fb, "lc_mode": lcm, "lc_profile": lcp,
+                    "back": back, "back_after": back_after, **units})
     return out
 
 
 class LoadRules:
-    """Switch the laptop's mode (and profile slot) when power / temperature / load hold past a limit.
+    """Switch the laptop's mode (and profile slot), Fan Boost and the liquid cooler (mode, profile) when power /
+    temperature / load / power source hold past a limit.
 
     Rules are checked in their order on every monitor sample (full monitoring); the first rule whose conditions held
-    for `hold` seconds is applied — once, when it becomes active. While a rule is active, App binding and the power
-    source rules do not change the mode ("rules come first"). A rule with `back` returns to the mode / slot from
-    before when its conditions have been false for `back_after` seconds (unless the mode was changed meanwhile).
+    for `hold` seconds (0: at once) is applied — once, when it becomes active. While a rule is active, App binding and
+    the power source rules do not change the mode ("rules come first"). Return (`back`): "never" — stay; "while" — back
+    as soon as the conditions stop; "after" — back when they have been false for `back_after` seconds. Each thing is
+    put back only if nobody changed it meanwhile.
     """
 
     def __init__(self, svc):
@@ -568,41 +593,24 @@ class LoadRules:
         self.since = {}          # rule index -> since when its conditions hold
         self.false_since = None
         self.active = None       # index of the active rule
-        self.applied = None      # (mode, slot) the active rule set
-        self.prev = None         # (mode, slot) before the first rule became active
-        self.lc_prev = None      # the cooler's curves / profile before a rule applied a cooler profile
-        self.lc_applied = None   # the cooler profile a rule applied
+        self.saved = None        # the state before the first rule became active (what a return puts back)
+        self.did = {}            # what the active rule(s) set
         self.log = collections.deque(maxlen=LOAD_LOG_LEN)    # what the rules did, newest last
         self.lock = threading.Lock()
 
-    def _note(self, what, r, mode=None, slot=None, lcp=None, now=None):
+    # kept for 1.6.8 callers / tests
+    @property
+    def prev(self):
+        return (self.saved or {}).get("mode")
+
+    def _note(self, what, r, now=None, **kw):
         self.log.append({"t": round(now or time.time()), "what": what, "rule": r.get("name") or "",
-                         "mode": mode, "slot": slot, "lc_profile": lcp})
+                         "mode": kw.get("mode"), "slot": kw.get("slot"), "lc_profile": kw.get("lc_profile"),
+                         "lc_mode": kw.get("lc_mode"), "fan_boost": kw.get("fan_boost")})
 
-    def _apply_lc(self, pid):
-        """A cooler profile (Liquid cooling) with the rule; the curves before are kept for the return."""
-        lc = getattr(self.svc, "liquid", None)
-        if not pid or lc is None:
-            return False
-        try:
-            if lc.cfg.get("profile") == pid and not LCV.modified(lc.cfg):
-                return True
-            if self.lc_prev is None:
-                self.lc_prev = lc.curves_snapshot()
-            lc.profile({"action": "apply", "id": pid})
-            self.lc_applied = pid
-            log.info("load rule: cooler profile %s", pid)
-            return True
-        except (KeyError, ValueError) as e:
-            log.warning("load rule: cooler profile %s: %s", pid, e)
-            return False
-
-    def _restore_lc(self):
-        lc = getattr(self.svc, "liquid", None)
-        if lc is not None and self.lc_prev is not None and self.lc_applied:
-            if lc.cfg.get("profile") == self.lc_applied and not LCV.modified(lc.cfg):    # not changed by hand
-                lc.curves_restore(self.lc_prev)
-        self.lc_prev = self.lc_applied = None
+    def clear_log(self):
+        with self.lock:
+            self.log.clear()
 
     def rules(self):
         return self.svc.settings_store.get("load_rules", []) or []
@@ -616,6 +624,7 @@ class LoadRules:
             res.append(v is not None and (v == c["value"] if op == "=" else v > c["value"] if op == ">" else v < c["value"]))
         return all(res) if rule.get("join", "and") == "and" else any(res)
 
+    # -- what a rule can change ----------------------------------------------------------------------
     def _current(self):
         p = self.svc.power
         mode = p.option.get("OperatingMode")
@@ -625,8 +634,23 @@ class LoadRules:
             slot = None
         return mode, slot
 
+    def _lc(self):
+        lc = getattr(self.svc, "liquid", None)
+        return lc if lc is not None and getattr(lc, "cfg", None) is not None else None
+
+    def _snapshot(self):
+        lc = self._lc()
+        snap = {"mode": self._current(), "fan_boost": bool(self.svc.power.option.get("FanBoostEnable"))}
+        if lc is not None:
+            snap["lc_mode"] = lc.cfg.get("mode")
+            if hasattr(lc, "curves_snapshot"):
+                snap["lc_curves"] = lc.curves_snapshot()
+        return snap
+
     def _apply(self, mode, slot, why):
         p = self.svc.power
+        if mode is None:
+            return True
         if mode == 2 and not self.svc.pf.turbo_support or mode not in p.MODES:
             log.warning("load rule: mode %s is not available here", mode)
             return False
@@ -640,6 +664,78 @@ class LoadRules:
             p.user_set_mode(mode, osd=True)
         self.svc.emit("load_rule", {"rule": why, "mode": mode, "slot": slot})
         return True
+
+    def _fan_boost(self, on):
+        p = self.svc.power
+        if bool(p.option.get("FanBoostEnable")) != on:
+            log.info("load rule: Fan Boost %s", "on" if on else "off")
+            p.set_fan_boost(on)
+
+    def _apply_lc(self, r):
+        """The liquid cooler's mode and / or profile with the rule; returns what was set."""
+        lc, out = self._lc(), {}
+        if lc is None:
+            return out
+        try:
+            pid = r.get("lc_profile")
+            if pid and not (lc.cfg.get("profile") == pid and not LCV.modified(lc.cfg)):
+                lc.profile({"action": "apply", "id": pid})
+                log.info("load rule: cooler profile %s", pid)
+            if pid:
+                out["lc_profile"] = pid
+            m = r.get("lc_mode")
+            if m and lc.cfg.get("mode") != m:
+                lc.configure({"mode": m})
+                log.info("load rule: cooler mode %s", m)
+            if m:
+                out["lc_mode"] = m
+        except (KeyError, ValueError) as e:
+            log.warning("load rule: liquid cooler: %s", e)
+        return out
+
+    def _activate(self, i, r, now):
+        if self.active is None:
+            self.saved = self._snapshot()
+            self.did = {}
+        if not self._apply(r.get("mode"), r.get("slot"), r.get("name") or f"rule {i + 1}"):
+            return
+        did = {}
+        if r.get("mode") is not None:
+            did["mode"] = (r["mode"], r.get("slot"))
+        if r.get("fan_boost"):
+            self._fan_boost(True)
+            did["fan_boost"] = True
+        did.update(self._apply_lc(r))
+        self.did.update(did)
+        self.active, self.false_since = i, None
+        self._note("on", r, now, mode=r.get("mode"), slot=r.get("slot"), lc_profile=did.get("lc_profile"),
+                   lc_mode=did.get("lc_mode"), fan_boost=did.get("fan_boost"))
+
+    def _return(self, r, now):
+        """Put back what the rules changed — each part only if it is still what the rule set."""
+        sv, did, lc = self.saved or {}, self.did, self._lc()
+        back = {}
+        cur = self._current()
+        if "mode" in did and sv.get("mode") and cur[0] == did["mode"][0]:
+            log.info("load rule %s over: back to mode %s", r.get("name") or "", sv["mode"][0])
+            self._apply(sv["mode"][0], sv["mode"][1], "back")
+            back["mode"], back["slot"] = sv["mode"]
+        if did.get("fan_boost") and not sv.get("fan_boost") and self.svc.power.option.get("FanBoostEnable"):
+            self._fan_boost(False)
+            back["fan_boost"] = False
+        if lc is not None:
+            try:
+                if did.get("lc_profile") and sv.get("lc_curves") and lc.cfg.get("profile") == did["lc_profile"] \
+                        and not LCV.modified(lc.cfg):
+                    lc.curves_restore(sv["lc_curves"])
+                    back["lc_profile"] = did["lc_profile"]
+                if did.get("lc_mode") and sv.get("lc_mode") and lc.cfg.get("mode") == did["lc_mode"]:
+                    lc.configure({"mode": sv["lc_mode"]})
+                    back["lc_mode"] = sv["lc_mode"]
+            except (KeyError, ValueError) as e:
+                log.warning("load rule: liquid cooler back: %s", e)
+        self._note("back" if back else "end", r, now, **back)
+        self.active, self.saved, self.did = None, None, {}
 
     def tick(self, m, now=None):
         if not self.svc.fan_control or not m or m.get("monitoring", "full") != "full":
@@ -657,42 +753,28 @@ class LoadRules:
                     continue
                 if self.holds(r, m):
                     self.since.setdefault(i, now)
-                    if hit is None and now - self.since[i] >= r["hold"]:
+                    if hit is None and now - self.since[i] >= r.get("hold", 0):
                         hit = i
                 else:
                     self.since.pop(i, None)
             try:
                 if hit is not None and hit != self.active:
-                    r = rules[hit]
-                    if self.active is None:
-                        self.prev = self._current()
-                    if self._apply(r["mode"], r.get("slot"), r.get("name") or f"rule {hit + 1}"):
-                        self.active, self.applied, self.false_since = hit, (r["mode"], r.get("slot")), None
-                        lcp = r.get("lc_profile") if self._apply_lc(r.get("lc_profile")) else None
-                        self._note("on", r, r["mode"], r.get("slot"), lcp, now)
+                    self._activate(hit, rules[hit], now)
                 elif self.active is not None and self.active < len(rules):
                     r = rules[self.active]
                     if self.active in self.since:
                         self.false_since = None
                     else:
                         self.false_since = self.false_since or now
-                        if not r.get("back"):
-                            self._note("end", r, now=now)
-                            self.active = None
-                            self.lc_prev = self.lc_applied = None
-                        elif now - self.false_since >= r["back_after"]:
-                            cur = self._current()
-                            if self.prev and cur[0] == self.applied[0]:
-                                log.info("load rule %s over: back to mode %s", r.get("name") or self.active + 1, self.prev[0])
-                                self._apply(self.prev[0], self.prev[1], "back")
-                                self._note("back", r, self.prev[0], self.prev[1], self.lc_applied, now)
-                            else:
-                                self._note("end", r, now=now)
-                            self._restore_lc()
-                            self.active = self.prev = self.applied = None
+                        back = r.get("back", "never")
+                        back = "after" if back is True else "never" if back is False else back
+                        if back == "never":
+                            self._note("end", r, now)
+                            self.active, self.saved, self.did = None, None, {}
+                        elif back == "while" or now - self.false_since >= r.get("back_after", 0):
+                            self._return(r, now)
                 elif self.active is not None:            # the rule was removed
-                    self.active = self.prev = self.applied = None
-                    self.lc_prev = self.lc_applied = None
+                    self.active, self.saved, self.did = None, None, {}
             except Exception:  # noqa: BLE001
                 log.exception("load rules")
 
@@ -704,4 +786,5 @@ class LoadRules:
                     "held": {str(i): round(now - t) for i, t in self.since.items()},
                     "back_in": (round(self.rules()[self.active]["back_after"] - (now - self.false_since))
                                 if self.active is not None and self.false_since and self.active < len(self.rules())
-                                and self.rules()[self.active].get("back") else None)}
+                                and self.rules()[self.active].get("back") in ("after", True) else None),
+                    "lc_modes": list(LC_RULE_MODES)}

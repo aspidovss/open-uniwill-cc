@@ -83,7 +83,7 @@ _uwccctl() {
                 COMPREPLY=($(compgen -W "static breathing breathing_multi wave cycle rainbow colorbreath colorwave" -- "$cur"))
             elif ((n == z + 1)) && [[ $op == light ]]; then COMPREPLY=($(compgen -W "0 1 2 3 4" -- "$cur"))
             fi ;;
-        rules) ((n == 1)) && COMPREPLY=($(compgen -W "list export import enable disable clear" -- "$cur")) ;;
+        rules) ((n == 1)) && COMPREPLY=($(compgen -W "list export import enable disable clear clear-log" -- "$cur")) ;;
         clevo)
             local a2=${w[2]}
             if ((n == 1)); then COMPREPLY=($(compgen -W "writes restore power fan antidust kb" -- "$cur"))

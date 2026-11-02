@@ -73,6 +73,56 @@ BUILTIN_PROFILES = {
                    "pump": [[0, 11]]}}},
 }
 DEFAULT_PROFILE = "default"
+# "Behaviour" (Automatic / Follow the laptop / Controller): kept in a cooler profile with the curves since 1.6.11
+BEHAVIOUR_KEYS = ("temp_source", "delay_up", "delay_down", "smooth", "pump_idle")
+TEMP_SOURCES = ("max", "cpu", "gpu")
+PUMP_IDLE = {"enabled": False, "off_below": 50, "off_after": 60, "on_above": 55, "on_after": 10, "min_run": 120}
+
+
+def _beh(up, down):
+    return {"temp_source": "max", "delay_up": up, "delay_down": down, "smooth": True, "pump_idle": dict(PUMP_IDLE)}
+
+
+BUILTIN_BEHAVIOUR = {"default": _beh(10, 30), "quiet": _beh(20, 60), "balanced": _beh(10, 30), "performance": _beh(5, 60)}
+
+
+def check_idle(pi):
+    out = {"enabled": bool(pi["enabled"])}
+    for k, lo, hi in (("off_below", 30, 85), ("on_above", 32, 95), ("off_after", 10, 900), ("on_after", 0, 120),
+                      ("min_run", 0, 1800)):
+        v = int(pi[k])
+        if not lo <= v <= hi:
+            raise ValueError(f"pump idle {k}: {lo}..{hi}")
+        out[k] = v
+    if out["on_above"] < out["off_below"] + 2:
+        raise ValueError("the pump must restart at least 2 °C above the temperature it stops at")
+    return out
+
+
+def check_behaviour(b, base=None):
+    """A (partial) behaviour -> a full, checked one (missing keys from `base`, else the Default profile's)."""
+    if not isinstance(b, dict):
+        raise ValueError("behaviour: an object expected")
+    out = copy.deepcopy(base or BUILTIN_BEHAVIOUR[DEFAULT_PROFILE])
+    if "temp_source" in b:
+        if b["temp_source"] not in TEMP_SOURCES:
+            raise ValueError("temperature source: max / cpu / gpu")
+        out["temp_source"] = b["temp_source"]
+    for k in ("delay_up", "delay_down"):
+        if k in b:
+            v = int(b[k])
+            if not 0 <= v <= 300:
+                raise ValueError("delay 0..300 s")
+            out[k] = v
+    if "smooth" in b:
+        out["smooth"] = bool(b["smooth"])
+    if "pump_idle" in b:
+        out["pump_idle"] = check_idle({**out["pump_idle"], **(b["pump_idle"] or {})})
+    return out
+
+
+def behaviour_of(cfg):
+    return {k: copy.deepcopy(cfg.get(k, BUILTIN_BEHAVIOUR[DEFAULT_PROFILE][k])) for k in BEHAVIOUR_KEYS}
 # "Follow the laptop" before 1.6.8: a fixed duty per laptop mode and the pump at 11 V — kept as flat per-mode curves
 OLD_LAPTOP_FAN = {"office": 40, "gaming": 60, "turbo": 90, "custom": 90}
 
@@ -254,8 +304,10 @@ ID_RE = re.compile(r"[^a-z0-9]+")
 
 def profiles(cfg):
     """Built-in and user profiles, built-in first."""
-    out = [{"id": k, "name": v["name"], "builtin": True, "curves": full(v["curves"])} for k, v in BUILTIN_PROFILES.items()]
-    out += [{"id": p["id"], "name": p["name"], "builtin": False, "curves": full(p["curves"])}
+    out = [{"id": k, "name": v["name"], "builtin": True, "curves": full(v["curves"]),
+            "behaviour": copy.deepcopy(BUILTIN_BEHAVIOUR[k])} for k, v in BUILTIN_PROFILES.items()]
+    out += [{"id": p["id"], "name": p["name"], "builtin": False, "curves": full(p["curves"]),
+             "behaviour": copy.deepcopy(p.get("behaviour"))}          # None: a profile of 1.6.8 / 1.6.10 (curves only)
             for p in cfg.get("profiles") or []]
     return out
 
@@ -272,9 +324,10 @@ def modified(cfg):
     if not pid:
         return True
     try:
-        return find(cfg, pid)["curves"] != full(cfg.get("curves"))
+        p = find(cfg, pid)
     except KeyError:
         return True
+    return p["curves"] != full(cfg.get("curves")) or bool(p["behaviour"] and p["behaviour"] != behaviour_of(cfg))
 
 
 def profile_action(cfg, b):
@@ -284,6 +337,8 @@ def profile_action(cfg, b):
     if a == "apply":
         p = find(cfg, str(b["id"]))
         cfg["curves"] = copy.deepcopy(p["curves"])
+        if p["behaviour"]:                         # the profile's Behaviour comes with its curves
+            cfg.update(copy.deepcopy(p["behaviour"]))
         cfg["profile"] = p["id"]
         return p["id"]
     if a in ("copy", "import"):
@@ -302,9 +357,11 @@ def profile_action(cfg, b):
             if not isinstance(cs, dict) or not cs.get("common"):
                 raise ValueError("a cooler profile needs curves with a common curve")
             curves = check_curves(cs, None, ALL_VOLTAGES)
+            beh = check_behaviour(b["behaviour"]) if b.get("behaviour") else None
         else:
             curves = full(cfg.get("curves"))
-        user.append({"id": pid, "name": name, "curves": curves})
+            beh = behaviour_of(cfg)
+        user.append({"id": pid, "name": name, "curves": curves, "behaviour": beh})
         if a == "copy":                           # the current curves now are this profile; an import is only added
             cfg["profile"] = pid
         return pid
@@ -316,6 +373,7 @@ def profile_action(cfg, b):
         raise KeyError(f"cooler profile {pid}")
     if a == "save":
         p["curves"] = full(cfg.get("curves"))
+        p["behaviour"] = behaviour_of(cfg)
         cfg["profile"] = pid
     elif a == "remove":
         user.remove(p)

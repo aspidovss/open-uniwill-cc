@@ -822,7 +822,20 @@ class LiquidCoolerUnit(unittest.TestCase):
     def test_cooler_profiles(self):
         lc = self.lc
         self.assertEqual(lc.status()["profile"], "default")
+        self.assertTrue(lc.status()["profile_modified"])                 # setUp changed the Behaviour (delays 0)
+        lc.configure({"delay_up": 10, "delay_down": 30, "smooth": True})
         self.assertFalse(lc.status()["profile_modified"])
+        lc.profile({"action": "apply", "id": "quiet"})                    # 1.6.11: the Behaviour comes with the profile
+        self.assertEqual((lc.cfg["delay_up"], lc.cfg["delay_down"]), (20, 60))
+        lc.configure({"temp_source": "gpu"})
+        self.assertTrue(lc.status()["profile_modified"])
+        pid = lc.profile({"action": "copy", "name": "GPU quiet"})
+        lc.profile({"action": "apply", "id": "default"})
+        self.assertEqual(lc.cfg["temp_source"], "max")
+        lc.profile({"action": "apply", "id": pid})
+        self.assertEqual((lc.cfg["temp_source"], lc.cfg["delay_up"]), ("gpu", 20))
+        lc.profile({"action": "remove", "id": pid})
+        lc.profile({"action": "apply", "id": "default"})
         from uwccd import lc_curves as LCV
         dflt = LCV.find(lc.cfg, "default")["curves"]["common"]           # Default = the factory tiers
         self.assertEqual(dflt["fan"], LCV.from_tiers(self.W.DEFAULT_TIERS)["fan"])
@@ -1958,6 +1971,58 @@ class LoadRulesUnit(unittest.TestCase):
         self.lr.tick(self.m(), now=0)
         self.lr.tick(self.m(), now=2)
         self.assertEqual(svc.power.option["OperatingMode"], 1)          # battery saver on and "performance" (2)
+
+    def test_immediate_while_fan_boost_and_cooler_mode(self):
+        """1.6.11: hold 0 (at once), return "while" the conditions hold, Fan Boost and the cooler's mode."""
+        from uwccd import lc_curves as LCV
+        pw = self.svc.power
+        pw.option["FanBoostEnable"] = 0
+        pw.set_fan_boost = lambda on: pw.option.__setitem__("FanBoostEnable", 1 if on else 0)
+
+        class Lc:
+            def __init__(c):
+                c.cfg = {"curves": LCV.full(None), "profile": "default", "mode": "auto"}
+
+            def curves_snapshot(c):
+                return dict(c.cfg["curves"]), c.cfg["profile"]
+
+            def curves_restore(c, snap):
+                c.cfg["curves"], c.cfg["profile"] = snap[0], snap[1]
+
+            def profile(c, b):
+                LCV.profile_action(c.cfg, b)
+
+            def configure(c, b):
+                c.cfg.update(b)
+        self.svc.liquid = Lc()
+        rules = self.A.check_load_rules([{"name": "hot", "conditions": [{"metric": "gpu_temp", "op": ">", "value": 80}],
+                                          "hold": 0, "mode": "keep", "fan_boost": True, "lc_mode": "high",
+                                          "back": "while", "hold_unit": "min"}])
+        self.assertEqual((rules[0]["mode"], rules[0]["back"], rules[0]["hold_unit"]), (None, "while", "min"))
+        self.svc.settings_store.set("load_rules", rules)
+        pw.option["OperatingMode"] = 1
+        self.lr.tick(self.m(gt=85), now=0)                       # at once
+        self.assertEqual((pw.option["FanBoostEnable"], self.svc.liquid.cfg["mode"], pw.option["OperatingMode"]), (1, "high", 1))
+        self.lr.tick(self.m(gt=70), now=1)                       # "while": back as soon as it stops
+        self.assertEqual((pw.option["FanBoostEnable"], self.svc.liquid.cfg["mode"]), (0, "auto"))
+        self.assertEqual([x["what"] for x in self.lr.status()["log"]], ["back", "on"])
+        self.lr.clear_log()
+        self.assertEqual(self.lr.status()["log"], [])
+        for t in range(150):                                     # the log keeps the last 100 events
+            self.lr._note("on", {"name": str(t)}, now=t)
+        self.assertEqual(len(self.lr.status()["log"]), 100)
+        with self.assertRaises(ValueError):                      # nothing to switch
+            self.A.check_load_rules([{"conditions": [{"metric": "cpu_temp", "op": ">", "value": 80}], "mode": "keep"}])
+        with self.assertRaises(ValueError):
+            self.A.check_load_rules([{"conditions": [{"metric": "cpu_temp", "op": ">", "value": 80}], "mode": 1,
+                                      "hold": 90000}])
+        never = self.A.check_load_rules([{"conditions": [{"metric": "cpu_temp", "op": ">", "value": 80}], "mode": 2,
+                                          "hold": 0, "back": "never"}])
+        self.svc.settings_store.set("load_rules", never)
+        pw.option["OperatingMode"] = 0
+        self.lr.tick(self.m(ct=85), now=200)
+        self.lr.tick(self.m(ct=50), now=300)
+        self.assertEqual(pw.option["OperatingMode"], 2)                # "never": stays
 
 if __name__ == "__main__":
     unittest.main()

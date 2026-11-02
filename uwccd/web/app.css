@@ -120,7 +120,19 @@ input[type=number]{width:70px}
 input[type=color]{width:42px;height:34px;border:1px solid var(--line);border-radius:8px;background:var(--bg1);padding:2px;cursor:pointer}
 .slider{display:grid;grid-template-columns:160px 1fr 50px;align-items:center;gap:12px;margin:10px 0}
 .slider output{text-align:right;color:var(--acc);font-weight:650}
-input[type=range]{accent-color:var(--acc);width:100%}
+/* sliders in the look of the app: a filled track (--p is set by app.js) and a round thumb like the curve points */
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:22px;margin:0;background:transparent;cursor:pointer;--p:50%}
+input[type=range]:focus{outline:none}
+input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:3px;background:linear-gradient(to right,var(--acc) 0,var(--acc) var(--p),var(--bg3) var(--p),var(--bg3) 100%)}
+input[type=range]::-moz-range-track{height:6px;border-radius:3px;background:var(--bg3)}
+input[type=range]::-moz-range-progress{height:6px;border-radius:3px;background:var(--acc)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;margin-top:-5px;border-radius:50%;background:var(--acc);border:2px solid #002b25;box-shadow:0 0 0 0 rgba(50,219,190,.25);transition:box-shadow .15s,transform .15s}
+input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--acc);border:2px solid #002b25}
+input[type=range]:hover::-webkit-slider-thumb{box-shadow:0 0 0 5px rgba(50,219,190,.18)}
+input[type=range]:active::-webkit-slider-thumb{transform:scale(1.12);box-shadow:0 0 0 7px rgba(50,219,190,.22)}
+input[type=range]:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 4px rgba(50,219,190,.45)}
+input[type=range]:disabled{cursor:default;opacity:.45}
+input[type=range]:disabled::-webkit-slider-thumb{background:var(--muted);border-color:var(--bg2)}
 /* fans */
 .curve{width:100%;height:auto;background:var(--bg1);border-radius:10px;margin:14px 0 6px;touch-action:none;user-select:none;-webkit-user-select:none}
 .curve .grid line{stroke:#1f2830}.curve text{fill:#6d7c88;font-size:11px}
@@ -384,7 +396,8 @@ svg.lc-curve .pt.pt-off.idle{fill:#101418;stroke:#ff8a3d;stroke-width:2.5}
 svg.lc-curve text.draglbl{font-size:16px}
 .lc-prof-h{margin:16px 0 6px}
 #lc-prof-hint{margin:6px 0 0}
-.au-log{list-style:none;margin:6px 0 0;padding:0;font-size:13px;max-height:220px;overflow:auto}.au-log li{padding:4px 0;border-bottom:1px solid var(--line)}
+.au-log{list-style:none;margin:6px 0 0;padding:0;font-size:13px}.au-log.all{max-height:360px;overflow:auto}
+.au-sep{margin-left:14px;color:var(--muted)}.au-log li{padding:4px 0;border-bottom:1px solid var(--line)}
 
 /* BetterRGB temperature curves */
 .temp-general{display:flex;align-items:center;flex-wrap:wrap;gap:16px 28px;padding:4px 0 16px}

@@ -932,16 +932,7 @@ class LiquidCooler:
 
     @staticmethod
     def _check_idle(pi):
-        out = {"enabled": bool(pi["enabled"])}
-        for k, lo, hi in (("off_below", 30, 85), ("on_above", 32, 95), ("off_after", 10, 900), ("on_after", 0, 120),
-                          ("min_run", 0, 1800)):
-            v = int(pi[k])
-            if not lo <= v <= hi:
-                raise ValueError(f"pump idle {k}: {lo}..{hi}")
-            out[k] = v
-        if out["on_above"] < out["off_below"] + 2:
-            raise ValueError("the pump must restart at least 2 °C above the temperature it stops at")
-        return out
+        return LCV.check_idle(pi)
 
     @staticmethod
     def _check_tiers(tiers):
@@ -1026,6 +1017,7 @@ class LiquidCooler:
             "pump_custom": bool(c.get("pump_custom")), "all_voltages": list(LCV.ALL_VOLTAGES),
             "max_fan_points": LCV.MAX_FAN_POINTS,
             "max_pump_steps": LCV.MAX_PUMP_STEPS,
-            "profiles": [{"id": p["id"], "name": p["name"], "builtin": p["builtin"], "curves": p["curves"]} for p in LCV.profiles(c)],
+            "profiles": [{"id": p["id"], "name": p["name"], "builtin": p["builtin"], "curves": p["curves"],
+                          "behaviour": p["behaviour"]} for p in LCV.profiles(c)],
             "profile": c.get("profile"), "profile_modified": LCV.modified(c),
         }

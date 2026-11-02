@@ -444,6 +444,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(200, r)
             elif path == "/api/clevo":                    # Control Center 3.0 / Clevo (experimental)
                 return self._json(200, s.clevo.command(b))
+            elif path == "/api/load-rules/clear-log":     # Automation: forget what the rules did
+                s.load_rules.clear_log()
+                s.emit("status", {})
+                return self._json(200, s.load_rules.status())
             elif path == "/api/load-rules":               # Automation: mode by power / temperature / load
                 from .automation import check_load_rules
                 s.settings_store.set("load_rules", check_load_rules(b.get("rules", [])))
