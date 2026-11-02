@@ -1,10 +1,7 @@
 # Changelog
 
-## 1.6.10
+## 1.6.11
 
-- **Mode selection: the profile settings apply by themselves** — a slider when it is released, a switch at once (several
-  quick changes become one write). *Apply the settings as soon as they change* (on by default) turns it off: then the
-  Apply button is back. `uwccctl set profile_autoapply on|off`.
 - **Automatic profile switching:**
   - times in **s / min / h** (up to 24 h); *for 0* switches **at once**, on the first sample that meets the conditions;
   - **Then:** *stay (do not return)*, *return as soon as the condition stops*, or *return when it has not held for N*;
@@ -18,6 +15,12 @@
   (Quiet: slower, Performance: quicker up, slower down). A profile picked in the list shows its Behaviour read-only;
   profile files carry it too. Profiles saved by 1.6.8–1.6.10 keep the current Behaviour when applied.
 - **Sliders** in the look of the app: a filled track and a round thumb like the points of the charts.
+
+## 1.6.10
+
+- **Mode selection: the profile settings apply by themselves** — a slider when it is released, a switch at once (several
+  quick changes become one write). *Apply the settings as soon as they change* (on by default) turns it off: then the
+  Apply button is back. `uwccctl set profile_autoapply on|off`.
 
 ## 1.6.9
 
