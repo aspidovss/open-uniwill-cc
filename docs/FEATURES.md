@@ -1,6 +1,6 @@
 # Features
 
-**English** · details of what open-uniwill-cc does and how (EC registers, ACPI methods, WMI events).
+**English** · [Русский](FEATURES.ru.md) · details of what open-uniwill-cc does and how (EC registers, ACPI methods, WMI events).
 Windows differences: [README.windows.md](../README.windows.md#differences-from-linux). Protocol: [PROTOCOL.md](PROTOCOL.md) (Russian).
 
 ## EC access without third-party drivers
@@ -32,6 +32,10 @@ The original service has two different mode managers and picks one by the projec
 
 In Custom mode the Fn mode key steps through the five slots. Each slot can be reset to the factory values (its curve too).
 
+**Profile settings apply by themselves** (1.6.10): on the mode page a slider is written when it is released, a switch at
+once; several quick changes become one write. *Apply the settings as soon as they change* (on by default) turns this
+off and brings the *Apply* button back. `uwccctl set profile_autoapply on|off`.
+
 **Super performance** (a switch of its own, works in any mode; `LoadOverClockingValue` of the original): fan mode byte
 `0x751 = 0x10` (Turbo) with the Custom flag `0x726` bit 7 cleared, the factory `DefaultFanTable_Turbo`, cTGP = maximum +
 Dynamic Boost with Dynamic Boost off; the PL limits of the current mode stay. **RAM overclocking** (also its own
@@ -48,10 +52,13 @@ WhisperMode.
 back to the previous mode when it has not held for 60 s"*, *"CPU power below 15 W for 60 s → Office"* or *"CPU above
 90 °C or GPU above 85 °C for 20 s → Gaming"*. Up to 3 conditions per rule (and / or) on CPU, GPU or CPU + GPU power,
 CPU / GPU temperature and load, battery charge and the power source (mains / battery); the target is a mode and a
-profile slot (or the current one, or *keep the mode*), Fan Boost, and the liquid cooler's mode and profile. Times in
-s / min / h, *for 0* = at once; then *stay*, *return as soon as the condition stops* or *return after N*. The card
-lists what the rules did (the last 10, *Show all*: up to 100 kept since the service started; *Clear*). Rules are checked from
-the top; the first that held long enough is applied once. While a rule is active, App binding and the power-source
+profile slot (or the current one, or *keep the mode*), **Fan Boost** (*keep it / turn on / turn off*), and the liquid
+cooler's mode (Automatic … Off, or *keep*) and profile. A rule must change at least one of them. Times in s / min / h
+(up to 24 h), *for 0* = at once, on the first sample that meets the conditions. **Then:** *stay (do not return)*,
+*return as soon as the condition stops*, or *return when it has not held for N* (the time is asked only for this
+choice). On the return each item the rule changed is put back only if nobody changed it meanwhile. The card lists what
+the rules did (the last 10, *Show all*: up to 100 kept since the service started; *Clear*, `uwccctl rules clear-log`).
+Rules are checked from the top; the first that held long enough is applied once. While a rule is active, App binding and the power-source
 settings do not change the mode. Needs full monitoring. `uwccctl rules …`.
 
 
@@ -76,6 +83,10 @@ settings do not change the mode. Needs full monitoring. `uwccctl rules …`.
 * **Discrete GPU** card on the Information page: whether the NVIDIA GPU sleeps and which programs keep it awake.
   The monitor no longer calls `nvidia-smi` while the GPU is in runtime suspend (that used to wake it every 2 s and drain the battery).
 * **Fan curve presets** (Factory / Quiet = factory × 0.8, the OEM rule for its quiet table / Maximum) — loaded into the editor, saved with *Save*.
+* **Fan settings editor:** the *Off, °C* row (where a level drops back) is hidden — it follows the next level's *On*
+  by itself, keeping the distance the table had; *Show the return temperatures* brings it back. A red dot marks the
+  fan's current temperature and speed (real rpm in the label); dragging a point on any chart shows its temperature
+  and value next to it.
 * **Webcam** switch (Settings → Switches): the camera is de-authorized on the USB bus, so no program can open it.
 
 ## Liquid cooling
@@ -90,7 +101,7 @@ the system sleeps the cooler is put to sleep. Needs `python3-bleak` (installed b
 | **Curves** (1.6.8): a fan curve (2..17 points, linear between them) and pump steps (one draggable point per allowed voltage, down only 3 °C below a step; the *Off* point is *Stop the pump when it is cool*), edited by dragging; a red dot shows the current temperature and value. One **common** curve (Automatic, and Follow the laptop for modes without their own); in Follow the laptop each mode — Office, Gaming, Turbo, Custom — can have **its own curve**; a change of the laptop's mode switches the curve at once (the fan still ramps) | |
 | **Own pump voltage limits** (after a risk warning): choose which of 7 / 8 / 11 / 12 V may be used — the cooler firmware knows only these and cannot report what a pump supports; a voltage outside the choice becomes the nearest allowed one in every mode | |
 | **Controller** mode: the curves are shown but cannot be edited (the EC drives the cooler; the common curve is used only when the EC publishes no targets) | |
-| **Cooler profiles**: Default (factory steps), Quiet, Balanced, Performance and your own (Apply / Save / Copy / Remove) — a profile holds the common and the per-mode curves | |
+| **Cooler profiles** (block *Profiles* under the charts): Default (factory steps), Quiet, Balanced, Performance and your own — *Apply*, *Save*, *New…* (the current curves as a new profile), *Remove*, *Export* / *Import…* (a JSON file). A profile holds the common and the per-mode curves **and the Behaviour** (temperature source, up / down delays, smoothing, stopping the pump when cool); a profile chosen in the list is shown on the charts and its Behaviour read-only until *Apply*. Built-in Behaviour: Default and Balanced 10 s up / 30 s down, Quiet 20 / 60 s, Performance 5 / 60 s. Profiles saved by 1.6.8–1.6.10 have no Behaviour and keep the current one | |
 | Lighting: static, breathing, rainbow, breathing rainbow; Mk2 also spiral, rotating rainbow, colour wave | `0x1E` / `0x33` |
 | Coolant flow check every 15 s with a desktop alert when the pump runs but nothing circulates | `0x32` |
 | Coolant filling cycle (8 pump pulses, ~70 s) | `0x19` |
@@ -104,7 +115,7 @@ uwccctl lc mode auto                 # auto | laptop | ec | manual | high | medi
 uwccctl lc manual 60 8               # fan 60 %, pump 8 V
 uwccctl lc curve common fan 40:25 60:45 80:80 95:100 pump 0:8 70:11
 uwccctl lc curve turbo flat 90       # Follow the laptop: Turbo at 90 %;  uwccctl lc curve turbo off
-uwccctl lc profile apply quiet       # cooler profiles: list | apply | save | copy NAME | remove | rename
+uwccctl lc profile apply quiet       # cooler profiles: list | apply | save | copy NAME | remove | rename | export | import
 uwccctl lc rgb 00ffff breathe        # colour and effect;  uwccctl lc rgb off
 uwccctl lc prime                     # filling cycle
 ```
@@ -161,7 +172,7 @@ to the hardware differs (see the last section).
 | *Not in the original:* 17 BetterRGB effects (Wave, Sparkle, Lightning, Flame, Rain, Matrix, Quicksand, Current, Screen ambient, CPU / GPU temperature …) | ✅ | ✅ | frames from `uwccd/lighting/fx.py` (from BetterRGB, MIT): picture 12h on per-key keyboards, zone colours on four-zone ones — [LIGHTING.md](LIGHTING.md) |
 | *Not in the original:* transitions, white calibration, top-row bar, frame rate on AC / battery | ✅ | ✅ | `uwccd/lighting/fx.py`; key presses: Linux `/dev/input`, Windows the tray app; screen: Windows tray app, Linux agent (X11) |
 | LED colour correction per keyboard type / LED vendor | ✅ | ✅ | `WKDColor.cheatRGB_*` (`uwccd/lighting/oem`, proprietary) |
-| Chassis light bar (hinge / base / logo) | ✅ | ✅ | HIDLightbar4, HID 0x7000 |
+| Chassis light bar (hinge / base / logo) | ✅ | ✅ | HIDLightbar4, HID `048D:7000`; `048D:7001` (XMG NEO 16 E25, experimental) |
 | Single-colour backlight (on/off, level) | ✅ | ✅ | EC `0x78C` |
 | Backlight auto-off on inactivity | ✅ | ✅ | Linux: `/dev/input` events; Windows: idle time of the tray app |
 | Windows key lock, Fn Lock | ✅ | ✅ | EC `0x767/0x768`, `0x74E`, NVRAM `FnKeyStatus` |
@@ -173,7 +184,8 @@ to the hardware differs (see the last section).
 | Battery protection modes (full / balanced / stationary) | ✅ | ✅ | EC `0x7A6` bits 4–5 |
 | Custom charge limits | ✅ | ✅ | EC `0x7B9`, `0x7D0`, NVRAM `Charge*Limit` |
 | Type-C charging priority | ✅ | ✅ | EC `0x7CC` bit 7 |
-| Automation: mode per power source, overheating alerts, follow the power profile | ✅ | ✅ | power-profiles-daemon (Linux) / Windows power mode |
+| Automation: mode per power source, overheating alerts, follow the power profile (both ways) | ✅ | ✅ | power-profiles-daemon (Linux) / Windows power mode |
+| *Not in the original:* automatic profile switching by power, temperature, load, battery, power source, system profile | ✅ | ✅ | `uwccd/automation.py`, needs full monitoring |
 | App binding | ✅ | ✅ | process watch |
 | Liquid cooling over Bluetooth (BT Cooling) | ✅ | ✅ | `bleak` (BlueZ / WinRT); see above |
 | Liquid cooler firmware update (DFU) | ❌ | ❌ | not done on purpose: a failed update can leave the cooler unusable |

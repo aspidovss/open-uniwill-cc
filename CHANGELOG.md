@@ -14,6 +14,8 @@
   with the curves: *Save* / *New…* store it, applying a profile sets both, the built-in profiles have their own
   (Quiet: slower, Performance: quicker up, slower down). A profile picked in the list shows its Behaviour read-only;
   profile files carry it too. Profiles saved by 1.6.8–1.6.10 keep the current Behaviour when applied.
+- **Help:** *Features and how they work* in Russian (`docs/FEATURES.ru.md`); the features page and the command line
+  reference describe the 1.6.10–1.6.11 additions (rule fields, `rules clear-log`, `profile_autoapply`, profile Behaviour).
 - **Sliders** in the look of the app: a filled track and a round thumb like the points of the charts.
 
 ## 1.6.10

@@ -1362,7 +1362,7 @@ class DriverCheckUnit(unittest.TestCase):
 class MarkdownHelpUnit(unittest.TestCase):
     def test_docs_exist(self):
         for f in ("EC/Platforms.md", "EC/Platforms.ru.md", "EC/OEM-driver.md", "EC/OEM-driver.ru.md", "EC/WMI-config.md",
-                  "EC/WMI-vs-Driver.md", "EC/Registers.md", "EC/README.md", "FEATURES.md", "CLI.md", "CLI.ru.md",
+                  "EC/WMI-vs-Driver.md", "EC/Registers.md", "EC/README.md", "FEATURES.md", "FEATURES.ru.md", "CLI.md", "CLI.ru.md",
                   "LIGHTING.md", "LIGHTING.ru.md"):
             self.assertTrue(os.path.isfile(os.path.join(ROOT, "docs", f)), f)
 

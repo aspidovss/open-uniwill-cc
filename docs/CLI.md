@@ -137,6 +137,7 @@ Control Center 3.0 / Clevo (experimental): `uwccctl clevo …` — see [CLEVO.md
 | `winkey_lock` `fn_lock` `usb_charger` `touchpad_toggle` `touchpad_enabled` `ac_recovery` `dgpu_direct` `bluetooth` `wifi` `webcam` `osd` `lc_hwoc` `kb_picture_modes` `tcc_extended` `history_record` `update_check` `debug` `mem_oc` `super_performance` | on / off |
 | `kb_timeout` | seconds 0..3600, 0 = never |
 | `alerts` `overheat_boost` `kb_off_on_battery` `ppd_sync` `ppd_follow` | on / off |
+| `profile_autoapply` | on / off: profile settings in the window apply as soon as they change (default on) |
 | `ppd_modes` | the system power profile → the laptop's mode, e.g. `power-saver=office,balanced=keep,performance=turbo` |
 | `cpu_alert` `gpu_alert` | 60..105 °C |
 | `mode_on_ac` | `keep`, `previous` or a mode |
@@ -147,8 +148,23 @@ Control Center 3.0 / Clevo (experimental): `uwccctl clevo …` — see [CLEVO.md
 
 App binding: `apps`, `apps add PROCESS MODE`, `apps remove PROCESS`, `apps enable|disable PROCESS`.
 
-Automatic profile switching (power / temperature / load): `rules` (list and state), `rules export FILE`,
-`rules import FILE` (JSON, replaces the rules), `rules enable N` / `disable N` / `clear` — see `uwccctl help rules`.
+Automatic profile switching: `rules` (list, state and what the rules did), `rules export FILE`,
+`rules import FILE` (JSON, replaces the rules), `rules enable N` / `disable N` / `clear`, `rules clear-log` (empty the
+log of what the rules did) — see `uwccctl help rules`.
+
+| Rule field (JSON) | Values |
+|---|---|
+| `conditions` | 1..3 of `{"metric", "op", "value"}`; `metric`: `cpu_power` `gpu_power` `total_power` (W), `cpu_temp` `gpu_temp` (°C), `cpu_load` `gpu_load` `battery` (%), `ac` (1 mains / 0 battery), `sys_profile` (0 power saver / 1 balanced / 2 performance), `saver` (Windows battery saver 1 / 0); `op` `>` / `<` (`=` for `ac`, `sys_profile`, `saver`) |
+| `join` | `and` / `or` |
+| `hold`, `hold_unit` | seconds 0..86400 (0 = at once); `s` / `min` / `h` — only how the window shows it |
+| `mode`, `slot` | 0 office, 1 gaming, 2 turbo, 3 custom, or `null` = keep the mode; slot 0..4 or `null` = the current one |
+| `fan_boost` | `keep` / `on` / `off` |
+| `lc_mode` | `auto` `laptop` `ec` `manual` `high` `medium` `low` `off`, or `null` = keep |
+| `lc_profile` | cooler profile ID, or `null` = keep |
+| `back`, `back_after`, `back_unit` | `never` (stay), `while` (return as soon as the conditions stop), `after` (return when they have not held for `back_after` s) |
+
+A rule must change at least one of mode, Fan Boost, cooler mode or cooler profile. Older files (`back: true/false`,
+`fan_boost: true/false`) are still read.
 
 ## Liquid cooler
 
@@ -162,7 +178,7 @@ Automatic profile switching (power / temperature / load): `rules` (list and stat
 | `lc curve KEY fan T:D ... [pump T:V ...]` | set a curve: fan 2..17 points (°C:%), pump 1..4 steps (from °C:V, 7/8/11 V: e.g. `pump 0:7 50:8 70:11`); the pump is stopped by `lc idle` (the Off point) |
 | `lc curve KEY flat FAN [PUMP]` / `lc curve MODE off` | a flat curve / the mode uses the common curve |
 | `lc profile [list\|apply ID\|save ID\|copy NAME\|remove ID\|rename ID NAME]` | cooler profiles (built-in: default, quiet, balanced, performance) |
-| `lc profile export ID [FILE]` / `lc profile import FILE [NAME]` | a cooler profile as a JSON file (`{"name", "curves"}`); an import is added as an own profile |
+| `lc profile export ID [FILE]` / `lc profile import FILE [NAME]` | a cooler profile as a JSON file (`{"name", "curves", "behaviour"}`); an import is added as an own profile; a profile applies its curves and its Behaviour (`temp_source`, delays, `smooth`, pump stop) |
 | `lc tiers BELOW:FAN:PUMP ...` | old tier form (1.6.7), becomes the common curve |
 | `lc pump-limits 7,8,11,12 --accept-risks` / `lc pump-limits off` | own pump voltages (of 7/8/11/12 V) / back to 7–11 V |
 | `lc set KEY VALUE` | `temp_source max\|cpu\|gpu`, `delay_up`/`delay_down` 0..300 s, `smooth` `notify_flow` `flow_guard` `boost_fan` `boost_pump` on/off |

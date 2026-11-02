@@ -138,6 +138,7 @@ Control Center 3.0 / Clevo (экспериментально): `uwccctl clevo �
 | `winkey_lock` `fn_lock` `usb_charger` `touchpad_toggle` `touchpad_enabled` `ac_recovery` `dgpu_direct` `bluetooth` `wifi` `webcam` `osd` `lc_hwoc` `kb_picture_modes` `tcc_extended` `history_record` `update_check` `debug` `mem_oc` `super_performance` | on / off |
 | `kb_timeout` | секунды 0..3600, 0 = никогда |
 | `alerts` `overheat_boost` `kb_off_on_battery` `ppd_sync` `ppd_follow` | on / off |
+| `profile_autoapply` | on / off: настройки профиля в окне применяются сразу после изменения (по умолчанию on) |
 | `ppd_modes` | системный профиль питания → режим ноутбука, например `power-saver=office,balanced=keep,performance=turbo` |
 | `cpu_alert` `gpu_alert` | 60..105 °C |
 | `mode_on_ac` | `keep`, `previous` или режим |
@@ -148,9 +149,23 @@ Control Center 3.0 / Clevo (экспериментально): `uwccctl clevo �
 
 Привязка к программам: `apps`, `apps add ПРОЦЕСС РЕЖИМ`, `apps remove ПРОЦЕСС`, `apps enable|disable ПРОЦЕСС`.
 
-Автоматическое переключение профилей (мощность / температура / загрузка): `rules` (список и состояние),
-`rules export ФАЙЛ`, `rules import ФАЙЛ` (JSON, заменяет правила), `rules enable N` / `disable N` / `clear` —
-см. `uwccctl help rules`.
+Автоматическое переключение профилей: `rules` (список, состояние и что сделали правила), `rules export ФАЙЛ`,
+`rules import ФАЙЛ` (JSON, заменяет правила), `rules enable N` / `disable N` / `clear`, `rules clear-log` (очистить
+журнал того, что сделали правила) — см. `uwccctl help rules`.
+
+| Поле правила (JSON) | Значения |
+|---|---|
+| `conditions` | 1..3 условия `{"metric", "op", "value"}`; `metric`: `cpu_power` `gpu_power` `total_power` (Вт), `cpu_temp` `gpu_temp` (°C), `cpu_load` `gpu_load` `battery` (%), `ac` (1 сеть / 0 батарея), `sys_profile` (0 энергосбережение / 1 сбалансированный / 2 производительность), `saver` (экономия заряда Windows 1 / 0); `op` `>` / `<` (`=` для `ac`, `sys_profile`, `saver`) |
+| `join` | `and` / `or` |
+| `hold`, `hold_unit` | секунды 0..86400 (0 = сразу); `s` / `min` / `h` — только то, как время показывает окно |
+| `mode`, `slot` | 0 office, 1 gaming, 2 turbo, 3 custom или `null` = не менять режим; слот 0..4 или `null` = текущий |
+| `fan_boost` | `keep` / `on` / `off` (не менять / включить / выключить) |
+| `lc_mode` | `auto` `laptop` `ec` `manual` `high` `medium` `low` `off` или `null` = не менять |
+| `lc_profile` | ID профиля охладителя или `null` = не менять |
+| `back`, `back_after`, `back_unit` | `never` (не возвращать), `while` (вернуть, как только условие перестанет выполняться), `after` (вернуть, когда условие не выполняется `back_after` с) |
+
+Правило должно менять хотя бы что-то одно: режим, Fan Boost, режим или профиль охладителя. Старые файлы
+(`back: true/false`, `fan_boost: true/false`) по-прежнему читаются.
 
 ## Водяное охлаждение
 
@@ -164,7 +179,7 @@ Control Center 3.0 / Clevo (экспериментально): `uwccctl clevo �
 | `lc curve КЛЮЧ fan T:D ... [pump T:V ...]` | задать кривую: вентилятор 2..17 точек (°C:%), помпа 1..4 ступени (с °C:В, 7/8/11 В: например `pump 0:7 50:8 70:11`); помпу останавливает `lc idle` (точка «Выкл») |
 | `lc curve КЛЮЧ flat ВЕНТ [ПОМПА]` / `lc curve РЕЖИМ off` | ровная кривая / режим берёт общую кривую |
 | `lc profile [list\|apply ID\|save ID\|copy ИМЯ\|remove ID\|rename ID ИМЯ]` | профили охладителя (встроенные: default, quiet, balanced, performance) |
-| `lc profile export ID [ФАЙЛ]` / `lc profile import ФАЙЛ [ИМЯ]` | профиль охладителя как файл JSON (`{"name", "curves"}`); импорт добавляется как свой профиль |
+| `lc profile export ID [ФАЙЛ]` / `lc profile import ФАЙЛ [ИМЯ]` | профиль охладителя как файл JSON (`{"name", "curves", "behaviour"}`); импорт добавляется как свой профиль; профиль применяет кривые и «Поведение» (`temp_source`, задержки, `smooth`, остановку помпы) |
 | `lc tiers НИЖЕ:ВЕНТ:ПОМПА ...` | старая форма ступеней (1.6.7), превращается в общую кривую |
 | `lc pump-limits 7,8,11,12 --accept-risks` / `lc pump-limits off` | свои напряжения помпы (из 7/8/11/12 В) / обратно 7–11 В |
 | `lc set КЛЮЧ ЗНАЧЕНИЕ` | `temp_source max\|cpu\|gpu`, `delay_up`/`delay_down` 0..300 с, `smooth` `notify_flow` `flow_guard` `boost_fan` `boost_pump` on/off |

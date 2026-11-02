@@ -3079,7 +3079,7 @@ const HELP_PAGES = [
   { id: "registers", name: "EC registers", en: "EC/Registers.md", ru: "EC/Registers.ru.md" },
   { id: "ec-tool", name: "EC test tool (ec_tool.py)", en: "EC/README.md", ru: "EC/README.ru.md" },
   { group: "Program" },
-  { id: "features", name: "Features and how they work", en: "FEATURES.md", ru: "FEATURES.md" },
+  { id: "features", name: "Features and how they work", en: "FEATURES.md", ru: "FEATURES.ru.md" },
   { id: "lighting", name: "BetterRGB keyboard effects", en: "LIGHTING.md", ru: "LIGHTING.ru.md" },
   { id: "clevo", name: "Control Center 3.0 / Clevo (experimental)", en: "CLEVO.md", ru: "CLEVO.ru.md" },
   { id: "cli", name: "Command line (uwccctl)", en: "CLI.md", ru: "CLI.ru.md" },
