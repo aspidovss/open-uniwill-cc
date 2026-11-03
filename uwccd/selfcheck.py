@@ -286,7 +286,7 @@ class SelfCheck:
         try:
             f = svc.monitor.fans()
             fan_ok = all(0 <= f.get(k, 0) <= 9000 for k in ("cpu_rpm", "gpu_rpm")) and \
-                all(0 <= f.get(k, 0) <= 100 for k in ("cpu_duty", "gpu_duty"))
+                all(0 <= (f.get(k) or 0) <= 100 for k in ("cpu_duty", "gpu_duty"))
             add(_item("fans", "registers", "Fan readings", "ok" if fan_ok else "warn",
                       f"CPU {f.get('cpu_rpm')} rpm / {f.get('cpu_duty')} %" +
                       (f", GPU {f.get('gpu_rpm')} rpm / {f.get('gpu_duty')} %" if "gpu_rpm" in f else "")))

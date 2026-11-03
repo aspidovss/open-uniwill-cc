@@ -27,7 +27,7 @@ from . import regs as R
 
 log = logging.getLogger("uwccd.report")
 
-SECTIONS = ("system", "platform", "ec", "bios", "acpi", "firmware", "selfcheck", "clevo", "oem_registry", "oem_software", "oem_files",
+SECTIONS = ("system", "platform", "ec", "bios", "acpi", "firmware", "selfcheck", "clevo", "leishen", "oem_registry", "oem_software", "oem_files",
             "oem_files_full", "power", "lighting", "nvidia", "sensors", "original", "cooler", "log", "settings")
 DEFAULT_SECTIONS = tuple(s for s in SECTIONS if s != "oem_files_full")      # the complete OEM folders are large
 PRIVATE = ("serial", "uuid", "mac", "names", "apps")
@@ -312,7 +312,9 @@ def summary(svc):
             "keyboard": f"{kb.get('kind')} {dev.get('pid', '')} fw {dev.get('fw', '')}".strip(),
             "fan_control": getattr(svc, "fan_control", None), "support": getattr(svc.pf, "support", None),
             "clevo": (f"Control Center 3.0 / Clevo via {svc.clevo.dchu.name}" if getattr(svc, "clevo", None)
-                      and svc.clevo.present else "no")}
+                      and svc.clevo.present else "no"),
+            "leishen": (f"Leishen / Thunderobot via {svc.leishen.wmi.name}" if getattr(svc, "leishen", None)
+                        and svc.leishen.present else "no")}
 
 
 class Job:
@@ -411,6 +413,8 @@ def build(svc, sections=DEFAULT_SECTIONS, private=()):
         "original": original_info, "cooler": lambda: cooler_info(svc, private),
         "settings": lambda: settings_info(svc, private),
         "clevo": lambda: clevo_diag.collect(svc),                       # Control Center 3.0 / Clevo, every laptop
+        "leishen": lambda: (svc.leishen.diagnostics() if getattr(svc, "leishen", None)       # Leishen / Thunderobot
+                            else {"present": False}),
     }
     from . import report_oem as O
     from .clevo import diag as clevo_diag
@@ -466,6 +470,11 @@ def build(svc, sections=DEFAULT_SECTIONS, private=()):
             txt.append("  capability words: " + ", ".join(f"{k}={v}" for k, v in m["caps_raw"].items()))
         for f in m.get("fans") if isinstance(m.get("fans"), list) else []:
             txt.append(f"  fan {f['fan']}: {f['rpm']} rpm, {f['duty']} %, {f['temp']} °C")
+    le = data.get("leishen")
+    if isinstance(le, dict) and le.get("present"):
+        txt += ["", "Leishen / Thunderobot (experimental)", "-" * 36]
+        for f, v in (le.get("get") or {}).items():
+            txt.append(f"  get {f}: " + (" ".join(f"{k}={x}" for k, x in v.items()) if isinstance(v, dict) else str(v)))
     txt += ["", f"sections:         {', '.join(sections)}",
             f"private included: {', '.join(private) or 'none'}", "", f"Send to: {CONTACT} or GitHub issues."]
     buf = io.BytesIO()

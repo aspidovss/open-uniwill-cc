@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.6.11_Leishen_dev (test build)
+
+- **Leishen / Thunderobot (experimental, separate module `uwccd/leishen`)** for Quanta laptops with Leishen
+  ControlCenter 3.x (Thunderobot R16, board NLY), which have neither the Uniwill nor the Clevo interface. Through the
+  firmware's WMI block `RW_GMWMI` (GUID `644C5791-…`, the WMI driver of Windows; Linux: `acpi_call`):
+  - CPU / GPU temperature and 2–3 fan speeds, also on the Monitor page and in the history;
+  - power mode High performance / Gaming / Office (with the firmware's NVIDIA power limits);
+  - fans: automatic, fixed speed or a curve run by the service, as Leishen ControlCenter does; automatic again when the
+    service stops;
+  - Windows key lock, touchpad, RGB keyboard light (zone, effect, level, colour), the Fn mode key (optional);
+  - commands only after *Allow commands*; the diagnostic report has the raw answers of the firmware.
+  Page *Leishen (experimental)*, `uwccctl leishen …`, [docs/LEISHEN.md](docs/LEISHEN.md). Written from the firmware's
+  ACPI tables and how Leishen ControlCenter uses them; not tested on such a laptop yet.
+
 ## 1.6.11
 
 - **Automatic profile switching:**

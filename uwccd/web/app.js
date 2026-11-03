@@ -158,9 +158,14 @@ function render() {
     const pm = (S.clevo && S.clevo.state || {}).power_mode;
     pill.textContent = pm ? t((CLEVO_POWER.find(x => x[0] === pm) || [, pm])[1]) : "—"; pill.className = "modepill";
   }
+  if (S.ec_access && S.ec_access.reason === "leishen_only") {    // Leishen / Thunderobot laptop: no Uniwill EC
+    $("#brand-sub").textContent = "Leishen · Thunderobot";
+    const lm = S.leishen && S.leishen.mode;
+    pill.textContent = lm ? t((LEISHEN_MODES.find(x => x[0] === lm) || [, lm])[1]) : "—"; pill.className = "modepill";
+  }
   renderModes(); renderFanPage(); renderLiquid(); renderLight(); renderBattery(); renderSwitches(); renderBinding(); renderInfo(); renderAuto(); renderAbout(); renderReportCard();
   renderHistSeg(); drawHistory();
-  renderClevo(); renderDriver(); renderEcBanner(); applyFeatures(); renderBusy(S.busy || []); renderMonOff(); setupCollapsible();
+  renderClevo(); renderLeishen(); renderDriver(); renderEcBanner(); applyFeatures(); renderBusy(S.busy || []); renderMonOff(); setupCollapsible();
 }
 
 // ---------------------------------------------------------------- monitor
@@ -209,11 +214,11 @@ function onMonitor(m) {
     g.append(gauge(t("Memory"), m.memory.usage, "%", 100, `${(m.memory.used_mb / 1024).toFixed(1)} / ${(m.memory.total_mb / 1024).toFixed(1)} ${t("GB")}`));
   }
   const fb = $("#fan-bars"); fb.innerHTML = "";
-  const bar = (cls, name, duty, rpm) => h("div", { class: "bar " + cls },
-    h("div", { class: "top" }, h("span", {}, name), h("span", { class: "muted" }, `${duty}% · ${rpm} ${t("rpm")}`)),
-    h("div", { class: "track" }, h("div", { class: "fill", style: `width:${Math.min(100, duty)}%` })));
+  const bar = (cls, name, duty, rpm) => h("div", { class: "bar " + cls },       // duty null: only rpm known (Leishen)
+    h("div", { class: "top" }, h("span", {}, name), h("span", { class: "muted" }, duty == null ? `${rpm} ${t("rpm")}` : `${duty}% · ${rpm} ${t("rpm")}`)),
+    h("div", { class: "track" }, h("div", { class: "fill", style: `width:${Math.min(100, duty == null ? Math.round((rpm || 0) / 60) : duty)}%` })));
   fb.append(bar("cpu", t("Processor fan"), m.fans.cpu_duty, m.fans.cpu_rpm));
-  if (m.fans.gpu_duty != null) fb.append(bar("gpu", t("Graphics card fan"), m.fans.gpu_duty, m.fans.gpu_rpm));
+  if (m.fans.gpu_duty != null || m.fans.gpu_rpm != null) fb.append(bar("gpu", t("Graphics card fan"), m.fans.gpu_duty, m.fans.gpu_rpm));
   fb.append(h("p", { class: "muted tiny" }, S ? `${t("Active table:")} ${TABLE_LABEL[S.power.current_table] || "—"}${S.power.fan_boost ? " · " + t("Fan Boost") : ""}` : ""));
   $("#st-mem").innerHTML = ""; $("#st-mem").append(h("h3", {}, t("Memory")), h("div", { class: "big" }, `${m.memory.usage}%`), h("div", { class: "sub" }, t("{0} of {1} GB", (m.memory.used_mb / 1024).toFixed(1), (m.memory.total_mb / 1024).toFixed(1))));
   $("#st-net").innerHTML = ""; $("#st-net").append(h("h3", {}, t("Network")), h("div", { class: "big" }, `↓ ${fmtRate(m.net.down_kbs)}`), h("div", { class: "sub" }, `↑ ${fmtRate(m.net.up_kbs)}`));
@@ -1037,6 +1042,105 @@ function renderClevo() {
     h("p", { class: "muted tiny" }, t("A diagnostic report (Information) includes these values: it helps to test this module."))));
 }
 $(`#nav a[data-page="clevo"]`)?.addEventListener("click", () => setTimeout(clevoPoll, 50));
+
+// ---------------------------------------------------------------- Leishen / Thunderobot (experimental, uwccd/leishen)
+const LEISHEN_MODES = [["performance", "High performance", "Highest CPU and GPU power"], ["gaming", "Gaming", "Balanced"],
+  ["office", "Office", "Quiet, lower power"]];
+const LEISHEN_FAN = { cpu: "Processor fan", gpu: "Graphics card fan", sys: "System fan" };
+const LEISHEN_ZONES = { all: "All", keyboard: "Keyboard", zone1: "Keyboard zone 1", zone2: "Keyboard zone 2", zone3: "Keyboard zone 3", rear: "Rear light", logo: "Logo" };
+const LEISHEN_LIGHT = { static: "Static", breathing: "Breathing", cycle: "Colour cycle", ambilight: "Ambilight" };
+const LEISHEN_LEVEL = ["Off", "Low", "High"];
+let leishenTimer = null, leishenCurve = null, leishenLight = null, leishenView = null;
+function leishenCmd(body, ok) { return act(() => api("leishen", body), ok); }
+function leishenSensors(c) {
+  const se = c.sensors || {}, box = h("div", { class: "clevo-fans", id: "leishen-sensors" });
+  box.append(h("div", { class: "clevo-fan" }, h("small", {}, t("Processor")), h("b", {}, se.cpu_temp != null ? se.cpu_temp + " °C" : "—")),
+    h("div", { class: "clevo-fan" }, h("small", {}, t("Graphics card")), h("b", {}, se.gpu_temp != null ? se.gpu_temp + " °C" : "—")));
+  for (const f of se.fans || []) box.append(h("div", { class: "clevo-fan" }, h("small", {}, t(LEISHEN_FAN[f.fan] || f.fan)), h("b", {}, `${f.rpm} ${t("rpm")}`)));
+  if (c.error) box.append(h("p", { class: "muted" }, c.error));
+  return box;
+}
+async function leishenPoll() {
+  if (!$("#page-leishen").classList.contains("active") || !S || !S.leishen || !S.leishen.present) return;
+  try { const c = await api("leishen"); const old = $("#leishen-sensors"); if (old) old.replaceWith(leishenSensors(c)); } catch (_) {}
+}
+function renderLeishen() {
+  const c = S.leishen || {}, on = !!c.present;
+  $("#nav-leishen").classList.toggle("hidden", !on); $("#nav-leishen-group").classList.toggle("hidden", !on);
+  if (!leishenTimer) leishenTimer = setInterval(leishenPoll, 2000);
+  const root = $("#leishen-root"); if (!root) return;
+  root.innerHTML = "";
+  if (!on) { $("#leishen-sub").textContent = ""; root.append(h("div", { class: "card" }, h("p", {}, t("No Leishen / Thunderobot interface on this laptop.")))); return; }
+  const st = c.state || {}, info = c.info || {}, locked = !c.writes;
+  $("#leishen-sub").replaceChildren(t("Separate module for Quanta laptops with Leishen ControlCenter · via {0}", c.transport === "windows-wmi" ? t("the Windows WMI driver") : c.transport),
+    h("span", { class: "clevo-exp" }, t("experimental")));
+  const sw = (checked, fn) => h("label", { class: "sw" }, h("input", { type: "checkbox", ...(checked ? { checked: true } : {}), onchange: e => fn(e.target.checked) }), h("span"));
+  root.append(h("div", { class: "card warn" }, h("h3", {}, t("Experimental commands")),
+    h("p", { class: "muted" }, t("These functions send the firmware the same commands as Leishen ControlCenter. They were read from the firmware and from how ControlCenter uses it, and have not been tested on such a laptop yet. When the service stops, the fans go back to automatic.")),
+    h("div", { class: "clevo-row" }, h("span", {}, t("Allow commands")), sw(c.writes, v => act(() => api("setting", { key: "leishen_writes", value: v })))),
+    h("div", { class: "clevo-row" }, h("span", {}, t("Send the saved settings at start")), sw(c.restore, v => act(() => api("setting", { key: "leishen_restore", value: v })))),
+    h("div", { class: "clevo-row" }, h("span", {}, t("The mode key switches Office → Gaming → High performance")), sw(c.hotkey, v => act(() => api("setting", { key: "leishen_hotkey", value: v })))),
+    c.hotkey && c.hotkey_state && c.hotkey_state !== "listening" ? h("p", { class: "muted tiny" }, t("Mode key events: {0}", t(c.hotkey_state))) : "",
+    h("p", { class: "muted tiny" }, t("Close Leishen ControlCenter while using this page: both programs would send commands."))));
+  // power mode (the firmware reports it)
+  const box = h("div", { class: "choices clevo-cmd" });
+  for (const [id, name, desc] of LEISHEN_MODES) box.append(h("div", { class: "choice" + (c.mode === id ? " on" : ""), onclick: () => leishenCmd({ action: "mode", mode: id }, t(name)) }, h("h4", {}, t(name)), h("p", {}, t(desc))));
+  root.append(h("div", { class: "card" + (locked ? " locked" : "") }, h("h3", {}, t("Power mode")), box,
+    h("p", { class: "muted tiny" }, t("Sets the mode in the controller and the graphics card power limits, like the Fn mode key."))));
+  // fans
+  const fm = leishenView || st.fan_mode || "auto", fc = h("div", { class: "card" + (locked ? " locked" : "") }, h("h3", {}, t("Fans")), leishenSensors(c));
+  const seg = h("div", { class: "seg clevo-cmd" });
+  for (const [m, n] of [["auto", "Automatic"], ["fixed", "Fixed speed"], ["curve", "Curve"]])
+    seg.append(h("button", { class: fm === m ? "on" : "", onclick: () => { leishenView = m === "auto" ? null : m; m === "auto" ? leishenCmd({ action: "fans_auto" }, t(n)) : renderLeishen(); } }, t(n)));
+  fc.append(h("div", { class: "clevo-row" }, h("span", {}, t("Fan mode")), seg));
+  const names = info.fans3 ? ["cpu", "gpu", "sys"] : ["cpu", "gpu"];
+  if (fm === "fixed") {
+    const fx = { cpu: 50, gpu: 50, sys: 50, ...(st.fixed || {}) };
+    for (const k of names) {
+      const o = h("output", {}, fx[k] + "%");
+      fc.append(h("div", { class: "clevo-row clevo-cmd" }, h("span", {}, t(LEISHEN_FAN[k])),
+        h("input", { type: "range", min: 0, max: 100, step: 5, value: fx[k], oninput: e => { fx[k] = +e.target.value; o.textContent = fx[k] + "%"; } }), o));
+    }
+    fc.append(h("div", { class: "row clevo-cmd" }, h("button", { class: "btn", onclick: () => {
+      const low = Math.min(fx.cpu, fx.gpu) < 20;
+      if (low && !confirm(t("Below 20 % the fans may stop while the laptop is warm. Set it anyway?"))) return;
+      leishenView = null; leishenCmd({ action: "fans_fixed", fixed: { ...fx, allow_low: low } }, t("Fixed speed")); } }, t("Apply"))));
+  }
+  if (fm === "curve") {
+    leishenCurve = leishenCurve || JSON.parse(JSON.stringify((st.curves || {}).cpu || c.default_curve || []));
+    const g = h("div", { class: "leishen-curve clevo-cmd" });
+    leishenCurve.forEach((p, i) => g.append(h("div", {}, h("input", { type: "number", min: 0, max: 110, value: p[0], onchange: e => { p[0] = +e.target.value; } }), h("small", {}, "°C"),
+      h("input", { type: "number", min: 0, max: 100, value: p[1], onchange: e => { p[1] = +e.target.value; } }), h("small", {}, "%"))));
+    fc.append(h("p", { class: "muted tiny" }, t("One curve for every fan, run by the service every 2 s: the speed of the highest point at or below the temperature; a lower step only 5 °C below it. Factory values of this laptop.")), g,
+      h("div", { class: "row clevo-cmd" }, h("button", { class: "btn", onclick: () => { leishenView = null; leishenCmd({ action: "fans_curve", curves: { cpu: leishenCurve, gpu: leishenCurve, sys: leishenCurve } }, t("Curve applied")); } }, t("Apply curve")),
+        h("button", { class: "btn ghost", onclick: () => { leishenCurve = JSON.parse(JSON.stringify(c.default_curve || [])); renderLeishen(); } }, t("Factory curve"))));
+    if (c.curve_error) fc.append(h("p", { class: "muted" }, c.curve_error));
+  }
+  root.append(fc);
+  // keyboard
+  const kc = h("div", { class: "card" + (locked ? " locked" : "") }, h("h3", {}, t("Keyboard")),
+    h("div", { class: "clevo-row clevo-cmd" }, h("span", {}, t("Windows key locked")), sw(!!st.win_lock, v => leishenCmd({ action: "win_lock", on: v }))),
+    h("div", { class: "clevo-row clevo-cmd" }, h("span", {}, t("Touchpad")), sw(st.touchpad !== false, v => leishenCmd({ action: "touchpad", on: v }))),
+    h("p", { class: "muted tiny" }, t("The firmware does not report the Windows key and the touchpad: the switches show what was last set here.")),
+    h("div", { class: "clevo-row" }, h("span", {}, t("Backlight level")), h("b", {}, (c.sensors || {}).kb_level != null ? t(LEISHEN_LEVEL[c.sensors.kb_level] || String(c.sensors.kb_level)) : "—")));
+  if (info.kb_rgb) {
+    leishenLight = leishenLight || { zone: "all", mode: "static", level: 2, color: "#ffffff" };
+    const L = leishenLight, sel = (obj, key) => { const s = h("select", { onchange: e => { L[key] = e.target.value; } }); for (const [v, n] of Object.entries(obj)) s.append(h("option", { value: v, ...(L[key] === v ? { selected: true } : {}) }, t(n))); return s; };
+    const lv = h("select", { onchange: e => { L.level = +e.target.value; } }); LEISHEN_LEVEL.forEach((n, i) => lv.append(h("option", { value: i, ...(L.level === i ? { selected: true } : {}) }, t(n))));
+    kc.append(h("div", { class: "clevo-row clevo-cmd" }, h("span", {}, t("Zone")), sel(LEISHEN_ZONES, "zone"), h("span", {}, t("Effect")), sel(LEISHEN_LIGHT, "mode")),
+      h("div", { class: "clevo-row clevo-cmd" }, h("span", {}, t("Brightness")), lv, h("span", {}, t("Colour")), h("input", { type: "color", value: L.color, onchange: e => { L.color = e.target.value; } }),
+        h("button", { class: "btn", onclick: () => leishenCmd({ action: "light", ...L }, t("Applied")) }, t("Apply"))));
+  } else {
+    kc.append(h("p", { class: "muted tiny" }, t("The firmware reports a single-colour keyboard: the light is changed with the Fn keys (the firmware's light command waits for an RGB controller and is not sent).")));
+  }
+  root.append(kc);
+  const dl = h("dl", { class: "kv" });
+  dl.append(h("dt", {}, t("Keyboard")), h("dd", {}, info.kb_rgb ? "RGB" : t("single colour") + ` (0x${(info.kb_code || 0).toString(16)})`),
+    h("dt", {}, t("Fans")), h("dd", {}, String(info.fans3 ? 3 : 2)), h("dt", {}, t("Factory fan table")), h("dd", {}, String(info.fan_table ?? "—")));
+  root.append(h("div", { class: "card" }, h("h3", {}, t("Firmware")), dl,
+    h("p", { class: "muted tiny" }, t("A diagnostic report (Information) includes the answers of the firmware: it helps to test this module."))));
+}
+$(`#nav a[data-page="leishen"]`)?.addEventListener("click", () => setTimeout(leishenPoll, 50));
 
 function lbSet(body) { act(() => api("lightbar", { zone: lbZone, ...body })); }
 $("#lb-power").addEventListener("change", e => lbSet({ power: e.target.checked }));
@@ -2073,6 +2177,7 @@ const REP_SECTIONS = [["system", "System, BIOS and EC versions"], ["platform", "
   ["firmware", "EC interface devices (ACPI / WMI) and their drivers"],
   ["selfcheck", "Self-check, stage 1 (read only): what works on this laptop, a draft platform profile"],
   ["clevo", "Control Center 3.0 / Clevo: interface, driver, Control Center 3 app, capability words and fan buffers (read only)"],
+  ["leishen", "Leishen / Thunderobot: answers of the firmware's WMI block (read only)"],
   ["oem_registry", "Settings and feature flags of the original Control Center (registry, Windows)"],
   ["oem_software", "Services, packages and versions of the original Control Center (Windows)"],
   ["oem_files", "Settings files, tables and logs of the original Control Center (Windows)"],
@@ -2545,9 +2650,11 @@ function renderEcBanner() {
   const msg = { oem_missing: t("The OEM driver UWACPIDriver was not found — the program cannot reach the embedded controller (fans, modes, power limits, battery). Install the OEM driver (recommended) or switch to the open WMI implementation (beta)."),
     wmi_consent: t("The WMI path is selected, but its warning has not been accepted yet."),
     wmi_failed: t("The WMI path could not be opened: {0}", a.wmi_error || ""),
-    clevo_only: t("This laptop has no Uniwill embedded controller interface but a Control Center 3.0 / Clevo one: modes, fans and backlight are on the Clevo (experimental) page; the Uniwill pages do not work here.") }[a.reason] || t("No access to the embedded controller.");
+    clevo_only: t("This laptop has no Uniwill embedded controller interface but a Control Center 3.0 / Clevo one: modes, fans and backlight are on the Clevo (experimental) page; the Uniwill pages do not work here."),
+    leishen_only: t("This laptop has no Uniwill embedded controller interface but a Leishen / Thunderobot one: mode, fans and keyboard are on the Leishen (experimental) page; the Uniwill pages do not work here.") }[a.reason] || t("No access to the embedded controller.");
   b.replaceChildren(h("div", {}, h("b", {}, t("No access to the embedded controller")), h("p", {}, msg)),
     a.reason === "clevo_only" ? h("button", { class: "btn", onclick: () => $(`#nav a[data-page="clevo"]`)?.click() }, t("Open the Clevo page"))
+      : a.reason === "leishen_only" ? h("button", { class: "btn", onclick: () => $(`#nav a[data-page="leishen"]`)?.click() }, t("Open the Leishen page"))
       : h("button", { class: "btn", onclick: () => $(`#nav a[data-page="driver"]`)?.click() }, t("Open EC Manager")));
 }
 $("#wmi-badge").addEventListener("click", () => $(`#nav a[data-page="driver"]`)?.click());
@@ -3089,6 +3196,7 @@ const HELP_PAGES = [
   { id: "features", name: "Features and how they work", en: "FEATURES.md", ru: "FEATURES.ru.md" },
   { id: "lighting", name: "BetterRGB keyboard effects", en: "LIGHTING.md", ru: "LIGHTING.ru.md" },
   { id: "clevo", name: "Control Center 3.0 / Clevo (experimental)", en: "CLEVO.md", ru: "CLEVO.ru.md" },
+  { id: "leishen", name: "Leishen / Thunderobot (experimental)", en: "LEISHEN.md", ru: "LEISHEN.ru.md" },
   { id: "cli", name: "Command line (uwccctl)", en: "CLI.md", ru: "CLI.ru.md" },
 ];
 var helpCur = null;                     // var: setLang() may run before this line

@@ -356,6 +356,8 @@ pre.code{margin:0;padding:10px 12px;background:var(--bg0);border:1px solid var(-
 .clevo-fan b{font-size:20px}.clevo-fan small{color:var(--muted);display:block}
 .clevo-curve{display:grid;grid-template-columns:auto repeat(3,minmax(90px,1fr));gap:6px 10px;align-items:center;margin:10px 0}
 .clevo-curve input{width:64px}.clevo-curve .muted{font-size:12px}
+.leishen-curve{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px;margin:10px 0}
+.leishen-curve div{display:flex;align-items:center;gap:4px}.leishen-curve input{width:70px}
 .clevo-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:8px 0}
 .clevo-row > span:first-child{min-width:170px;color:var(--muted)}
 #page-clevo .card.locked .clevo-cmd{opacity:.45;pointer-events:none}

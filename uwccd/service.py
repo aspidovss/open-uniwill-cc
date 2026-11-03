@@ -50,9 +50,13 @@ class Service:
         from .clevo import ClevoManager
         self.clevo = ClevoManager(self.settings_store, self.emit, mock=mock)     # Control Center 3.0 / Clevo
         self.clevo.start()
+        from .leishen import LeishenManager
+        self.leishen = LeishenManager(self.settings_store, self.emit, mock=mock)   # Leishen / Thunderobot (Quanta)
+        if not self.clevo.present:
+            self.leishen.start()
         from .ecaccess import open_backend
         self.ec, self.ec_info = open_backend(self.settings_store, mock=mock, prefer=None if mock else backend,
-                                             clevo=self.clevo.present)
+                                             clevo=self.clevo.present, leishen=self.leishen.present)
         self.oem_driver = None
         self.pf = Platform(self.ec)
         if self.ec_info.get("active") not in ("none", None):
@@ -88,6 +92,10 @@ class Service:
             self.monitor = WinMonitor(self.ec, self.pf)
         else:
             self.monitor = Monitor(self.ec, self.pf)
+        if self.leishen.present:                 # Leishen / Thunderobot: fan speeds come from its WMI block
+            self.monitor.fans = self.leishen.monitor_fans
+            os_temp = self.monitor.cpu_temp
+            self.monitor.cpu_temp = lambda: self.leishen.cpu_temp() or os_temp()     # the EC sensor, as Leishen shows
         self.liquid = LiquidCooler(self.ec, self.hottest_temp, self.emit, mock=mock,
                                    mode_fn=lambda: self.power.option.get("OperatingMode") if self.fan_control else None)
         self.liquid.no_temps = lambda: self.monitor_level() == "off"
@@ -235,6 +243,7 @@ class Service:
                  "kernel module" if hk.available else "polling")
 
     def stop(self):
+        self.leishen.stop()                # its fans go back to automatic
         t = self.power.tables
         t._pending = None
         t.wait_idle(20)                    # a fan curve still being written in the background
@@ -376,6 +385,7 @@ class Service:
             "info": self.monitor.info(),
             "ec_access": self.ec_access(),
             "clevo": self.clevo.status() if self.clevo.present else {"present": False},
+            "leishen": self.leishen.status() if self.leishen.present else {"present": False},
             "busy": self.busy.state(),
             "monitoring": self.monitor_level(),
         }
