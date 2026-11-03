@@ -76,7 +76,7 @@ SETTINGS = {
     "ppd_follow": "bool", "ppd_modes": "ppdmap",
     "cpu_alert": "int", "gpu_alert": "int", "mode_on_ac": "mode", "mode_on_battery": "mode", "lang": "str",
     "fan_manager": "str", "clevo_writes": "bool", "clevo_restore": "bool",
-    "leishen_writes": "bool", "leishen_restore": "bool", "leishen_hotkey": "bool",
+    "leishen_writes": "bool", "leishen_restore": "bool", "leishen_hotkey": "bool", "leishen_battery_office": "bool",
 }
 
 TEXT = {
@@ -204,11 +204,13 @@ HELP = {
         "uwccctl leishen                            status: temperatures, fans, mode, saved state\n"
         "uwccctl leishen writes on|off              allow commands (off by default)\n"
         "uwccctl leishen restore on|off             send the saved settings again when the service starts\n"
+        "uwccctl leishen battery-office on|off      Office on battery, the AC mode back with the charger (default on)\n"
         "uwccctl leishen hotkey on|off              the mode key switches Office / Gaming / Performance (Windows; turn off\n"
         "                                           while Leishen ControlCenter runs)\n"
         "uwccctl leishen mode performance|gaming|office\n"
         "uwccctl leishen fan auto                   fans back to the firmware\n"
-        "uwccctl leishen fan fixed CPU GPU [SYS] [--low]   fixed speeds in % (below 20 % only with --low)\n"
+        "uwccctl leishen fan fixed CPU GPU [SYS|auto] [--low]   fixed speeds in % (below 20 % only with --low);\n"
+        "                                           the system fan stays automatic unless SYS is given\n"
         "uwccctl leishen fan curve T:D T:D ...      one curve (°C:%) for every fan, run by the service\n"
         "uwccctl leishen winkey lock|free           Windows key\n"
         "uwccctl leishen touchpad on|off\n"
@@ -1175,8 +1177,8 @@ def leishen_text(c):
 def cmd_leishen(a):
     op, rest = (a[0], a[1:]) if a else ("status", [])
     act = None
-    if op in ("writes", "restore", "hotkey") and rest:
-        call("setting", {"key": f"leishen_{op}", "value": onoff(rest[0], "leishen")})
+    if op in ("writes", "restore", "hotkey", "battery-office") and rest:
+        call("setting", {"key": f"leishen_{op.replace('-', '_')}", "value": onoff(rest[0], "leishen")})
     elif op == "mode" and rest:
         act = {"action": "mode", "mode": rest[0]}
     elif op == "fan" and rest:
@@ -1184,14 +1186,15 @@ def cmd_leishen(a):
             act = {"action": "fans_auto"}
         elif rest[0] == "fixed" and len(rest) >= 3:
             vals = [v for v in rest[1:] if v != "--low"]
-            act = {"action": "fans_fixed", "fixed": {**{k: num(v, "leishen") for k, v in zip(("cpu", "gpu", "sys"), vals[:3])},
+            act = {"action": "fans_fixed", "fixed": {**{k: (v if v == "auto" else num(v, "leishen"))
+                                                        for k, v in zip(("cpu", "gpu", "sys"), vals[:3])},
                                                     "allow_low": "--low" in rest}}
         elif rest[0] == "curve" and len(rest) >= 3:
             try:
                 pts = [[int(x) for x in p.split(":")] for p in rest[1:]]
             except ValueError:
                 usage("leishen")
-            act = {"action": "fans_curve", "curves": {"cpu": pts, "gpu": pts, "sys": pts}}
+            act = {"action": "fans_curve", "curves": {"cpu": pts, "gpu": pts}}       # system fan: automatic
         else:
             usage("leishen")
     elif op == "winkey" and rest and rest[0] in ("lock", "free"):

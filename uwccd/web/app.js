@@ -1076,17 +1076,21 @@ function renderLeishen() {
     h("span", { class: "clevo-exp" }, t("experimental")));
   const sw = (checked, fn) => h("label", { class: "sw" }, h("input", { type: "checkbox", ...(checked ? { checked: true } : {}), onchange: e => fn(e.target.checked) }), h("span"));
   root.append(h("div", { class: "card warn" }, h("h3", {}, t("Experimental commands")),
-    h("p", { class: "muted" }, t("These functions send the firmware the same commands as Leishen ControlCenter. They were read from the firmware and from how ControlCenter uses it, and have not been tested on such a laptop yet. When the service stops, the fans go back to automatic.")),
+    h("p", { class: "muted" }, t("These functions send the firmware the same commands as Leishen ControlCenter. They were read from the firmware and from how ControlCenter uses it and were first checked on a Thunderobot R16. When the service stops, the fans go back to automatic.")),
     h("div", { class: "clevo-row" }, h("span", {}, t("Allow commands")), sw(c.writes, v => act(() => api("setting", { key: "leishen_writes", value: v })))),
     h("div", { class: "clevo-row" }, h("span", {}, t("Send the saved settings at start")), sw(c.restore, v => act(() => api("setting", { key: "leishen_restore", value: v })))),
+    h("div", { class: "clevo-row" }, h("span", {}, t("Office on battery (the mode chosen on AC comes back with the charger)")), sw(c.battery_office, v => act(() => api("setting", { key: "leishen_battery_office", value: v })))),
     h("div", { class: "clevo-row" }, h("span", {}, t("The mode key switches Office → Gaming → High performance")), sw(c.hotkey, v => act(() => api("setting", { key: "leishen_hotkey", value: v })))),
     c.hotkey && c.hotkey_state && c.hotkey_state !== "listening" ? h("p", { class: "muted tiny" }, t("Mode key events: {0}", t(c.hotkey_state))) : "",
     h("p", { class: "muted tiny" }, t("Close Leishen ControlCenter while using this page: both programs would send commands."))));
   // power mode (the firmware reports it)
   const box = h("div", { class: "choices clevo-cmd" });
-  for (const [id, name, desc] of LEISHEN_MODES) box.append(h("div", { class: "choice" + (c.mode === id ? " on" : ""), onclick: () => leishenCmd({ action: "mode", mode: id }, t(name)) }, h("h4", {}, t(name)), h("p", {}, t(desc))));
+  const batLock = c.on_battery && c.battery_office;
+  for (const [id, name, desc] of LEISHEN_MODES) box.append(h("div", { class: "choice" + (c.mode === id ? " on" : "") + (batLock && id !== "office" ? " disabled" : ""),
+    onclick: () => { if (!(batLock && id !== "office")) leishenCmd({ action: "mode", mode: id }, t(name)); } }, h("h4", {}, t(name)), h("p", {}, t(desc))));
   root.append(h("div", { class: "card" + (locked ? " locked" : "") }, h("h3", {}, t("Power mode")), box,
-    h("p", { class: "muted tiny" }, t("Sets the mode in the controller and the graphics card power limits, like the Fn mode key."))));
+    h("p", { class: "muted tiny" }, batLock ? t("On battery: Office, like Leishen ControlCenter. The mode chosen on AC comes back with the charger.")
+      : t("Sets the mode in the controller and the graphics card power limits, like the Fn mode key. Office also limits the graphics card and stops the system fan."))));
   // fans
   const fm = leishenView || st.fan_mode || "auto", fc = h("div", { class: "card" + (locked ? " locked" : "") }, h("h3", {}, t("Fans")), leishenSensors(c));
   const seg = h("div", { class: "seg clevo-cmd" });
@@ -1095,14 +1099,19 @@ function renderLeishen() {
   fc.append(h("div", { class: "clevo-row" }, h("span", {}, t("Fan mode")), seg));
   const names = info.fans3 ? ["cpu", "gpu", "sys"] : ["cpu", "gpu"];
   if (fm === "fixed") {
-    const fx = { cpu: 50, gpu: 50, sys: 50, ...(st.fixed || {}) };
+    const fx = { cpu: 50, gpu: 50, sys: "auto", ...(st.fixed || {}) };
     for (const k of names) {
-      const o = h("output", {}, fx[k] + "%");
-      fc.append(h("div", { class: "clevo-row clevo-cmd" }, h("span", {}, t(LEISHEN_FAN[k])),
-        h("input", { type: "range", min: 0, max: 100, step: 5, value: fx[k], oninput: e => { fx[k] = +e.target.value; o.textContent = fx[k] + "%"; } }), o));
+      const auto = k === "sys" && fx.sys === "auto";
+      const o = h("output", {}, auto ? "" : fx[k] + "%");
+      const rng = h("input", { type: "range", min: 0, max: 100, step: 5, value: auto ? 50 : fx[k], ...(auto ? { disabled: true } : {}),
+        oninput: e => { fx[k] = +e.target.value; o.textContent = fx[k] + "%"; } });
+      const row = h("div", { class: "clevo-row clevo-cmd" }, h("span", {}, t(LEISHEN_FAN[k])), rng, o);
+      if (k === "sys") row.append(h("label", { class: "chk tiny" }, h("input", { type: "checkbox", ...(auto ? { checked: true } : {}),
+        onchange: e => { fx.sys = e.target.checked ? "auto" : +rng.value; rng.disabled = e.target.checked; o.textContent = e.target.checked ? "" : fx.sys + "%"; } }), " " + t("automatic")));
+      fc.append(row);
     }
     fc.append(h("div", { class: "row clevo-cmd" }, h("button", { class: "btn", onclick: () => {
-      const low = Math.min(fx.cpu, fx.gpu) < 20;
+      const low = Math.min(fx.cpu, fx.gpu) < 20 || (fx.sys !== "auto" && fx.sys < 20);
       if (low && !confirm(t("Below 20 % the fans may stop while the laptop is warm. Set it anyway?"))) return;
       leishenView = null; leishenCmd({ action: "fans_fixed", fixed: { ...fx, allow_low: low } }, t("Fixed speed")); } }, t("Apply"))));
   }
@@ -1111,8 +1120,8 @@ function renderLeishen() {
     const g = h("div", { class: "leishen-curve clevo-cmd" });
     leishenCurve.forEach((p, i) => g.append(h("div", {}, h("input", { type: "number", min: 0, max: 110, value: p[0], onchange: e => { p[0] = +e.target.value; } }), h("small", {}, "°C"),
       h("input", { type: "number", min: 0, max: 100, value: p[1], onchange: e => { p[1] = +e.target.value; } }), h("small", {}, "%"))));
-    fc.append(h("p", { class: "muted tiny" }, t("One curve for every fan, run by the service every 2 s: the speed of the highest point at or below the temperature; a lower step only 5 °C below it. Factory values of this laptop.")), g,
-      h("div", { class: "row clevo-cmd" }, h("button", { class: "btn", onclick: () => { leishenView = null; leishenCmd({ action: "fans_curve", curves: { cpu: leishenCurve, gpu: leishenCurve, sys: leishenCurve } }, t("Curve applied")); } }, t("Apply curve")),
+    fc.append(h("p", { class: "muted tiny" }, t("One curve for the processor and graphics card fans, run by the service every 2 s: the speed of the highest point at or below the temperature; a lower step only 5 °C below it. The system fan stays automatic. Factory values of this laptop.")), g,
+      h("div", { class: "row clevo-cmd" }, h("button", { class: "btn", onclick: () => { leishenView = null; leishenCmd({ action: "fans_curve", curves: { cpu: leishenCurve, gpu: leishenCurve } }, t("Curve applied")); } }, t("Apply curve")),
         h("button", { class: "btn ghost", onclick: () => { leishenCurve = JSON.parse(JSON.stringify(c.default_curve || [])); renderLeishen(); } }, t("Factory curve"))));
     if (c.curve_error) fc.append(h("p", { class: "muted" }, c.curve_error));
   }

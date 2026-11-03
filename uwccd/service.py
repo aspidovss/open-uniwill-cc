@@ -94,6 +94,7 @@ class Service:
             self.monitor = Monitor(self.ec, self.pf)
         if self.leishen.present:                 # Leishen / Thunderobot: fan speeds come from its WMI block
             self.monitor.fans = self.leishen.monitor_fans
+            self.leishen.ac_fn = lambda: getattr(self.power, "ac_online", True)
             os_temp = self.monitor.cpu_temp
             self.monitor.cpu_temp = lambda: self.leishen.cpu_temp() or os_temp()     # the EC sensor, as Leishen shows
         self.liquid = LiquidCooler(self.ec, self.hottest_temp, self.emit, mock=mock,

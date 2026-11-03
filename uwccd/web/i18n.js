@@ -923,8 +923,8 @@ Object.assign(RU, {
   "No Leishen / Thunderobot interface on this laptop.": "На этом ноутбуке нет интерфейса Leishen / Thunderobot.",
   "Separate module for Quanta laptops with Leishen ControlCenter · via {0}": "Отдельный модуль для ноутбуков Quanta с Leishen ControlCenter · через {0}",
   "the Windows WMI driver": "WMI-драйвер Windows",
-  "These functions send the firmware the same commands as Leishen ControlCenter. They were read from the firmware and from how ControlCenter uses it, and have not been tested on such a laptop yet. When the service stops, the fans go back to automatic.":
-    "Эти функции отправляют прошивке те же команды, что и Leishen ControlCenter. Они разобраны по прошивке и по тому, как с ней работает ControlCenter, и ещё не проверялись на таком ноутбуке. Когда служба останавливается, вентиляторы возвращаются в автоматический режим.",
+  "These functions send the firmware the same commands as Leishen ControlCenter. They were read from the firmware and from how ControlCenter uses it and were first checked on a Thunderobot R16. When the service stops, the fans go back to automatic.":
+    "Эти функции отправляют прошивке те же команды, что и Leishen ControlCenter. Они разобраны по прошивке и по тому, как с ней работает ControlCenter, и впервые проверены на Thunderobot R16. Когда служба останавливается, вентиляторы возвращаются в автоматический режим.",
   "Close Leishen ControlCenter while using this page: both programs would send commands.":
     "Пока пользуетесь этой страницей, закройте Leishen ControlCenter: иначе команды будут отправлять обе программы.",
   "The mode key switches Office → Gaming → High performance": "Клавиша режима переключает Офисный → Игровой → Высокая производительность",
@@ -950,5 +950,13 @@ Object.assign(RU, {
   "This laptop has no Uniwill embedded controller interface but a Leishen / Thunderobot one: mode, fans and keyboard are on the Leishen (experimental) page; the Uniwill pages do not work here.":
     "У этого ноутбука нет интерфейса встроенного контроллера Uniwill, но есть интерфейс Leishen / Thunderobot: режим, вентиляторы и клавиатура — на странице «Leishen (экспериментально)»; страницы Uniwill здесь не работают.",
   "Open the Leishen page": "Открыть страницу Leishen",
+  "Office on battery (the mode chosen on AC comes back with the charger)": "Офисный от батареи (режим, выбранный от сети, вернётся с зарядкой)",
+  "On battery: Office, like Leishen ControlCenter. The mode chosen on AC comes back with the charger.":
+    "От батареи — Офисный, как в Leishen ControlCenter. Режим, выбранный от сети, вернётся при подключении зарядки.",
+  "Sets the mode in the controller and the graphics card power limits, like the Fn mode key. Office also limits the graphics card and stops the system fan.":
+    "Задаёт режим в контроллере и пределы мощности видеокарты — как клавиша режима Fn. Офисный заодно ограничивает видеокарту и останавливает системный вентилятор.",
+  "automatic": "автоматически",
+  "One curve for the processor and graphics card fans, run by the service every 2 s: the speed of the highest point at or below the temperature; a lower step only 5 °C below it. The system fan stays automatic. Factory values of this laptop.":
+    "Одна кривая для вентиляторов процессора и видеокарты, служба применяет её каждые 2 с: скорость самой высокой точки не выше температуры; на ступень ниже — только когда температура опустится на 5 °C ниже точки. Системный вентилятор остаётся автоматическим. Заводские значения этого ноутбука.",
   "Leishen / Thunderobot: answers of the firmware's WMI block (read only)": "Leishen / Thunderobot: ответы WMI-блока прошивки (только чтение)",
 });

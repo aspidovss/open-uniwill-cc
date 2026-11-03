@@ -2104,10 +2104,13 @@ class LeishenUnit(unittest.TestCase):
         self.assertEqual((sets[-1]["a1"], sets[-1]["a2"], sets[-1]["a3"], sets[-1]["a4"]), (0x205, 60, 50, 40))
         self.assertEqual(m.monitor_fans()["cpu_duty"], 60)
         m.set_fans_auto()
-        last = [r for r in m.wmi.log if r["a0"] == 0xFB00][-1]
-        self.assertEqual((last["a1"], last["a2"], last["a3"]), (0x206, 0, 0))
+        sets = [r for r in m.wmi.log if r["a0"] == 0xFB00]
+        self.assertEqual((sets[-2]["a1"], sets[-2]["a2"], sets[-2]["a3"]), (0x206, 0, 0))
+        self.assertEqual((sets[-1]["a1"], sets[-1]["a2"], sets[-1]["a3"], sets[-1]["a4"]), (0x205, 0xFF, 0xFF, 0xFF))
         self.assertIsNone(m.monitor_fans()["cpu_duty"])
         self.assertEqual(st["leishen_state"]["fan_mode"], "auto")
+        m.set_fans_fixed({"cpu": 40, "gpu": 40})                   # the system fan stays automatic
+        self.assertEqual([r for r in m.wmi.log if r["a1"] == 0x205][-1]["a4"], 0xFF)
 
     def test_curve(self):
         from uwccd.leishen.manager import DEFAULT_CURVE, check_curve, curve_duty
@@ -2142,6 +2145,28 @@ class LeishenUnit(unittest.TestCase):
         self.assertEqual([r for r in m.wmi.log if r["a0"] == 0xFB00][-1]["a1"], 0x400)
         st["leishen_hotkey"] = False
         self.assertIsNone(m.handle_event(bytes([0] * 7 + [1] + [0] * 24)))
+
+    def test_battery_office(self):
+        m, st = self.manager(leishen_hotkey=True)
+        ac = [True]
+        m.ac_fn = lambda: ac[0]
+        m.set_mode("performance")
+        m._power_source()
+        self.assertEqual(m.mode(), "performance")
+        ac[0] = False
+        m._power_source()
+        self.assertEqual(m.mode(), "office")
+        with self.assertRaises(ValueError):
+            m.set_mode("gaming")
+        self.assertEqual(m.handle_event(bytes([0] * 7 + [1] + [0] * 24)), "office")
+        self.assertEqual(m.mode(), "office")
+        ac[0] = True
+        m._power_source()
+        self.assertEqual(m.mode(), "performance")
+        st["leishen_battery_office"] = False
+        ac[0] = False
+        m._power_source()
+        self.assertEqual(m.mode(), "performance")
 
     def test_absent(self):
         from uwccd.leishen import LeishenManager

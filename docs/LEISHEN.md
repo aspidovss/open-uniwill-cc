@@ -9,6 +9,9 @@ talks to their firmware instead. It is **experimental**: it was written from the
 Leishen ControlCenter 3.0.0.18 uses them (interoperability analysis, no vendor code or files), and has not been tested
 on such a laptop yet.
 
+**Checked on a Thunderobot R16 (1.6.11_Leishen_dev):** sensors, power modes, own fan speeds, keyboard light,
+Windows key, touchpad and the mode key work.
+
 ## How it works
 
 The firmware has one 32-byte WMI data block, GUID `644C5791-B7B0-4123-A90B-E93876E0DAAD` (WMI class `RW_GMWMI` in
@@ -26,14 +29,15 @@ answer in the same layout:
 | `0x200` | `a2` CPU °C, `a3` GPU °C, `a4` / `a5` fan 1 / 2 rpm, `a6` keyboard light level | `a2` 0: `a6` 1 = Windows key locked |
 | `0x201` | `a2` `0x34` RGB keyboard, `0x35` single colour | — |
 | `0x202` | hardware flags | `a2` 0 / 1 touchpad off / on |
-| `0x205` | `a2` factory fan table (4 = NLY) | `a2` / `a3` / `a4` fan 1 / 2 / 3 speed, % |
+| `0x205` | `a2` factory fan table (4 = NLY) | `a2` / `a3` / `a4` fan 1 / 2 / 3 speed, %; `0xFF` = that fan automatic |
 | `0x206` | `a2` "control program present" bit | the same bit (the firmware writes `a2`, then `a3`) |
 | `0x207` | `a2` GPU °C, `a3` fan 3 rpm | — |
 | `0x300` | `a2` power mode: 0 High performance, 1 Gaming, 2 Office | the same; the firmware also sets the NVIDIA power limits |
 | `0x100` | — | keyboard light: `a2` zone, `a3` = effect << 28, level << 24, RRGGBB |
 
 Every read of `0x200` also sets the "control program present" bit in the controller — Leishen ControlCenter reads it
-every few seconds too.
+every few seconds too. So *automatic* fans are `0x206` = 0 **and** `0x205` = `0xFF` for every fan: the bit alone comes
+back with the next read and the last speeds stay.
 
 - **Windows:** the WMI driver built into Windows; no extra driver.
 - **Linux:** `acpi_call` on the device's `WSAA` / `WQAA` (`sudo modprobe acpi_call`).
@@ -43,8 +47,8 @@ every few seconds too.
 | | |
 |---|---|
 | **Monitor** | CPU and GPU temperature and the speed of 2 or 3 fans from the firmware also on the Monitor page and in the history |
-| **Power mode** | High performance / Gaming / Office, read back from the firmware |
-| **Fans** | *Automatic* (the controller), *Fixed speed* (below 20 % only after a question) or a *Curve* run by the service every 2 s, like Leishen ControlCenter (factory curve of the NLY: 30 % up to 70 °C, then 50 / 60 / 70 / 100 %). When the service stops, the fans go back to automatic |
+| **Power mode** | High performance / Gaming / Office, read back from the firmware. Office also limits the graphics card (NVIDIA power limits of the firmware) and stops the system fan. On battery the mode is Office, like in Leishen ControlCenter; the mode chosen on AC comes back with the charger (*Office on battery*, on by default) |
+| **Fans** | *Automatic* (the controller), *Fixed speed* or a *Curve* for the processor and graphics card fans, run by the service every 2 s like Leishen ControlCenter (factory curve of the NLY: 30 % up to 70 °C, then 50 / 60 / 70 / 100 %). Leishen ControlCenter does not go below 30 % (≈1450 rpm, system fan ≈1800); here 20 % works (≈1000 rpm, system fan ≈1250), lower only after a question. The system fan stays automatic unless a fixed speed is given for it (a fixed speed made it surge between 1000 and 2000 rpm in Office mode). When the service stops, the fans go back to automatic |
 | **Keyboard** | Windows key lock, touchpad on / off; on RGB keyboards zone, effect (static, breathing, colour cycle, ambilight), level and colour. On a single-colour keyboard the firmware's light command is not sent (it waits for an RGB controller); the level is shown and changed with the Fn keys |
 | **Mode key** | (Windows, off by default) Fn mode key switches Office → Gaming → High performance, like Leishen ControlCenter does. Turn it on only when Leishen ControlCenter is closed |
 
@@ -60,13 +64,14 @@ Not done: the display mode switch (`0x203`, needs a restart), refresh-rate switc
 uwccctl leishen                         # status
 uwccctl leishen writes on               # allow commands
 uwccctl leishen mode office             # performance | gaming | office
-uwccctl leishen fan fixed 50 50         # CPU GPU [SYS] %, below 20 % with --low
+uwccctl leishen fan fixed 50 50         # CPU GPU [SYS|auto] %, below 20 % with --low
 uwccctl leishen fan curve 30:30 70:50 80:60 90:70 100:100
 uwccctl leishen fan auto
 uwccctl leishen winkey lock             # lock | free
 uwccctl leishen touchpad off            # on | off
 uwccctl leishen light all static 2 00A0FF   # RGB keyboards: ZONE EFFECT LEVEL(0-2) RRGGBB
 uwccctl leishen hotkey on               # Windows: the mode key
+uwccctl leishen battery-office off      # keep the chosen mode on battery
 ```
 
 ## Testing

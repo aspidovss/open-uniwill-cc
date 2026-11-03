@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.6.11_Leishen_dev (test build)
+## 1.6.11_Leishen_dev2 (test build)
 
 - **Leishen / Thunderobot (experimental, separate module `uwccd/leishen`)** for Quanta laptops with Leishen
   ControlCenter 3.x (Thunderobot R16, board NLY), which have neither the Uniwill nor the Clevo interface. Through the
@@ -12,7 +12,10 @@
   - Windows key lock, touchpad, RGB keyboard light (zone, effect, level, colour), the Fn mode key (optional);
   - commands only after *Allow commands*; the diagnostic report has the raw answers of the firmware.
   Page *Leishen (experimental)*, `uwccctl leishen …`, [docs/LEISHEN.md](docs/LEISHEN.md). Written from the firmware's
-  ACPI tables and how Leishen ControlCenter uses them; not tested on such a laptop yet.
+  ACPI tables and how Leishen ControlCenter uses them.
+  - After the first test on an R16: *Automatic* fans now also send `0xFF` for every fan (the bit alone did not bring
+    the firmware's control back); the system fan stays automatic unless a speed is given for it; on battery the mode
+    is Office like in Leishen ControlCenter, the mode chosen on AC comes back with the charger (*Office on battery*).
 
 ## 1.6.11
 

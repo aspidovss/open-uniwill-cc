@@ -651,7 +651,7 @@ class Handler(BaseHTTPRequestHandler):
         elif key in ("clevo_writes", "clevo_restore"):     # Control Center 3.0 / Clevo (experimental)
             s.settings_store.set(key, bool(value))
             s.emit("clevo", {})
-        elif key in ("leishen_writes", "leishen_restore", "leishen_hotkey"):     # Leishen / Thunderobot (experimental)
+        elif key in ("leishen_writes", "leishen_restore", "leishen_hotkey", "leishen_battery_office"):     # Leishen / Thunderobot (experimental)
             s.settings_store.set(key, bool(value))
             if key == "leishen_writes" and not value and s.leishen.present \
                     and s.leishen.state().get("fan_mode", "auto") != "auto":

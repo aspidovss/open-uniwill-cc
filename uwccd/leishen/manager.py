@@ -13,7 +13,7 @@ BIOS TP162) handles them in its ACPI method WSAA:
   get 0x207  a2 GPU °C, a3 fan 3 rpm
   get 0x300  a2 power mode (0 Performance, 1 Gaming, 2 Office)
   set 0x300  a2 power mode: EC mode register + NVIDIA power limits (NPCF), as Leishen ControlCenter does
-  set 0x205  a2 / a3 / a4 fan 1 / 2 / 3 speed in % (0xFF: no third fan)
+  set 0x205  a2 / a3 / a4 fan 1 / 2 / 3 speed in %, 0xFF = that fan automatic
   set 0x206  bit "control program present": the firmware writes a2, then a3 (both are sent)
   set 0x200  a2 0, a6 1 = Windows key locked, 0 = free
   set 0x202  a2 0 = touchpad off, 1 = on
@@ -22,7 +22,11 @@ BIOS TP162) handles them in its ACPI method WSAA:
              a3 = mode << 28 | level << 24 | RRGGBB (mode 1 static, 2 breathing, 3 colour cycle, 4 ambilight)
 
 Own fan speeds work like in Leishen ControlCenter: the program reads the temperatures every 2 s and writes the speeds
-of its curve with set 0x205; "automatic" is set 0x206 with 0. The light command waits inside the firmware for the
+of its curve with set 0x205. "Automatic" is set 0x206 with 0 and then set 0x205 with 0xFF for every fan (checked on an
+R16: 0x206 alone leaves the last speeds, because every read of 0x200 sets the bit again). The system fan (fan 3) stays
+automatic unless a speed is given for it: in Office mode the firmware stops it, a fixed speed made it surge.
+On battery Leishen ControlCenter switches to Office and greys out the modes; setting leishen_battery_office does the
+same (the mode chosen on AC comes back with the charger). The light command waits inside the firmware for the
 keyboard controller, so it is only sent when the firmware reports an RGB keyboard (0x34). The firmware does not report
 the Windows key lock, the touchpad or the light colours: the values last set here are kept (setting leishen_state).
 Every command that changes something needs the setting leishen_writes.
@@ -92,6 +96,8 @@ class LeishenManager:
         self.last_duty = {}
         self.curve_error = None
         self._cache = (0.0, None)
+        self.ac_fn = None                     # service: is the laptop on AC (for leishen_battery_office)
+        self._on_ac = None
         self.hotkey_state = "Windows only" if sys.platform != "win32" else "not started"
 
     # -- setup -----------------------------------------------------------------------------------------
@@ -239,6 +245,7 @@ class LeishenManager:
               "transport": getattr(self.wmi, "name", None), "writes": self.writes_allowed(),
               "restore": bool(self.store.get("leishen_restore", True)),
               "hotkey": bool(self.store.get("leishen_hotkey", False)), "hotkey_state": self.hotkey_state,
+              "battery_office": self.on_battery_office(), "on_battery": self._on_ac is False,
               "info": self.info, "state": self.state(), "modes": list(MODES), "kb_zones": list(KB_ZONES),
               "kb_modes": list(KB_MODES), "default_curve": DEFAULT_CURVE, "curve_error": self.curve_error,
               "duty": self.last_duty}
@@ -267,18 +274,21 @@ class LeishenManager:
     def set_mode(self, name, save=True):
         if name not in MODES:
             raise ValueError(f"mode {name} ({', '.join(MODES)})")
+        if save and name != "office" and self._on_ac is False and self.on_battery_office():
+            raise ValueError("on battery the mode stays Office (setting leishen_battery_office)")
         self._set(0x300, f"power mode {name}", a2=MODES[name])
         if save:
             self._save(mode=name)
 
     def _fans_auto(self):
         self._set(0x206, "own fan speeds off", a2=0, a3=0)
+        self._set(0x205, "fans automatic", a2=NO_FAN, a3=NO_FAN, a4=NO_FAN)
         self.last_duty = {}
 
     def _fans_speed(self, cpu, gpu, sys_=None, enable=False):
         if enable:
             self._set(0x206, "own fan speeds on", a2=1, a3=1)
-        s = NO_FAN if sys_ is None or not self.info.get("fans3") else int(sys_)
+        s = NO_FAN if sys_ in (None, "auto") or not self.info.get("fans3") else int(sys_)
         self._set(0x205, f"fans {cpu}/{gpu}/{s} %", a2=int(cpu), a3=int(gpu), a4=s)
         self.last_duty = {"cpu": int(cpu), "gpu": int(gpu), **({"sys": s} if s != NO_FAN else {})}
 
@@ -288,9 +298,11 @@ class LeishenManager:
             self._save(fan_mode="auto")
 
     def set_fans_fixed(self, fixed, save=True):
-        vals = {k: int(fixed.get(k, 50)) for k in ("cpu", "gpu", "sys")}
+        vals = {k: int(fixed.get(k, 50)) for k in ("cpu", "gpu")}
+        sv = fixed.get("sys", "auto")
+        vals["sys"] = "auto" if sv in (None, "", "auto") else int(sv)
         for v in vals.values():
-            if not 0 <= v <= 100:
+            if v != "auto" and not 0 <= v <= 100:
                 raise ValueError("fan speed 0..100 %")
         if min(vals["cpu"], vals["gpu"]) < 20 and not fixed.get("allow_low"):
             raise ValueError("below 20 % the fans may stop: send allow_low to confirm")
@@ -323,15 +335,19 @@ class LeishenManager:
         temps = {k: max(30, v) for k, v in temps.items()}            # Leishen ControlCenter: at least 30 °C
         temps["sys"] = max(temps.values())
         duty = {}
-        for k in ("cpu", "gpu", "sys"):
-            pts = cur.get(k) or cur.get("cpu")
-            duty[k] = curve_duty(pts, temps[k], self.last_duty.get(k))
+        for k in ("cpu", "gpu"):
+            duty[k] = curve_duty(cur.get(k) or cur["cpu"], temps[k], self.last_duty.get(k))
+        duty["sys"] = curve_duty(cur["sys"], temps["sys"], self.last_duty.get("sys")) if cur.get("sys") else None
         if {k: duty[k] for k in ("cpu", "gpu")} != {k: self.last_duty.get(k) for k in ("cpu", "gpu")} \
-                or (self.info.get("fans3") and duty["sys"] != self.last_duty.get("sys")):
+                or (self.info.get("fans3") and duty["sys"] is not None and duty["sys"] != self.last_duty.get("sys")):
             self._fans_speed(duty["cpu"], duty["gpu"], duty["sys"])
 
     def _fan_loop(self):
         while not self.stop_ev.wait(2):
+            try:
+                self._power_source()
+            except Exception as e:  # noqa: BLE001
+                log.warning("Leishen battery mode: %s", e)
             try:
                 self._curve_step()
                 self.curve_error = None
@@ -339,6 +355,26 @@ class LeishenManager:
                 if str(e) != self.curve_error:
                     log.warning("Leishen fan curve: %s", e)
                 self.curve_error = str(e)
+
+    def on_battery_office(self):
+        return bool(self.store.get("leishen_battery_office", True))
+
+    def _power_source(self):
+        """Like Leishen ControlCenter: Office on battery; the mode chosen on AC comes back with the charger."""
+        if not self.ac_fn or not self.writes_allowed() or not self.on_battery_office():
+            self._on_ac = None
+            return
+        ac = bool(self.ac_fn())
+        if ac == self._on_ac:
+            return
+        first, self._on_ac = self._on_ac is None, ac
+        if not ac:
+            if self.mode() != "office":
+                self.set_mode("office", save=False)
+                log.info("Leishen: on battery -> Office")
+        elif not first and self.state().get("mode") in MODES and self.state()["mode"] != "office":
+            self.set_mode(self.state()["mode"], save=False)
+            log.info("Leishen: on AC -> %s", self.state()["mode"])
 
     def set_win_lock(self, on, save=True):
         self._set(0x200, f"Windows key {'locked' if on else 'free'}", a2=0, a6=1 if on else 0)
@@ -369,6 +405,9 @@ class LeishenManager:
             return None
         if not (self.store.get("leishen_hotkey", False) and self.writes_allowed()):
             return None
+        if self._on_ac is False and self.on_battery_office():
+            self._set(0x400, "mode-key event handled (on battery: Office)", a2=1)
+            return "office"
         new = next_mode(self.state().get("mode") or self.mode())
         self.set_mode(new)
         try:
