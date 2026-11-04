@@ -126,7 +126,7 @@ OEM-драйвером — уровень мощности с СЖО (`PWUP`) и
 |---|---|
 | 5.52.x (служба GCUService 1.0.2.x) | **поддерживается** — программа портирована с него |
 | 5.56.x с новой службой 1.2 (например, Mechrevo 5.56.60.12) | работает (та же раскладка EC, RamFan 1.5), **не проверено** — её код защищён, из неё ничего не взято |
-| 3.x (Clevo, приложение из Microsoft Store) | **экспериментально** с 1.6.6 — отдельный модуль *Control Center 3.0 / Clevo* (интерфейс Clevo DCHU), на ноутбуке Clevo ещё не проверялся: [docs/CLEVO.ru.md](docs/CLEVO.ru.md) |
+| 3.x для Clevo и Tongfang (приложение из Microsoft Store) | **экспериментально** с 1.6.6 — отдельный модуль *Control Center 3.0 / Clevo* (интерфейс DCHU), на таком ноутбуке ещё не проверялся: [docs/CLEVO.ru.md](docs/CLEVO.ru.md) |
 | другие центры производителей (например собственный 3.x у Mechrevo) | **не поддерживается** — не портирован и не проверен |
 
 **Теоретический список платформ.** Программа читает **ID проекта** из EC (`0x740`) и знает эти проекты; на реальном
@@ -147,9 +147,8 @@ OEM-драйвером — уровень мощности с СЖО (`PWUP`) и
 используйте OEM-драйвер или создайте профиль [самопроверкой](docs/EC/Platforms.ru.md).
 
 Эти шасси продаются под разными брендами (MAIBENBEN, XMG/Schenker, Eluktronics, Mechrevo, Thunderobot и др.).
-Проект показывает первая строка `uwccctl status`. **Не поддерживаются:** Tongfang GK/GM (другой EC).
-Ноутбуки Clevo с Control Center 3.x — только экспериментальный модуль *Control Center 3.0 / Clevo*
-([docs/CLEVO.ru.md](docs/CLEVO.ru.md)).
+Проект показывает первая строка `uwccctl status`. Ноутбуки Clevo и Tongfang с Control Center 3.x (например, Tongfang GK/GM, у которых EC отличается от Uniwill) —
+только экспериментальный модуль *Control Center 3.0 / Clevo* ([docs/CLEVO.ru.md](docs/CLEVO.ru.md)).
 
 **Проверено на**
 

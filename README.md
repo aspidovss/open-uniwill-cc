@@ -123,7 +123,7 @@ Control Center **5.52.x** (checked against 5.52.49.6, MBB). It replaces that Con
 |---|---|
 | 5.52.x (service GCUService 1.0.2.x) | **supported** — the program is ported from it |
 | 5.56.x with the newer service 1.2 (e.g. Mechrevo 5.56.60.12) | runs (same EC layout, RamFan 1.5), **not tested** — its code is protected, nothing was taken from it |
-| 3.x (Clevo, Microsoft Store app) | **experimental** since 1.6.6 — separate module *Control Center 3.0 / Clevo* (Clevo DCHU interface), not tested on a Clevo laptop yet: [docs/CLEVO.md](docs/CLEVO.md) |
+| 3.x for Clevo and Tongfang (Microsoft Store app) | **experimental** since 1.6.6 — separate module *Control Center 3.0 / Clevo* (DCHU interface), not tested on such a laptop yet: [docs/CLEVO.md](docs/CLEVO.md) |
 | other vendor centers (e.g. Mechrevo's own 3.x) | **not supported** — not ported, not tested |
 
 **Theoretical list of platforms.** The program reads the **project ID** from the EC (`0x740`) and recognises these
@@ -144,9 +144,8 @@ On the WMI path only a platform with a profile gets functions; for the others us
 with the [self-check](docs/EC/Platforms.md).
 
 These chassis are sold under many brands (MAIBENBEN, XMG/Schenker, Eluktronics, Mechrevo, Thunderobot, …).
-Run `uwccctl status` — the first line shows the project. **Not supported:** Tongfang GK/GM barebones (different EC).
-Clevo laptops with Control Center 3.x: only the experimental *Control Center 3.0 / Clevo* module
-([docs/CLEVO.md](docs/CLEVO.md)).
+Run `uwccctl status` — the first line shows the project. Clevo and Tongfang laptops with Control Center 3.x (e.g. Tongfang GK/GM barebones, whose EC differs from the
+Uniwill one): only the experimental *Control Center 3.0 / Clevo* module ([docs/CLEVO.md](docs/CLEVO.md)).
 
 **Tested on**
 
