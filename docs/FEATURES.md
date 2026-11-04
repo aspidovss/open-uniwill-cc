@@ -143,6 +143,13 @@ Laptops with Control Center 3.x have no Uniwill EC; the module `uwccd/clevo/` dr
 colour / brightness / effects / sleep timer / boot effect. Windows: the Control Center 3 driver; Linux: the `uwcc`
 module. Not tested on a Clevo laptop yet; commands are off until allowed — [CLEVO.md](CLEVO.md).
 
+## Leishen / Thunderobot (experimental, separate module)
+
+Thunderobot laptops built by Quanta with Leishen ControlCenter 3.x (e.g. R16) have neither the Uniwill nor the Clevo
+interface; the module `uwccd/leishen/` uses their firmware's WMI block `RW_GMWMI`: temperatures and fan speeds, power
+mode, own fan speeds or a curve, Windows key, touchpad, RGB keyboard light, the mode key. Not tested on such a laptop
+yet; commands are off until allowed — [LEISHEN.md](LEISHEN.md).
+
 ## What was ported
 
 ✅ works · ❌ not available · ➖ not needed / not applicable. Linux and Windows run the same service code; only the access

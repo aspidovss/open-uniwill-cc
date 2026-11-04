@@ -7,7 +7,11 @@ of the ACPI device INOU0000, exactly like the Windows UWACPIDriver.sys does.
 import os
 import sys
 
+<<<<<<< HEAD
 __version__ = "1.6.12"
+=======
+__version__ = "1.6.11_Leishen_dev2"
+>>>>>>> leishen-dev
 CONTACT = "OUCC@aspidov.ru"
 # Edition of the user agreement (uwccd/web/eula.*.txt); a higher number asks for acceptance again.
 EULA_VERSION = 1

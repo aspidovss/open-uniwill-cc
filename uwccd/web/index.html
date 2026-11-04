@@ -30,6 +30,8 @@
       <a data-page="battery"><i class="ico ico-battery"></i><span data-i>Battery</span></a>
       <div class="nav-group hidden" id="nav-clevo-group" data-i>Control Center 3.0 / Clevo</div>
       <a data-page="clevo" id="nav-clevo" class="hidden"><i class="ico ico-chip"></i><span data-i>Clevo (experimental)</span></a>
+      <div class="nav-group hidden" id="nav-leishen-group" data-i>Leishen / Thunderobot</div>
+      <a data-page="leishen" id="nav-leishen" class="hidden"><i class="ico ico-chip"></i><span data-i>Leishen (experimental)</span></a>
       <div class="nav-group" data-i>Settings</div>
       <a data-page="switches"><i class="ico ico-switch"></i><span data-i>Switches</span></a>
       <a data-page="auto"><i class="ico ico-auto"></i><span data-i>Automation</span></a>
@@ -97,6 +99,8 @@
         <div class="card"><h3 data-i>Device</h3><dl class="kv" id="info-dev"></dl></div>
         <div class="card"><h3 data-i>Control Center service</h3><dl class="kv" id="info-svc"></dl></div>
       </div>
+      <div class="card"><div class="row between wrap"><h3 data-i>Platform</h3><button class="btn ghost" id="info-detect" data-i>Check the platform</button></div>
+        <p class="muted" id="info-detect-line"></p></div>
       <div class="card hidden" id="info-ec">
         <div class="row between wrap"><h3 data-i>EC access</h3><button class="btn ghost" id="info-ec-open" data-i>Open EC Manager</button></div>
         <dl class="kv" id="info-ec-kv"></dl>
@@ -490,6 +494,12 @@
     <section class="page" id="page-clevo">
       <header class="ph"><h1>Control Center 3.0 / Clevo</h1><p id="clevo-sub"></p></header>
       <div id="clevo-root"></div>
+    </section>
+
+    <!-- LEISHEN / THUNDEROBOT (experimental, separate module: uwccd/leishen) -->
+    <section class="page" id="page-leishen">
+      <header class="ph"><h1>Leishen / Thunderobot</h1><p id="leishen-sub"></p></header>
+      <div id="leishen-root"></div>
     </section>
 
     <!-- BATTERY -->

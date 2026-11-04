@@ -17,6 +17,8 @@ Overview
   kb [on|off|effects|effect|level] ...   keyboard backlight
   lb [hinge|base|logo] on|off|color|effect|light ...   light bar
   clevo ...                      Control Center 3.0 / Clevo (experimental, separate module): see uwccctl help clevo
+  leishen ...                    Leishen / Thunderobot (experimental, separate module): see uwccctl help leishen
+  detect [run|close]             which platform this is, vendor control programs running (close: end them)
   get [KEY]  /  set KEY VALUE    switches and automation (see: uwccctl help set)
   apps [add|remove|enable|disable] ...   switch the mode when a program runs
   rules [list|export FILE|import FILE|clear|enable N|disable N]   mode by power / temperature / load
@@ -75,6 +77,7 @@ SETTINGS = {
     "ppd_follow": "bool", "ppd_modes": "ppdmap",
     "cpu_alert": "int", "gpu_alert": "int", "mode_on_ac": "mode", "mode_on_battery": "mode", "lang": "str",
     "fan_manager": "str", "clevo_writes": "bool", "clevo_restore": "bool",
+    "leishen_writes": "bool", "leishen_restore": "bool", "leishen_hotkey": "bool", "leishen_battery_office": "bool",
 }
 
 TEXT = {
@@ -199,6 +202,28 @@ HELP = {
         "uwccctl clevo kb effect random|breathe|cycle|wave|dance|tempo|flash\n"
         "uwccctl clevo kb sleep SECONDS             0 = never\n"
         "uwccctl clevo kb boot-effect on|off"),
+    "detect": (
+        "uwccctl detect                             which platform this is (found at the start of the service),\n"
+        "                                           the functions, vendor control programs running now\n"
+        "uwccctl detect run                         look again\n"
+        "uwccctl detect close                       end the vendor control programs (they would undo the settings)"),
+    "leishen": (
+        "Leishen / Thunderobot — experimental, separate module (Quanta laptops with Leishen ControlCenter 3.x)\n"
+        "uwccctl leishen                            status: temperatures, fans, mode, saved state\n"
+        "uwccctl leishen writes on|off              allow commands (off by default)\n"
+        "uwccctl leishen restore on|off             send the saved settings again when the service starts\n"
+        "uwccctl leishen battery-office on|off      Office on battery, the AC mode back with the charger (default on)\n"
+        "uwccctl leishen hotkey on|off              the mode key switches Office / Gaming / Performance (Windows; turn off\n"
+        "                                           while Leishen ControlCenter runs)\n"
+        "uwccctl leishen mode performance|gaming|office\n"
+        "uwccctl leishen fan auto                   fans back to the firmware\n"
+        "uwccctl leishen fan fixed CPU GPU [SYS|auto] [--low]   fixed speeds in % (below 20 % only with --low);\n"
+        "                                           the system fan stays automatic unless SYS is given\n"
+        "uwccctl leishen fan curve T:D T:D ...      one curve (°C:%) for every fan, run by the service\n"
+        "uwccctl leishen winkey lock|free           Windows key\n"
+        "uwccctl leishen touchpad on|off\n"
+        "uwccctl leishen light ZONE MODE LEVEL RRGGBB   RGB keyboards only: ZONE all|keyboard|zone1|zone2|zone3|rear|logo,\n"
+        "                                           MODE static|breathing|cycle|ambilight, LEVEL 0 off, 1 low, 2 high"),
     "lb": (
         "uwccctl lb [hinge|base|logo] on|off\n"
         "uwccctl lb [ZONE] color RRGGBB [EFFECT]\n"
@@ -1141,6 +1166,98 @@ def cmd_clevo(a):
     out(call("clevo", act) if act else call("clevo"), clevo_text)
 
 
+# -- Leishen / Thunderobot (experimental) ------------------------------------------------------------
+def leishen_text(c):
+    if not c.get("present"):
+        return f"Leishen / Thunderobot: not found ({c.get('reason') or '-'})"
+    st, info, se = c.get("state") or {}, c.get("info") or {}, c.get("sensors") or {}
+    lines = [f"Leishen / Thunderobot (experimental) via {c.get('transport')}",
+             f"commands: {'allowed' if c.get('writes') else 'off (uwccctl leishen writes on)'}, "
+             f"restore at start: {'on' if c.get('restore') else 'off'}, mode key: "
+             f"{'on' if c.get('hotkey') else 'off'} ({c.get('hotkey_state')})",
+             f"keyboard: {'RGB' if info.get('kb_rgb') else 'single colour'}, light level {se.get('kb_level', '-')}",
+             f"mode: {c.get('mode', '-')}   CPU {se.get('cpu_temp', '-')} °C   GPU {se.get('gpu_temp', '-')} °C"]
+    for f in se.get("fans") or []:
+        lines.append(f"  fan {f['fan']:4} {f['rpm']:5} rpm")
+    fm = st.get("fan_mode", "auto")
+    lines.append(f"fans: {fm}" + (f" {st.get('fixed')}" if fm == "fixed" else "")
+                 + ("  curve " + "  ".join(f"{t}°C {d}%" for t, d in (st.get("curves") or {}).get("cpu", []))
+                    if fm == "curve" else ""))
+    if "win_lock" in st:
+        lines.append(f"Windows key: {'locked' if st['win_lock'] else 'free'} (as last set here)")
+    if "touchpad" in st:
+        lines.append(f"touchpad: {'on' if st['touchpad'] else 'off'} (as last set here)")
+    if c.get("error"):
+        lines.append(f"error: {c['error']}")
+    return lines
+
+
+def detect_text(d):
+    if d.get("pending"):
+        return "platform: still being detected"
+    lap = d.get("laptop") or {}
+    lines = [f"laptop: {' '.join(x for x in (lap.get('vendor'), lap.get('model')) if x) or '-'}"
+             f"{' (board ' + lap['board'] + ')' if lap.get('board') else ''}",
+             f"platform: {d.get('platform')} — {d.get('name') or '-'} ({d.get('level')})"]
+    lines += [f"  {s}" for s in d.get("signals") or []]
+    lines.append("functions: " + ", ".join(f"{f} {'yes' if s == 'ok' else 'try' if s == 'try' else 'no'}"
+                                            for f, s in d.get("features") or []))
+    apps = d.get("vendor_apps") or []
+    lines.append("vendor programs running: " + (", ".join(f"{a['app']} ({a['name']}, pid {a['pid']})" for a in apps)
+                                                if apps else "none"))
+    if apps:
+        lines.append("  close them: uwccctl detect close")
+    return lines
+
+
+def cmd_detect(a):
+    op = a[0] if a else "status"
+    if op == "run":
+        out(call("detect", {"action": "run"}), detect_text)
+    elif op == "close":
+        d = call("detect")
+        out(call("detect", {"action": "close", "pids": [x["pid"] for x in d.get("vendor_apps") or []]}), detect_text)
+    elif op == "status":
+        out(call("detect"), detect_text)
+    else:
+        usage("detect")
+
+
+def cmd_leishen(a):
+    op, rest = (a[0], a[1:]) if a else ("status", [])
+    act = None
+    if op in ("writes", "restore", "hotkey", "battery-office") and rest:
+        call("setting", {"key": f"leishen_{op.replace('-', '_')}", "value": onoff(rest[0], "leishen")})
+    elif op == "mode" and rest:
+        act = {"action": "mode", "mode": rest[0]}
+    elif op == "fan" and rest:
+        if rest[0] == "auto":
+            act = {"action": "fans_auto"}
+        elif rest[0] == "fixed" and len(rest) >= 3:
+            vals = [v for v in rest[1:] if v != "--low"]
+            act = {"action": "fans_fixed", "fixed": {**{k: (v if v == "auto" else num(v, "leishen"))
+                                                        for k, v in zip(("cpu", "gpu", "sys"), vals[:3])},
+                                                    "allow_low": "--low" in rest}}
+        elif rest[0] == "curve" and len(rest) >= 3:
+            try:
+                pts = [[int(x) for x in p.split(":")] for p in rest[1:]]
+            except ValueError:
+                usage("leishen")
+            act = {"action": "fans_curve", "curves": {"cpu": pts, "gpu": pts}}       # system fan: automatic
+        else:
+            usage("leishen")
+    elif op == "winkey" and rest and rest[0] in ("lock", "free"):
+        act = {"action": "win_lock", "on": rest[0] == "lock"}
+    elif op == "touchpad" and rest:
+        act = {"action": "touchpad", "on": onoff(rest[0], "leishen")}
+    elif op == "light" and len(rest) >= 4:
+        act = {"action": "light", "zone": rest[0], "mode": rest[1], "level": num(rest[2], "leishen"),
+               "color": rgb(rest[3], "leishen")}
+    elif op != "status":
+        usage("leishen")
+    out(call("leishen", act) if act else call("leishen"), leishen_text)
+
+
 # -- settings, automation, app binding ------------------------------------------------------------
 def all_settings(s):
     d = dict(s["settings"])
@@ -1536,6 +1653,8 @@ def main(a):
         "kb": lambda: cmd_kb(rest),
         "lb": lambda: cmd_lb(rest),
         "clevo": lambda: cmd_clevo(rest),
+        "leishen": lambda: cmd_leishen(rest),
+        "detect": lambda: cmd_detect(rest),
         "rules": lambda: cmd_rules(rest),
         "get": lambda: cmd_get(rest),
         "set": lambda: cmd_set(rest),

@@ -271,6 +271,10 @@ class Handler(BaseHTTPRequestHandler):
                                         "profile": platformdb.export(s.pf.project_raw)})
             if u.path == "/api/clevo":                    # Control Center 3.0 / Clevo (experimental)
                 return self._json(200, s.clevo.status())
+            if u.path == "/api/leishen":                  # Leishen / Thunderobot (experimental)
+                return self._json(200, s.leishen.status())
+            if u.path == "/api/detect":                   # which platform, vendor programs running
+                return self._json(200, s.detect.status())
             if u.path == "/api/selfcheck":
                 return self._json(200, {**s.selfcheck.summary(), "result": s.selfcheck.last})
             if u.path == "/api/selfcheck/export":
@@ -444,6 +448,14 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(200, r)
             elif path == "/api/clevo":                    # Control Center 3.0 / Clevo (experimental)
                 return self._json(200, s.clevo.command(b))
+            elif path == "/api/leishen":                  # Leishen / Thunderobot (experimental)
+                return self._json(200, s.leishen.command(b))
+            elif path == "/api/detect":                   # {action: "close", pids: [...]} / {action: "run"}
+                if b.get("action") == "close":
+                    done = s.detect.close(b.get("pids") or [])
+                    return self._json(200, {**s.detect.status(), "closed": done})
+                s.detect.run()
+                return self._json(200, s.detect.status())
             elif path == "/api/load-rules/clear-log":     # Automation: forget what the rules did
                 s.load_rules.clear_log()
                 s.emit("status", {})
@@ -647,6 +659,18 @@ class Handler(BaseHTTPRequestHandler):
         elif key in ("clevo_writes", "clevo_restore"):     # Control Center 3.0 / Clevo (experimental)
             s.settings_store.set(key, bool(value))
             s.emit("clevo", {})
+        elif key == "detect_seen":                     # the first-start summary was shown
+            s.settings_store.set("detect_seen", str(value)[:40] if value else None)
+        elif key in ("leishen_writes", "leishen_restore", "leishen_hotkey", "leishen_battery_office"):     # Leishen / Thunderobot (experimental)
+            s.settings_store.set(key, bool(value))
+            if key == "leishen_writes" and not value and s.leishen.present \
+                    and s.leishen.state().get("fan_mode", "auto") != "auto":
+                s.settings_store.set(key, True)
+                try:
+                    s.leishen.set_fans_auto()             # commands off: the fans go back to the firmware first
+                finally:
+                    s.settings_store.set(key, False)
+            s.emit("leishen", {})
         elif key in ("kb_unlock_effects", "kb_untested_no_ask"):   # untested keyboard effects (no admin: lighting only)
             s.settings_store.set(key, bool(value))
             if key == "kb_unlock_effects" and not value:

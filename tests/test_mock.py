@@ -1385,7 +1385,7 @@ class DriverCheckUnit(unittest.TestCase):
 class MarkdownHelpUnit(unittest.TestCase):
     def test_docs_exist(self):
         for f in ("EC/Platforms.md", "EC/Platforms.ru.md", "EC/OEM-driver.md", "EC/OEM-driver.ru.md", "EC/WMI-config.md",
-                  "EC/WMI-vs-Driver.md", "EC/Registers.md", "EC/README.md", "FEATURES.md", "FEATURES.ru.md", "CLI.md", "CLI.ru.md",
+                  "EC/WMI-vs-Driver.md", "EC/Registers.md", "EC/README.md", "FEATURES.md", "FEATURES.ru.md", "CLI.md", "CLI.ru.md", "LEISHEN.md", "LEISHEN.ru.md",
                   "LIGHTING.md", "LIGHTING.ru.md"):
             self.assertTrue(os.path.isfile(os.path.join(ROOT, "docs", f)), f)
 
@@ -2114,6 +2114,176 @@ class LoadRulesUnit(unittest.TestCase):
         self.assertEqual(pw.option["FanBoostEnable"], 0)
         self.lr.tick(self.m(ct=70), now=401)
         self.assertEqual(pw.option["FanBoostEnable"], 1)
+
+class DetectUnit2(unittest.TestCase):
+    """Platform found at the start (first start dialog, uwccctl detect)."""
+
+    def test_platform_and_programs(self):
+        from uwccd import detect as D
+
+        class Leishen:
+            present, info = True, {"kb_rgb": True, "fans3": True, "fan_table": 4}
+
+            class wmi:
+                name = "windows-wmi"
+
+        class Absent:
+            present = False
+
+        class Svc:
+            ec_info = {"active": "none"}
+            clevo, leishen, pf = Absent(), Leishen(), None
+        r = D.platform_of(Svc())
+        self.assertEqual((r["platform"], r["level"], r["page"]), ("leishen", "experimental", "leishen"))
+        self.assertIn(("Keyboard backlight", "ok"), r["features"])
+        Svc.leishen = Absent()
+        self.assertEqual(D.platform_of(Svc())["platform"], "unknown")
+        self.assertEqual(D.close_processes([1234], allowed=set()), [])          # only programs from the list
+        import re
+        rx = dict(D.VENDOR_APPS)
+        self.assertTrue(re.search(rx["Leishen ControlCenter"], r"c:\program files (x86)\leishen\controlcenter\controlcenter.exe"))
+        self.assertTrue(re.search(D.OWN_RE, r"c:\program files\uwcc control center\controlcenter.exe"))
+
+
+class LeishenUnit(unittest.TestCase):
+    """Leishen / Thunderobot (experimental, uwccd/leishen) against the simulated firmware."""
+
+    class Store(dict):
+        def get(self, k, d=None):
+            return dict.get(self, k, d)
+
+        def set(self, k, v):
+            self[k] = v
+
+    def manager(self, writes=True, rgb=False, **extra):
+        from uwccd.leishen import LeishenManager
+        os.environ["UWCC_MOCK_LEISHEN"] = "1"
+        if rgb:
+            os.environ["UWCC_MOCK_LEISHEN_RGB"] = "1"
+        try:
+            st = self.Store(leishen_writes=writes, leishen_restore=False, **extra)
+            m = LeishenManager(st, lambda *a: None, mock=True)
+            self.assertTrue(m.start())
+            m.stop_ev.set()                          # no background fan loop in the tests
+            return m, st
+        finally:
+            os.environ.pop("UWCC_MOCK_LEISHEN", None)
+            os.environ.pop("UWCC_MOCK_LEISHEN_RGB", None)
+
+    def test_layout(self):
+        from uwccd.leishen import transport as T
+        b = T.pack(0xFB00, 0x205, 60, 50, 0xFF)
+        self.assertEqual(len(b), 32)
+        self.assertEqual(b[:12].hex(), "00fb0502" + "3c000000" + "32000000")
+        self.assertEqual(T.unpack(b)["a4"], 0xFF)
+
+    def test_detect_and_sensors(self):
+        m, _ = self.manager()
+        self.assertFalse(m.info["kb_rgb"])
+        self.assertEqual(m.info["fan_table"], 4)
+        se = m.sensors()
+        self.assertEqual((se["cpu_temp"], se["gpu_temp"]), (56, 44))
+        self.assertEqual([f["fan"] for f in se["fans"]], ["cpu", "gpu", "sys"])
+        self.assertEqual(m.mode(), "gaming")
+        self.assertEqual(m.cpu_temp(), 56)
+
+    def test_writes_off(self):
+        m, _ = self.manager(writes=False)
+        with self.assertRaises(LookupError):
+            m.set_mode("office")
+        self.assertFalse(any(r["a0"] == 0xFB00 for r in m.wmi.log))
+
+    def test_mode_and_keys(self):
+        m, st = self.manager()
+        m.set_mode("performance")
+        self.assertEqual(m.mode(), "performance")
+        m.set_win_lock(True)
+        m.set_touchpad(False)
+        self.assertEqual(m.wmi.win_lock, 1)
+        self.assertEqual(st["leishen_state"], {"mode": "performance", "win_lock": True, "touchpad": False})
+        with self.assertRaises(ValueError):
+            m.set_mode("turbo")
+
+    def test_fans_like_controlcenter(self):
+        m, st = self.manager()
+        with self.assertRaises(ValueError):
+            m.set_fans_fixed({"cpu": 10, "gpu": 40})            # below 20 % needs a confirmation
+        m.set_fans_fixed({"cpu": 60, "gpu": 50, "sys": 40})
+        sets = [r for r in m.wmi.log if r["a0"] == 0xFB00]
+        self.assertEqual((sets[-2]["a1"], sets[-2]["a2"], sets[-2]["a3"]), (0x206, 1, 1))   # the firmware writes a2, then a3
+        self.assertEqual((sets[-1]["a1"], sets[-1]["a2"], sets[-1]["a3"], sets[-1]["a4"]), (0x205, 60, 50, 40))
+        self.assertEqual(m.monitor_fans()["cpu_duty"], 60)
+        m.set_fans_auto()
+        sets = [r for r in m.wmi.log if r["a0"] == 0xFB00]
+        self.assertEqual((sets[-2]["a1"], sets[-2]["a2"], sets[-2]["a3"]), (0x206, 0, 0))
+        self.assertEqual((sets[-1]["a1"], sets[-1]["a2"], sets[-1]["a3"], sets[-1]["a4"]), (0x205, 0xFF, 0xFF, 0xFF))
+        self.assertIsNone(m.monitor_fans()["cpu_duty"])
+        self.assertEqual(st["leishen_state"]["fan_mode"], "auto")
+        m.set_fans_fixed({"cpu": 40, "gpu": 40})                   # the system fan stays automatic
+        self.assertEqual([r for r in m.wmi.log if r["a1"] == 0x205][-1]["a4"], 0xFF)
+
+    def test_curve(self):
+        from uwccd.leishen.manager import DEFAULT_CURVE, check_curve, curve_duty
+        self.assertEqual(curve_duty(DEFAULT_CURVE, 75), 50)
+        self.assertEqual(curve_duty(DEFAULT_CURVE, 69), 30)
+        self.assertEqual(curve_duty(DEFAULT_CURVE, 68, last=50), 50)     # falls back only 5 °C below the point
+        self.assertEqual(curve_duty(DEFAULT_CURVE, 64, last=50), 30)
+        with self.assertRaises(ValueError):
+            check_curve([[50, 60], [40, 70]])
+        m, _ = self.manager()
+        m.set_fans_curve({"cpu": [[30, 30], [50, 45], [80, 90]]})
+        last = [r for r in m.wmi.log if r["a0"] == 0xFB00 and r["a1"] == 0x205][-1]
+        self.assertEqual((last["a2"], last["a3"]), (45, 30))               # CPU 56 °C, GPU 44 °C
+
+    def test_light(self):
+        m, _ = self.manager()
+        with self.assertRaises(ValueError):                                 # single colour: never sent
+            m.set_light("all", "static", 2, [255, 0, 0])
+        m, _ = self.manager(rgb=True)
+        m.set_light("zone1", "breathing", 1, [0x12, 0x34, 0x56])
+        last = [r for r in m.wmi.log if r["a1"] == 0x100][-1]
+        self.assertEqual((last["a2"], last["a3"]), (5, 0x21123456))
+
+    def test_mode_key(self):
+        from uwccd.leishen.manager import next_mode
+        self.assertEqual([next_mode(x) for x in ("office", "gaming", "performance")], ["gaming", "performance", "office"])
+        m, st = self.manager(leishen_hotkey=True)
+        m.set_mode("office")
+        self.assertIsNone(m.handle_event(bytes(32)))
+        self.assertEqual(m.handle_event(bytes([0] * 7 + [1] + [0] * 24)), "gaming")
+        self.assertEqual(m.mode(), "gaming")
+        self.assertEqual([r for r in m.wmi.log if r["a0"] == 0xFB00][-1]["a1"], 0x400)
+        st["leishen_hotkey"] = False
+        self.assertIsNone(m.handle_event(bytes([0] * 7 + [1] + [0] * 24)))
+
+    def test_battery_office(self):
+        m, st = self.manager(leishen_hotkey=True)
+        ac = [True]
+        m.ac_fn = lambda: ac[0]
+        m.set_mode("performance")
+        m._power_source()
+        self.assertEqual(m.mode(), "performance")
+        ac[0] = False
+        m._power_source()
+        self.assertEqual(m.mode(), "office")
+        with self.assertRaises(ValueError):
+            m.set_mode("gaming")
+        self.assertEqual(m.handle_event(bytes([0] * 7 + [1] + [0] * 24)), "office")
+        self.assertEqual(m.mode(), "office")
+        ac[0] = True
+        m._power_source()
+        self.assertEqual(m.mode(), "performance")
+        st["leishen_battery_office"] = False
+        ac[0] = False
+        m._power_source()
+        self.assertEqual(m.mode(), "performance")
+
+    def test_absent(self):
+        from uwccd.leishen import LeishenManager
+        m = LeishenManager(self.Store(), lambda *a: None, mock=True)
+        self.assertFalse(m.start())
+        self.assertFalse(m.status()["present"])
+
 
 if __name__ == "__main__":
     unittest.main()

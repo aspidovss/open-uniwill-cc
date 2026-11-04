@@ -9,6 +9,25 @@
 - **Automatic profile switching: conditions on the state** — the laptop's mode (= / ≠), the cooler profile in use
   (= / ≠) and another rule (*is on* / *is not on*: its conditions held long enough, or it is active; or *any other
   rule*). Rule numbers in conditions follow the rules when they are moved or removed.
+- **Leishen / Thunderobot (experimental, separate module `uwccd/leishen`)** for Quanta laptops with Leishen
+  ControlCenter 3.x (Thunderobot R16, board NLY), which have neither the Uniwill nor the Clevo interface. Through the
+  firmware's WMI block `RW_GMWMI` (GUID `644C5791-…`, the WMI driver of Windows; Linux: `acpi_call`):
+  - CPU / GPU temperature and 2–3 fan speeds, also on the Monitor page and in the history;
+  - power mode High performance / Gaming / Office (with the firmware's NVIDIA power limits);
+  - fans: automatic, fixed speed or a curve run by the service, as Leishen ControlCenter does; automatic again when the
+    service stops;
+  - Windows key lock, touchpad, RGB keyboard light (zone, effect, level, colour), the Fn mode key (optional);
+  - commands only after *Allow commands*; the diagnostic report has the raw answers of the firmware.
+  Page *Leishen (experimental)*, `uwccctl leishen …`, [docs/LEISHEN.md](docs/LEISHEN.md). Written from the firmware's
+  ACPI tables and how Leishen ControlCenter uses them; checked on a Thunderobot R16 (test builds
+  1.6.11_Leishen_dev, _dev2). *Automatic* fans send `0xFF` for every fan (the switch alone did not give the firmware
+  its control back); the system fan stays automatic unless a speed is given for it; on battery the mode is Office like
+  in Leishen ControlCenter, the mode chosen on AC comes back with the charger (*Office on battery*).
+- **Platform found at the first start:** the service checks, reading only, which interface the laptop has (Uniwill EC,
+  Control Center 3.0 / Clevo, Leishen / Thunderobot or none) and which vendor control programs run at the same time.
+  At the first start the window shows the laptop, the platform with its level (tested / known / experimental / not
+  found), what can be controlled, and offers to close the vendor program (both would undo each other's settings).
+  Again: *Information → Platform → Check the platform*, `uwccctl detect`; in the diagnostic report.
 
 ## 1.6.11
 
