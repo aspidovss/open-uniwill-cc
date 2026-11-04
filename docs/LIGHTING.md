@@ -25,6 +25,11 @@ The keys are the 6 × 21 grid of the Uniwill ITE controller; BetterRGB itself is
 (ITE `048D:600B`). Rain, Matrix or Lightning look like pictures only on per-key keyboards; on four zones they become
 colours flowing over the zones.
 
+An active per-key picture is refreshed at least once a second, even when its colours have not changed. This keeps
+Windows USB idle suspend from interrupting a constant temperature colour or a held colour during missing sensor
+readings. These refreshes keep the existing user-mode effect; inactivity sleep and switching the backlight off still
+stop frame transmission.
+
 > **Tested:** the four-zone path on MAIBENBEN Tsunami. The per-key path uses the packets of the original Control
 > Center user mode and of BetterRGB, but it has not been tried on a per-key keyboard with this program yet — a report
 > helps (*Information → Diagnostic report*).
