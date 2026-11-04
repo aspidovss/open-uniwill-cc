@@ -915,3 +915,14 @@ Object.assign(RU, {
   "s → switch to": "с → переключить на", "then return to the previous mode when it has not held for": "потом вернуть прежний режим, когда условие не выполняется",
   "If": "Если", "Automation: {0} → {1}": "Автоматизация: {0} → {1}", "back": "возврат",
 });
+
+// Cooler profile Behaviour bound to the profile; conditions on the state (1.6.12)
+Object.assign(RU, {
+  "The Behaviour of the profile picked in the list — Apply uses it with its curves.": "«Поведение» профиля, выбранного в списке, — «Применить» включит его вместе с кривыми.",
+  "The Behaviour belongs to the cooler profile: changes apply at once and are kept in the profile in use.":
+    "«Поведение» — часть профиля СЖО: изменения применяются сразу и сохраняются в текущем профиле.",
+  "The Behaviour belongs to the cooler profile: changes apply at once; a built-in profile becomes changed — New… keeps it as your own profile.":
+    "«Поведение» — часть профиля СЖО: изменения применяются сразу; встроенный профиль становится изменённым — «Новый…» сохранит его как свой.",
+  "Laptop mode": "Режим ноутбука", "Cooler profile": "Профиль СЖО", "Automation rule": "Правило автоматизации",
+  "any other rule": "любое другое правило", "is on": "сработало", "is not on": "не сработало",
+});

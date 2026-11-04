@@ -819,6 +819,29 @@ class LiquidCoolerUnit(unittest.TestCase):
         with self.assertRaises(ValueError):
             self._curve([[40, 50], [60, 60]], [[0, 12]])          # no 12 V on a curve
 
+    def test_behaviour_bound_to_profile(self):
+        lc = self.lc
+        from uwccd import lc_curves as LCV
+        a = lc.profile({"action": "copy", "name": "Main"})
+        lc.configure({"temp_source": "max", "delay_up": 15})              # the own profile in use keeps the change
+        self.assertEqual(LCV.find(lc.cfg, a)["behaviour"]["delay_up"], 15)
+        self.assertFalse(lc.status()["profile_modified"])
+        b = lc.profile({"action": "copy", "name": "CPU and GPU"})
+        lc.configure({"temp_source": "gpu", "pump_idle": {"enabled": True, "off_below": 50}})
+        lc.profile({"action": "apply", "id": a})
+        self.assertEqual((lc.cfg["temp_source"], lc.cfg["delay_up"]), ("max", 15))
+        lc.profile({"action": "apply", "id": b})
+        self.assertEqual((lc.cfg["temp_source"], lc.cfg["pump_idle"]["off_below"]), ("gpu", 50))
+        lc.profile({"action": "apply", "id": "quiet"})                     # a built-in profile is only marked changed
+        lc.configure({"delay_up": 3})
+        self.assertEqual(LCV.find(lc.cfg, "quiet")["behaviour"]["delay_up"], 20)
+        self.assertTrue(lc.status()["profile_modified"])
+        cfg = {"profiles": [{"id": "old", "name": "Old", "curves": LCV.full(lc.cfg["curves"]), "behaviour": None}],
+               **{k: lc.cfg[k] for k in LCV.BEHAVIOUR_KEYS}}               # a profile of 1.6.8–1.6.10
+        self.assertEqual(LCV.give_behaviour(cfg), 1)
+        self.assertEqual(cfg["profiles"][0]["behaviour"]["delay_up"], 3)
+        self.assertEqual(LCV.give_behaviour(cfg), 0)
+
     def test_cooler_profiles(self):
         lc = self.lc
         self.assertEqual(lc.status()["profile"], "default")
@@ -1865,6 +1888,63 @@ class LoadRulesUnit(unittest.TestCase):
     def m(self, cp=10, gp=5, ct=50, gt=45, cl=10, asleep=False):
         return {"monitoring": "full", "cpu": {"power_w": cp, "temp": ct, "usage": cl},
                 "gpu": {"power_w": gp, "temp": gt, "usage": 5, "asleep": asleep}}
+
+    def test_state_conditions(self):
+        A = self.A
+        with self.assertRaises(ValueError):                      # a rule cannot test itself
+            A.check_load_rules([{"conditions": [{"metric": "rule", "op": "=", "value": 1}], "mode": 1}])
+        with self.assertRaises(ValueError):
+            A.check_load_rules([{"conditions": [{"metric": "mode", "op": ">", "value": 1}], "mode": 1}])
+        rules = A.check_load_rules([
+            {"name": "hot in office", "conditions": [{"metric": "cpu_temp", "op": ">", "value": 80},
+                                                     {"metric": "mode", "op": "=", "value": 0}], "hold": 0, "mode": 1},
+            {"name": "not in turbo", "conditions": [{"metric": "mode", "op": "!=", "value": 2},
+                                                    {"metric": "cpu_power", "op": ">", "value": 100}], "hold": 0,
+             "fan_boost": "on"}])
+        self.assertEqual(rules[0]["conditions"][1], {"metric": "mode", "op": "=", "value": 0})
+        self.svc.settings_store.set("load_rules", rules)
+        self.svc.power.option["OperatingMode"] = 2
+        self.lr.tick(self.m(ct=90), now=10)
+        self.assertIsNone(self.lr.active)                        # turbo: neither holds
+        self.svc.power.option["OperatingMode"] = 0
+        self.lr.tick(self.m(ct=90), now=12)
+        self.assertEqual(self.lr.active, 0)
+
+    def test_rule_on_condition(self):
+        A = self.A
+        rules = A.check_load_rules([
+            {"name": "boost while heavy", "conditions": [{"metric": "rule", "op": "=", "value": 2},
+                                                         {"metric": "gpu_temp", "op": ">", "value": 70}], "hold": 0,
+             "fan_boost": "on", "back": "while"},
+            {"name": "heavy", "conditions": [{"metric": "total_power", "op": ">", "value": 100}], "hold": 5, "mode": 2}])
+        self.svc.settings_store.set("load_rules", rules)
+        self.svc.power.set_fan_boost = lambda on: self.svc.power.option.__setitem__("FanBoostEnable", on)
+        hot = self.m(cp=90, gp=60, gt=80)
+        self.lr.tick(hot, now=0)                                 # rule 2 holds, not long enough yet
+        self.assertIsNone(self.lr.active)
+        self.lr.tick(hot, now=6)                                 # rule 2 on and the GPU hot -> rule 1 (it is first)
+        self.assertEqual(self.lr.active, 0)
+        self.lr.tick(hot, now=10)                                # stays: rule 2 still on (no flapping)
+        self.assertEqual(self.lr.active, 0)
+        self.assertTrue(self.svc.power.option.get("FanBoostEnable"))
+        self.lr.tick(self.m(cp=10, gp=5, gt=40), now=12)         # the load is over: back
+        self.assertIsNone(self.lr.active)
+
+    def test_cooler_profile_condition(self):
+        A = self.A
+
+        class Lc:
+            cfg = {"profile": "quiet", "mode": "auto"}
+        self.svc.liquid = Lc()
+        rules = A.check_load_rules([{"conditions": [{"metric": "lc_profile", "op": "=", "value": "quiet"},
+                                                    {"metric": "cpu_temp", "op": ">", "value": 85}], "hold": 0, "mode": 2}])
+        self.svc.settings_store.set("load_rules", rules)
+        self.lr.tick(self.m(ct=90), now=1)
+        self.assertEqual(self.lr.active, 0)
+        rules[0]["conditions"][0]["op"] = "!="
+        self.lr.active = None
+        self.lr.tick(self.m(ct=90), now=2)
+        self.assertIsNone(self.lr.active)
 
     def test_power_rule_with_return(self):
         rules = self.A.check_load_rules([

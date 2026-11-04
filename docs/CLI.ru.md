@@ -155,7 +155,7 @@ Control Center 3.0 / Clevo (экспериментально): `uwccctl clevo �
 
 | Поле правила (JSON) | Значения |
 |---|---|
-| `conditions` | 1..3 условия `{"metric", "op", "value"}`; `metric`: `cpu_power` `gpu_power` `total_power` (Вт), `cpu_temp` `gpu_temp` (°C), `cpu_load` `gpu_load` `battery` (%), `ac` (1 сеть / 0 батарея), `sys_profile` (0 энергосбережение / 1 сбалансированный / 2 производительность), `saver` (экономия заряда Windows 1 / 0); `op` `>` / `<` (`=` для `ac`, `sys_profile`, `saver`) |
+| `conditions` | 1..3 условия `{"metric", "op", "value"}`; `metric`: `cpu_power` `gpu_power` `total_power` (Вт), `cpu_temp` `gpu_temp` (°C), `cpu_load` `gpu_load` `battery` (%), `ac` (1 сеть / 0 батарея), `sys_profile` (0 энергосбережение / 1 сбалансированный / 2 производительность), `saver` (экономия заряда Windows 1 / 0), `mode` (0..3, режим ноутбука), `lc_profile` (ID профиля СЖО), `rule` (1..12: правило сработало — его условия держатся нужное время или оно активно; 0 = любое другое правило); `op` `>` / `<` (`=` для `ac`, `sys_profile`, `saver`; `=` / `!=` для `mode`, `lc_profile`, `rule`) |
 | `join` | `and` / `or` |
 | `hold`, `hold_unit` | секунды 0..86400 (0 = сразу); `s` / `min` / `h` — только то, как время показывает окно |
 | `mode`, `slot` | 0 office, 1 gaming, 2 turbo, 3 custom или `null` = не менять режим; слот 0..4 или `null` = текущий |

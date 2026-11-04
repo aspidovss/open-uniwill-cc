@@ -179,7 +179,9 @@ HELP = {
         "  metrics: cpu_power gpu_power total_power (W), cpu_temp gpu_temp (°C), cpu_load gpu_load battery (%),\n"
         "  ac (op \"=\", value 1 = on AC, 0 = on battery), sys_profile (op \"=\", 0 power-saver / 1 balanced /\n"
         "  2 performance), saver (Windows battery saver, op \"=\", 1 / 0); lc_profile = a cooler profile id or null;\n"
-        "  mode 0 office, 1 gaming, 2 turbo, 3 custom; slot = profile 0..4 or null (current)"),
+        "  mode 0 office, 1 gaming, 2 turbo, 3 custom; slot = profile 0..4 or null (current);\n"
+        "  conditions on the state (op \"=\" or \"!=\"): mode (0..3, the laptop's mode), lc_profile (a cooler profile id),\n"
+        "  rule (1..12: that rule is on — its conditions held long enough or it is active; 0 = any other rule)"),
     "clevo": (
         "Control Center 3.0 / Clevo — experimental, separate module (laptops with Control Center 3.x)\n"
         "uwccctl clevo                              status: interface, capabilities, fans, saved state\n"
@@ -1013,8 +1015,18 @@ def rules_text(d):
     names = {0: "office", 1: "gaming", 2: "turbo", 3: "custom"}
     out = []
     for i, r in enumerate(d["rules"]):
-        cond = f" {r.get('join', 'and')} ".join(("on AC" if c["value"] else "on battery") if c["metric"] == "ac"
-                                               else f"{c['metric']} {c['op']} {c['value']:g}" for c in r["conditions"])
+        def one(c):
+            m, op, v = c["metric"], c["op"], c["value"]
+            if m == "ac":
+                return "on AC" if v else "on battery"
+            if m == "mode":
+                return f"mode {op} {names.get(v, v)}"
+            if m == "rule":
+                return f"{'any other rule' if not v else f'rule {v}'} {'on' if op == '=' else 'not on'}"
+            if m == "lc_profile":
+                return f"cooler profile {op} {v}"
+            return f"{m} {op} {v:g}"
+        cond = f" {r.get('join', 'and')} ".join(one(c) for c in r["conditions"])
         state = " [active]" if d.get("active") == i else (f" [holds {d['held'][str(i)]} s]" if str(i) in (d.get("held") or {}) else "")
         back = r.get("back")
         back = "after" if back is True else "never" if back in (False, None) else back

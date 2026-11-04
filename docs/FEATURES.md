@@ -51,7 +51,9 @@ WhisperMode.
 **Automatic profile switching** (1.6.8): rules like *"CPU + GPU power above 120 W for 30 s → Turbo, profile 2;
 back to the previous mode when it has not held for 60 s"*, *"CPU power below 15 W for 60 s → Office"* or *"CPU above
 90 °C or GPU above 85 °C for 20 s → Gaming"*. Up to 3 conditions per rule (and / or) on CPU, GPU or CPU + GPU power,
-CPU / GPU temperature and load, battery charge and the power source (mains / battery); the target is a mode and a
+CPU / GPU temperature and load, battery charge, the power source (mains / battery), and the state: the laptop's mode,
+the cooler profile in use (= / ≠) and whether another rule is on (its conditions held long enough, or it is active);
+the target is a mode and a
 profile slot (or the current one, or *keep the mode*), **Fan Boost** (*keep it / turn on / turn off*), and the liquid
 cooler's mode (Automatic … Off, or *keep*) and profile. A rule must change at least one of them. Times in s / min / h
 (up to 24 h), *for 0* = at once, on the first sample that meets the conditions. **Then:** *stay (do not return)*,
@@ -102,6 +104,7 @@ the system sleeps the cooler is put to sleep. Needs `python3-bleak` (installed b
 | **Own pump voltage limits** (after a risk warning): choose which of 7 / 8 / 11 / 12 V may be used — the cooler firmware knows only these and cannot report what a pump supports; a voltage outside the choice becomes the nearest allowed one in every mode | |
 | **Controller** mode: the curves are shown but cannot be edited (the EC drives the cooler; the common curve is used only when the EC publishes no targets) | |
 | **Cooler profiles** (block *Profiles* under the charts): Default (factory steps), Quiet, Balanced, Performance and your own — *Apply*, *Save*, *New…* (the current curves as a new profile), *Remove*, *Export* / *Import…* (a JSON file). A profile holds the common and the per-mode curves **and the Behaviour** (temperature source, up / down delays, smoothing, stopping the pump when cool); a profile chosen in the list is shown on the charts and its Behaviour read-only until *Apply*. Built-in Behaviour: Default and Balanced 10 s up / 30 s down, Quiet 20 / 60 s, Performance 5 / 60 s. Profiles saved by 1.6.8–1.6.10 have no Behaviour and keep the current one | |
+| **Behaviour belongs to the profile** (1.6.12): a change applies at once and is kept in the own profile in use (a built-in one becomes *changed* — *New…* keeps it); the block follows a profile change at once, also one made by a rule. Profiles saved by 1.6.8–1.6.10 get the Behaviour in use when the service starts | |
 | Lighting: static, breathing, rainbow, breathing rainbow; Mk2 also spiral, rotating rainbow, colour wave | `0x1E` / `0x33` |
 | Coolant flow check every 15 s with a desktop alert when the pump runs but nothing circulates | `0x32` |
 | Coolant filling cycle (8 pump pulses, ~70 s) | `0x19` |

@@ -473,8 +473,12 @@ LOAD_METRICS = {                     # key -> (unit, max value)
     "ac": ("", 1),                   # power source: op "=", value 1 = from the mains, 0 = on battery
     "sys_profile": ("", 2),          # system power profile: op "=", 0 power-saver / 1 balanced / 2 performance
     "saver": ("", 1),                # Windows battery saver: op "=", 1 on / 0 off
-}
+    "mode": ("", 3),                 # the laptop's mode: op "=" / "!=", 0 office / 1 gaming / 2 turbo / 3 custom
+    "lc_profile": ("", 0),           # the liquid cooler profile in use: op "=" / "!=", its id (text)
+    "rule": ("", 12),                # another rule is on (its conditions held long enough, or it is active):
+}                                    #   op "=" on / "!=" not on, value its number 1..12, 0 = any other rule
 EQ_METRICS = ("ac", "sys_profile", "saver")
+STATE_METRICS = ("mode", "lc_profile", "rule")
 LOAD_LOG_LEN = 100                  # what the rules did: the last 100 events
 MAX_RULE_S = 86400                  # hold / return times up to 24 h
 TIME_UNITS = ("s", "min", "h")      # how the window shows a time (stored in seconds)
@@ -512,6 +516,8 @@ def load_metric(m, key):
         return SYS_PROFILES.index(p) if p in SYS_PROFILES else None
     if key == "saver":
         return None if m.get("saver") is None else (1 if m.get("saver") else 0)
+    if key in ("mode", "lc_profile"):
+        return m.get(key)
     return None
 
 
@@ -529,6 +535,21 @@ def check_load_rules(rules):
             if k not in LOAD_METRICS:
                 raise ValueError(f"rule {i + 1}: metric {k} ({', '.join(LOAD_METRICS)})")
             op = str(c.get("op", ">"))
+            if k in STATE_METRICS:
+                if op not in ("=", "!="):
+                    raise ValueError(f"rule {i + 1}: {k}: operator = or !=")
+                if k == "lc_profile":
+                    v = str(c.get("value") or "").strip()[:60]
+                    if not v:
+                        raise ValueError(f"rule {i + 1}: cooler profile: an id is needed")
+                else:
+                    v = int(c.get("value"))
+                    if not 0 <= v <= LOAD_METRICS[k][1]:
+                        raise ValueError(f"rule {i + 1}: {k} 0..{LOAD_METRICS[k][1]}")
+                    if k == "rule" and v == i + 1:
+                        raise ValueError(f"rule {i + 1}: a rule cannot test itself")
+                cc.append({"metric": k, "op": op, "value": v})
+                continue
             if k in EQ_METRICS:
                 op = "="
             elif op not in (">", "<"):
@@ -619,13 +640,33 @@ class LoadRules:
         return self.svc.settings_store.get("load_rules", []) or []
 
     @staticmethod
-    def holds(rule, m):
+    def holds(rule, m, i=None, on=frozenset()):
+        """i: the rule's own index; on: the rules that are on (conditions held long enough, or active)."""
         res = []
         for c in rule["conditions"]:
-            v = load_metric(m, c["metric"])
             op = c["op"]
-            res.append(v is not None and (v == c["value"] if op == "=" else v > c["value"] if op == ">" else v < c["value"]))
+            if c["metric"] == "rule":
+                n = int(c["value"])
+                is_on = any(j != i for j in on) if n == 0 else (n - 1) in on
+                res.append(is_on if op == "=" else not is_on)
+                continue
+            v = load_metric(m, c["metric"])
+            if op == "!=":
+                res.append(v is not None and v != c["value"])
+            else:
+                res.append(v is not None and (v == c["value"] if op == "=" else v > c["value"] if op == ">" else v < c["value"]))
         return all(res) if rule.get("join", "and") == "and" else any(res)
+
+    def _state(self, m):
+        """The laptop's mode and the cooler profile, for the conditions on them."""
+        out = dict(m)
+        try:
+            out["mode"] = self.svc.power.option.get("OperatingMode")
+        except Exception:  # noqa: BLE001
+            out["mode"] = None
+        lc = self._lc()
+        out["lc_profile"] = lc.cfg.get("profile") if lc is not None else None
+        return out
 
     # -- what a rule can change ----------------------------------------------------------------------
     def _current(self):
@@ -751,13 +792,17 @@ class LoadRules:
             m = {**m, "sys_profile": sp.profile, "saver": sp.saver}
         now = time.time() if now is None else now
         rules = self.rules()
+        m = self._state(m)
         with self.lock:
+            on = {j for j, t in self.since.items() if j < len(rules) and now - t >= rules[j].get("hold", 0)}
+            if self.active is not None:
+                on.add(self.active)
             hit = None
             for i, r in enumerate(rules):
                 if not r.get("enabled", True):
                     self.since.pop(i, None)
                     continue
-                if self.holds(r, m):
+                if self.holds(r, m, i, on):
                     self.since.setdefault(i, now)
                     if hit is None and now - self.since[i] >= r.get("hold", 0):
                         hit = i

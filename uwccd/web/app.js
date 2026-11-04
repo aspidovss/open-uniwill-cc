@@ -1427,8 +1427,12 @@ function lcCross(svg, P, temp, yv, label, flip) {      // the current point: a r
 }
 // The red dots follow the temperature source: CPU / GPU (the CPU while the GPU sleeps) / both — two dots.
 // The sensor that drives the cooler shows the cooler's real output; the other one shows its point on the curve.
+function lcPickBeh(L) {                    // the Behaviour of the profile picked in the list (preview), else null
+  const p = lcPick ? (L.profiles || []).find(x => x.id === lcPick) : null;
+  return p && p.behaviour ? p.behaviour : null;
+}
 function lcSensorDots(L) {
-  const src = (lcCalm && lcCalm.temp_source) || L.config.temp_source || "max", m = lastMonitor;
+  const pb = lcPickBeh(L), src = (pb && pb.temp_source) || L.config.temp_source || "max", m = lastMonitor;
   const cpu = m && m.cpu && m.cpu.temp != null ? m.cpu.temp : null;
   const gpu = m && m.gpu && !m.gpu.asleep && m.gpu.temp != null ? m.gpu.temp : null;
   let dots = [];
@@ -1534,7 +1538,7 @@ function lcPumpEditor(set, key, readonly, L) {
   const W = 640, H = 230, run = S.liquid.pump_running || [7, 8, 11], lv = [0, ...run];
   const P = lcPlot(W, H, 0, lv.length - 1), svg = lcSvg(W, H), yi = v => Math.max(0, lv.indexOf(v));
   const slots = lcPumpSlots(set.pump, run);
-  const calm = lcCalm || { pump_idle: { ...(S.liquid.config.pump_idle || {}) } }, pi = calm.pump_idle;
+  const pb = lcPickBeh(S.liquid), pi = { ...((pb && pb.pump_idle) || S.liquid.config.pump_idle || {}) };
   let off = pi.enabled ? pi.off_below : null;
   lcAxes(svg, P, lv.map((v, i) => [i, v ? `${v} V` : t("Off")]));
   const path = lcEl("polyline", { class: "line pump" + (readonly === true ? " ro" : "") }); svg.append(path);
@@ -1574,7 +1578,7 @@ function lcPumpEditor(set, key, readonly, L) {
     const was = S.liquid.config.pump_idle || {}, gap = Math.max(2, (pi.on_above ?? 55) - (pi.off_below ?? 50));
     const nx = off == null ? { ...pi, enabled: false }
       : { ...pi, enabled: true, off_below: off, on_above: Math.min(95, off + gap) };
-    Object.assign(pi, nx); if (lcCalm) lcCalm.pump_idle = pi;
+    Object.assign(pi, nx);
     if (nx.enabled !== !!was.enabled || nx.off_below !== was.off_below || nx.on_above !== was.on_above)
       lcPost("config", { pump_idle: nx }).then(() => drawCalm(S.liquid));
   };
@@ -1607,7 +1611,7 @@ function lcPumpEditor(set, key, readonly, L) {
   return h("div", { class: "lc-ed" }, h("h4", {}, t("Pump")), svg);
 }
 $("#lc-prof").addEventListener("change", e => { lcPick = e.target.value || null; drawCurves(S.liquid); drawCalm(S.liquid); });
-const lcProf = (action, extra, ok) => { const id = $("#lc-prof").value; lcPick = null; if (action === "apply") lcCalm = null; return lcPost("profile", { action, id, ...(extra || {}) }, ok); };
+const lcProf = (action, extra, ok) => { const id = $("#lc-prof").value; lcPick = null; return lcPost("profile", { action, id, ...(extra || {}) }, ok).then(() => drawCalm(S.liquid)); };
 $("#lc-prof-apply").addEventListener("click", () => lcProf("apply", {}, t("Profile applied")));
 $("#lc-prof-save").addEventListener("click", () => lcProf("save", {}, t("Saved")));
 $("#lc-prof-copy").addEventListener("click", () => {
@@ -1636,45 +1640,51 @@ $("#lc-prof-file").addEventListener("change", async e => {
   await act(async () => { rid = (await api("lc/profile", { action: "import", name: name.trim(), curves: d.curves, behaviour: d.behaviour || null })).id; }, t("Profile imported"));
   if (rid) { lcPick = rid; drawCurves(S.liquid); }      // shown on the charts; Apply uses it
 });
-// delays, smoothing, temperature source, pump stop when cool (auto / Controller modes)
-let lcCalm = null;
+// delays, smoothing, temperature source, pump stop when cool (auto / Controller modes) — the Behaviour of the cooler
+// profile: every change applies at once and is kept in the own profile in use (the service binds it)
+const LC_BEH_DEFAULT = { temp_source: "max", delay_up: 10, delay_down: 30, smooth: true };
+function lcBehPost(part) { return lcPost("config", part); }
 function drawCalm(L) {
   const c = L.config;
-  if (!lcCalm) lcCalm = { temp_source: c.temp_source || "max", delay_up: c.delay_up ?? 10, delay_down: c.delay_down ?? 30,
-    smooth: c.smooth !== false, pump_idle: { ...(c.pump_idle || {}) } };
   // a cooler profile picked in the list (not applied yet): its own Behaviour is shown, read-only
   const pick = lcPick ? (L.profiles || []).find(p => p.id === lcPick) : null, pv = pick && pick.behaviour;
-  const k = pv ? JSON.parse(JSON.stringify(pv)) : lcCalm, pi = k.pump_idle, box = $("#lc-calm"); box.innerHTML = "";
-  const num = (obj, key, min, max, unit) => {
+  const cur = { temp_source: c.temp_source || "max", delay_up: c.delay_up ?? 10, delay_down: c.delay_down ?? 30,
+    smooth: c.smooth !== false, pump_idle: { ...(c.pump_idle || {}) } };
+  const k = pv ? JSON.parse(JSON.stringify(pv)) : cur, pi = k.pump_idle, box = $("#lc-calm"); box.innerHTML = "";
+  const num = (obj, key, min, max, unit, post) => {
     const e = h("input", { type: "number", min, max, value: obj[key], class: "num" });
-    e.addEventListener("change", () => { obj[key] = +e.value; });
+    e.addEventListener("change", () => { const v = Math.max(min, Math.min(max, Math.round(+e.value || 0))); e.value = v; obj[key] = v; post(); });
     return h("span", { class: "row", style: "gap:6px;flex:none" }, e, h("span", { class: "muted" }, unit));
   };
-  const chk = (obj, key, label, after) => {
+  const chk = (obj, key, label, post) => {
     const e = h("input", { type: "checkbox" }); e.checked = !!obj[key];
-    e.addEventListener("change", () => { obj[key] = e.checked; if (after) after(); });
+    e.addEventListener("change", () => { obj[key] = e.checked; post(); });
     return h("label", { class: "chk" }, e, " ", h("span", {}, label));
   };
+  const top = key => () => lcBehPost({ [key]: k[key] });
+  const idle = () => lcBehPost({ pump_idle: { ...pi } }).then(() => drawCalm(S.liquid));
   const line = (label, ...ctrl) => h("div", { class: "calm-row" }, h("span", {}, label), h("div", { class: "row wrap", style: "gap:10px" }, ...ctrl));
   const src = h("select", {}, ...[["max", "Hotter of CPU and GPU"], ["cpu", "CPU"], ["gpu", "GPU"]].map(([v, n]) => {
     const o = h("option", { value: v }, t(n)); if (k.temp_source === v) o.selected = true; return o; }));
-  src.addEventListener("change", () => { k.temp_source = src.value; if (!lcDrag) drawCurves(S.liquid); });
+  src.addEventListener("change", () => { k.temp_source = src.value; lcBehPost({ temp_source: src.value }); });
   box.append(
     h("h4", {}, t("Behaviour")),
     line(t("Temperature"), src, h("span", { class: "muted tiny" }, t("GPU: while the graphics card sleeps, the CPU is used"))),
-    line(t("Raise the speed after"), num(k, "delay_up", 0, 300, t("s")), h("span", { class: "muted tiny" }, t("at once from 95 °C or when the curve asks 25 % more"))),
-    line(t("Lower the speed after"), num(k, "delay_down", 0, 300, t("s"))),
-    chk(k, "smooth", t("Smooth: average the temperature over 10 s, change the fan by 10 % and the pump by one voltage step at a time")),
+    line(t("Raise the speed after"), num(k, "delay_up", 0, 300, t("s"), top("delay_up")), h("span", { class: "muted tiny" }, t("at once from 95 °C or when the curve asks 25 % more"))),
+    line(t("Lower the speed after"), num(k, "delay_down", 0, 300, t("s"), top("delay_down"))),
+    chk(k, "smooth", t("Smooth: average the temperature over 10 s, change the fan by 10 % and the pump by one voltage step at a time"), top("smooth")),
     h("h4", {}, t("Stop the pump when it is cool")),
-    chk(pi, "enabled", t("Stop the pump at low load (the cooler fan keeps following the curve)"), () => drawCalm(L)));
+    chk(pi, "enabled", t("Stop the pump at low load (the cooler fan keeps following the curve)"), idle));
   if (pi.enabled) box.append(
-    line(t("Stop below"), num(pi, "off_below", 30, 85, "°C"), h("span", { class: "muted" }, t("for")), num(pi, "off_after", 10, 900, t("s"))),
-    line(t("Start again above"), num(pi, "on_above", 32, 95, "°C"), h("span", { class: "muted" }, t("for")), num(pi, "on_after", 0, 120, t("s"))),
-    line(t("Run at least"), num(pi, "min_run", 0, 1800, t("s")), h("span", { class: "muted tiny" }, t("after each start, so the pump does not cycle"))));
-  box.prepend(h("p", { class: "muted tiny lc-beh-note" }, pick && !pv ? t("This profile has no Behaviour of its own (saved before 1.6.11): applying it keeps the current one.")
-    : t("The Behaviour is part of the cooler profile: Save stores it with the curves, applying a profile sets both.")));
+    line(t("Stop below"), num(pi, "off_below", 30, 85, "°C", idle), h("span", { class: "muted" }, t("for")), num(pi, "off_after", 10, 900, t("s"), idle)),
+    line(t("Start again above"), num(pi, "on_above", 32, 95, "°C", idle), h("span", { class: "muted" }, t("for")), num(pi, "on_after", 0, 120, t("s"), idle)),
+    line(t("Run at least"), num(pi, "min_run", 0, 1800, t("s"), idle), h("span", { class: "muted tiny" }, t("after each start, so the pump does not cycle"))));
+  const own = c.profile && (L.profiles || []).some(p => p.id === c.profile && !p.builtin);
+  box.prepend(h("p", { class: "muted tiny lc-beh-note" }, pv ? t("The Behaviour of the profile picked in the list — Apply uses it with its curves.")
+    : own ? t("The Behaviour belongs to the cooler profile: changes apply at once and are kept in the profile in use.")
+      : t("The Behaviour belongs to the cooler profile: changes apply at once; a built-in profile becomes changed — New… keeps it as your own profile.")));
   box.querySelectorAll("input,select").forEach(e => { e.disabled = !!pv; });
-  for (const id of ["lc-calm-save", "lc-calm-reset"]) { const b = $("#" + id); if (b) b.disabled = !!pv; }
+  const rb = $("#lc-calm-reset"); if (rb) rb.disabled = !!pv;
 }
 $("#lc-scan").addEventListener("click", async () => {
   lcScanning = true; renderLiquid();
@@ -1692,13 +1702,8 @@ $("#lc-pump").addEventListener("change", e => {
   if (v === 0 && !confirm(t("Stop the pump? The coolant will not circulate."))) { e.target.value = S.liquid.config.pump; return; }
   lcPost("config", { mode: "manual", pump: v });
 });
-$("#lc-calm-save").addEventListener("click", () => act(async () => {
-  await api("lc/config", { ...(lcCalm || {}) }); lcCalm = null;
-}, t("Saved")));
-$("#lc-calm-reset").addEventListener("click", () => {
-  lcCalm = { temp_source: "max", delay_up: 10, delay_down: 30, smooth: true, pump_idle: { ...(S.liquid.config.pump_idle || {}), enabled: false } };
-  drawCalm(S.liquid);
-});
+$("#lc-calm-reset").addEventListener("click", () =>
+  lcBehPost({ ...LC_BEH_DEFAULT, pump_idle: { ...(S.liquid.config.pump_idle || {}), enabled: false } }).then(() => drawCalm(S.liquid)));
 $("#lc-pcustom").addEventListener("change", e => {
   if (e.target.checked) {
     if (!confirm(t("Own pump voltage limits: a voltage outside 7–11 V can damage the pump — too low and it may stop moving the coolant, too high and it wears out faster (the OEM software never uses 12 V). Do you understand the risks and want to continue?"))) { e.target.checked = false; return; }
@@ -2262,8 +2267,10 @@ function renderSysFollow(a, modes) {
 // ---- automatic profile switching (load rules, 1.6.8)
 const AU_METRIC = { cpu_power: "CPU power", gpu_power: "GPU power", total_power: "CPU + GPU power", cpu_temp: "CPU temperature",
   gpu_temp: "GPU temperature", cpu_load: "CPU load", gpu_load: "GPU load", battery: "Battery charge", ac: "Power source",
-  sys_profile: "System power profile", saver: "Battery saver (Windows)" };
+  sys_profile: "System power profile", saver: "Battery saver (Windows)", mode: "Laptop mode", lc_profile: "Cooler profile",
+  rule: "Automation rule" };
 const AU_EQ = ["ac", "sys_profile", "saver"];          // compared with "=": a choice instead of > / < and a number
+const AU_STATE = ["mode", "lc_profile", "rule"];       // = / ≠ and a choice (a rule: is on / is not on)
 const AU_UNIT_S = { s: 1, min: 60, h: 3600 }, AU_UNIT_NAME = { s: "s", min: "min", h: "h" };
 const AU_UNIT = { cpu_power: "W", gpu_power: "W", total_power: "W", cpu_temp: "°C", gpu_temp: "°C", cpu_load: "%", gpu_load: "%", battery: "%" };
 const AU_TEMPLATES = [                                   // the first one is chosen by default
@@ -2273,6 +2280,9 @@ const AU_TEMPLATES = [                                   // the first one is cho
   ["hot", "Hot → Gaming", { name: "Hot", conditions: [{ metric: "cpu_temp", op: ">", value: 90 }, { metric: "gpu_temp", op: ">", value: 85 }], join: "or", hold: 20, mode: 1, slot: null, back: true, back_after: 120 }],
 ];
 let auRules = null, auDirty = false;
+function auRenumber(f) {                          // rules moved / removed: conditions "rule N" follow them
+  for (const r of auRules || []) for (const c of r.conditions || []) if (c.metric === "rule" && c.value) c.value = f(c.value);
+}
 function renderLoadRules(force) {                 // force: our own change, redraw although a field has the focus
   const R = S.load_rules; if (!R) return;
   if (!auDirty || !auRules) auRules = JSON.parse(JSON.stringify(R.rules || []));
@@ -2292,22 +2302,33 @@ function renderLoadRules(force) {                 // force: our own change, redr
     const active = R.active === i && !auDirty, held = (R.held || {})[i];
     const en = h("input", { type: "checkbox", ...(r.enabled !== false ? { checked: true } : {}) }); en.addEventListener("change", () => { r.enabled = en.checked; change(); });
     const name = h("input", { type: "text", maxlength: 40, value: r.name || "", placeholder: t("Rule {0}", i + 1) }); name.addEventListener("change", () => { r.name = name.value; change(); });
-    const move = (d) => { const j = i + d; if (j < 0 || j >= auRules.length) return; [auRules[i], auRules[j]] = [auRules[j], auRules[i]]; change(); renderLoadRules(true); };
+    const move = (d) => { const j = i + d; if (j < 0 || j >= auRules.length) return; [auRules[i], auRules[j]] = [auRules[j], auRules[i]]; auRenumber(n => n === i + 1 ? j + 1 : n === j + 1 ? i + 1 : n); change(); renderLoadRules(true); };
     const head = h("div", { class: "row between wrap" }, h("div", { class: "row wrap" }, h("label", { class: "chk" }, en), name,
       active ? h("span", { class: "badge-on" }, t("active")) : held != null && !auDirty ? h("span", { class: "muted tiny" }, t("holds {0} of {1} s", held, r.hold)) : ""),
       h("div", { class: "row" }, h("button", { class: "btn ghost sm", title: t("Up"), onclick: () => move(-1) }, "↑"), h("button", { class: "btn ghost sm", title: t("Down"), onclick: () => move(1) }, "↓"),
-        h("button", { class: "btn ghost sm", onclick: () => { auRules.splice(i, 1); change(); renderLoadRules(true); } }, t("Delete"))));
+        h("button", { class: "btn ghost sm", onclick: () => { auRules.splice(i, 1); auRenumber(n => n === i + 1 ? 0 : n > i + 1 ? n - 1 : n); change(); renderLoadRules(true); } }, t("Delete"))));
     const conds = h("div", { class: "au-conds" });
     r.conditions.forEach((c, k) => {
       if (k) conds.append(sel([["and", t("and")], ["or", t("or")]], r.join || "and", v => { r.join = v; }));
-      const metric = sel(Object.entries(AU_METRIC).filter(([v]) => v !== "saver" || S.platform.os === "windows" || c.metric === "saver").map(([v, n]) => [v, t(n)]), c.metric, v => {
-        if (AU_EQ.includes(v)) { c.op = "="; c.value = v === "saver" ? 1 : 0; } else if (AU_EQ.includes(c.metric)) { c.op = "<"; c.value = 30; }
+      const metric = sel(Object.entries(AU_METRIC).filter(([v]) => (v !== "saver" || S.platform.os === "windows" || c.metric === "saver")
+        && (v !== "lc_profile" || (S.liquid && S.liquid.profiles) || c.metric === "lc_profile") && (v !== "rule" || auRules.length > 1 || c.metric === "rule"))
+        .map(([v, n]) => [v, t(n)]), c.metric, v => {
+        if (AU_EQ.includes(v)) { c.op = "="; c.value = v === "saver" ? 1 : 0; }
+        else if (AU_STATE.includes(v)) { c.op = "="; c.value = v === "lc_profile" ? (((S.liquid || {}).profiles || [])[0] || {}).id || "default" : v === "rule" ? 0 : (S.power.mode ?? 0); }
+        else if (AU_EQ.includes(c.metric) || AU_STATE.includes(c.metric)) { c.op = "<"; c.value = 30; }
         c.metric = v;
       });
+      const eqOp = sel([["=", "="], ["!=", "≠"]], c.op, v => { c.op = v; });
+      const lcName = p => p.builtin ? t(LC_PROFILE_NAME[p.id] || p.name) : p.name;
       conds.append(h("span", { class: "au-cond" }, metric,
         ...(c.metric === "ac" ? [sel([[1, t("from the mains")], [0, t("on battery")]], c.value ? 1 : 0, v => { c.value = +v; })]
           : c.metric === "sys_profile" ? [sel(SYS_PROF.map((p, j) => [j, sysProfName(p)]), c.value, v => { c.value = +v; })]
           : c.metric === "saver" ? [sel([[1, t("on")], [0, t("off")]], c.value ? 1 : 0, v => { c.value = +v; })]
+          : c.metric === "mode" ? [eqOp, sel(MODES.map(m => [m.id, t(m.name)]), c.value, v => { c.value = +v; })]
+          : c.metric === "lc_profile" ? [eqOp, sel([...((S.liquid || {}).profiles || []).map(p => [p.id, lcName(p)]),
+              ...(((S.liquid || {}).profiles || []).some(p => p.id === c.value) ? [] : [[c.value, c.value]])], c.value, v => { c.value = v; })]
+          : c.metric === "rule" ? [sel([[0, t("any other rule")], ...auRules.map((x, j) => [j + 1, x.name || t("Rule {0}", j + 1)]).filter(([n]) => n !== i + 1)], c.value, v => { c.value = +v; }),
+              sel([["=", t("is on")], ["!=", t("is not on")]], c.op, v => { c.op = v; })]
           : [sel([[">", ">"], ["<", "<"]], c.op, v => { c.op = v; }),
             num(c.value, 0, 1000, v => { c.value = v; }), h("span", { class: "muted" }, t(AU_UNIT[c.metric] ?? (R.metrics || {})[c.metric] ?? ""))]),
         r.conditions.length > 1 ? h("button", { class: "btn ghost sm", onclick: () => { r.conditions.splice(k, 1); change(); renderLoadRules(true); } }, "✕") : ""));

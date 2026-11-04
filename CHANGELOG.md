@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.6.12
+
+- **Liquid cooler: the Behaviour belongs to the profile.** A change of the Behaviour applies at once (no Save button)
+  and is kept in the own profile in use; a built-in profile becomes *changed* (*New…* keeps it as your own). The block
+  follows a profile change at once, also one made by an automation rule. Own profiles saved by 1.6.8–1.6.10 had curves
+  only: they get the Behaviour in use when the service starts.
+- **Automatic profile switching: conditions on the state** — the laptop's mode (= / ≠), the cooler profile in use
+  (= / ≠) and another rule (*is on* / *is not on*: its conditions held long enough, or it is active; or *any other
+  rule*). Rule numbers in conditions follow the rules when they are moved or removed.
+
 ## 1.6.11
 
 - **Automatic profile switching:**

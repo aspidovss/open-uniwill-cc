@@ -206,8 +206,13 @@ class LiquidCooler:
         saved = store.load_json(self.path, {}) or {}
         self.cfg.update(saved)
         self.cfg["pump_idle"] = {**PUMP_IDLE, **(self.cfg.get("pump_idle") or {})}
-        if LCV.migrate(self.cfg, DEFAULT_TIERS, stored=bool(saved)):     # 1.6.7 and older: tiers -> curves
+        migrated = LCV.migrate(self.cfg, DEFAULT_TIERS, stored=bool(saved))   # 1.6.7 and older: tiers -> curves
+        if migrated:
             log.info("liquid cooler: temperature tiers converted to curves")
+        given = LCV.give_behaviour(self.cfg)                              # 1.6.8–1.6.10 profiles: curves only
+        if given:
+            log.info("liquid cooler: %d own profile(s) got the current Behaviour", given)
+        if migrated or given:
             try:
                 store.save_json(self.path, self.cfg)
             except OSError:
@@ -869,6 +874,10 @@ class LiquidCooler:
             c["smooth"] = bool(b["smooth"])
         if "pump_idle" in b:
             c["pump_idle"] = self._check_idle({**c["pump_idle"], **b["pump_idle"]})
+        if any(k in b for k in LCV.BEHAVIOUR_KEYS):
+            bound = LCV.bind_behaviour(c)            # the Behaviour belongs to the own profile in use
+            if bound:
+                log.info("liquid cooler: Behaviour saved in profile %s", bound)
         if any(k in b for k in ("mode", "fan", "pump")):
             self.guard = False                       # a choice by hand ends the flow guard
         for k in ("notify_flow", "flow_guard", "boost_fan", "boost_pump"):

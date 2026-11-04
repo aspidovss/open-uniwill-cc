@@ -154,7 +154,7 @@ log of what the rules did) — see `uwccctl help rules`.
 
 | Rule field (JSON) | Values |
 |---|---|
-| `conditions` | 1..3 of `{"metric", "op", "value"}`; `metric`: `cpu_power` `gpu_power` `total_power` (W), `cpu_temp` `gpu_temp` (°C), `cpu_load` `gpu_load` `battery` (%), `ac` (1 mains / 0 battery), `sys_profile` (0 power saver / 1 balanced / 2 performance), `saver` (Windows battery saver 1 / 0); `op` `>` / `<` (`=` for `ac`, `sys_profile`, `saver`) |
+| `conditions` | 1..3 of `{"metric", "op", "value"}`; `metric`: `cpu_power` `gpu_power` `total_power` (W), `cpu_temp` `gpu_temp` (°C), `cpu_load` `gpu_load` `battery` (%), `ac` (1 mains / 0 battery), `sys_profile` (0 power saver / 1 balanced / 2 performance), `saver` (Windows battery saver 1 / 0), `mode` (0..3, the laptop's mode), `lc_profile` (a cooler profile id), `rule` (1..12: that rule is on — its conditions held long enough or it is active; 0 = any other rule); `op` `>` / `<` (`=` for `ac`, `sys_profile`, `saver`; `=` / `!=` for `mode`, `lc_profile`, `rule`) |
 | `join` | `and` / `or` |
 | `hold`, `hold_unit` | seconds 0..86400 (0 = at once); `s` / `min` / `h` — only how the window shows it |
 | `mode`, `slot` | 0 office, 1 gaming, 2 turbo, 3 custom, or `null` = keep the mode; slot 0..4 or `null` = the current one |

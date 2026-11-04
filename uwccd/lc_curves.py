@@ -302,6 +302,29 @@ def migrate(cfg, default_tiers, stored=True):
 ID_RE = re.compile(r"[^a-z0-9]+")
 
 
+def give_behaviour(cfg):
+    """Own profiles saved by 1.6.8–1.6.10 have curves only: they get the Behaviour in use now (it was the one for every
+    profile then), so each profile carries its own from here on. Returns how many were changed."""
+    n = 0
+    for p in cfg.get("profiles") or []:
+        if not p.get("behaviour"):
+            p["behaviour"] = behaviour_of(cfg)
+            n += 1
+    return n
+
+
+def bind_behaviour(cfg):
+    """The Behaviour was changed: an own profile in use keeps it (it is part of the profile). Returns its id or None."""
+    pid = cfg.get("profile")
+    if not pid or pid in BUILTIN_PROFILES:
+        return None
+    p = next((x for x in cfg.get("profiles") or [] if x["id"] == pid), None)
+    if p is None or p["curves"] != full(cfg.get("curves")):
+        return None                       # curves changed and not saved: the Behaviour waits for Save too
+    p["behaviour"] = behaviour_of(cfg)
+    return pid
+
+
 def profiles(cfg):
     """Built-in and user profiles, built-in first."""
     out = [{"id": k, "name": v["name"], "builtin": True, "curves": full(v["curves"]),
