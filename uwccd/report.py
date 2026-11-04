@@ -302,19 +302,43 @@ def _secrets(private):
 
 def summary(svc):
     from .hw import dmi
+    d = {"program": version_string(), "vendor": dmi("sys_vendor"), "model": dmi("product_name"),
+         "board": dmi("board_name"), "bios": f"{dmi('bios_version')} ({dmi('bios_date')})",
+         "ec": dmi("ec_firmware_release")}
+    clevo, leishen = getattr(svc, "clevo", None), getattr(svc, "leishen", None)
+    clevo_on, leishen_on = bool(clevo is not None and clevo.present), bool(leishen is not None and leishen.present)
+    plat = _safe(_platform_line, svc)
+    if isinstance(plat, str):
+        d["platform"] = plat
+    if leishen_on:
+        # no Uniwill EC here: its lines (project, keyboard none, fan_control False) would only mislead
+        info = leishen.info or {}
+        d.update({"cpu": getattr(svc.monitor, "cpu_model", None), "os": platform_mod.platform(),
+                  "nvidia": svc.pf.nv_gpu, "leishen": f"Leishen / Thunderobot via {leishen.wmi.name}",
+                  "keyboard": f"{'RGB' if info.get('kb_rgb') else 'single-colour'} (firmware code "
+                              f"0x{info.get('kb_code', 0):X})",
+                  "fans": f"{3 if info.get('fans3') else 2}, fan table {info.get('fan_table')}",
+                  "fan_control": "Leishen module, " + ("commands allowed" if leishen.writes_allowed()
+                                                      else "commands not allowed (read only)")})
+        m = _safe(leishen.mode)
+        if m is not None and not isinstance(m, dict):
+            d["power_mode"] = m
+        return d
     kb = (_safe(svc.keyboard.status) if getattr(svc, "keyboard", None) else {}) or {}
     dev = kb.get("device") or {}
-    return {"program": version_string(), "vendor": dmi("sys_vendor"), "model": dmi("product_name"),
-            "board": dmi("board_name"), "bios": f"{dmi('bios_version')} ({dmi('bios_date')})",
-            "ec": dmi("ec_firmware_release"), "project": svc.pf.project_name,
-            "project_id": f"0x{svc.pf.project_id:X}", "cpu": getattr(svc.monitor, "cpu_model", None),
-            "os": platform_mod.platform(), "nvidia": svc.pf.nv_gpu,
-            "keyboard": f"{kb.get('kind')} {dev.get('pid', '')} fw {dev.get('fw', '')}".strip(),
-            "fan_control": getattr(svc, "fan_control", None), "support": getattr(svc.pf, "support", None),
-            "clevo": (f"Control Center 3.0 / Clevo via {svc.clevo.dchu.name}" if getattr(svc, "clevo", None)
-                      and svc.clevo.present else "no"),
-            "leishen": (f"Leishen / Thunderobot via {svc.leishen.wmi.name}" if getattr(svc, "leishen", None)
-                        and svc.leishen.present else "no")}
+    d.update({"project": svc.pf.project_name, "project_id": f"0x{svc.pf.project_id:X}",
+              "cpu": getattr(svc.monitor, "cpu_model", None), "os": platform_mod.platform(), "nvidia": svc.pf.nv_gpu,
+              "keyboard": f"{kb.get('kind')} {dev.get('pid', '')} fw {dev.get('fw', '')}".strip(),
+              "fan_control": getattr(svc, "fan_control", None), "support": getattr(svc.pf, "support", None),
+              "clevo": f"Control Center 3.0 / Clevo via {clevo.dchu.name}" if clevo_on else "no",
+              "leishen": "no"})
+    return d
+
+
+def _platform_line(svc):
+    from .detect import platform_of
+    p = platform_of(svc)
+    return f"{p.get('platform')} — {p.get('name') or 'no name'} ({p.get('level')})"
 
 
 class Job:

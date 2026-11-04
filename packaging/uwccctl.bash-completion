@@ -77,7 +77,8 @@ _uwccctl() {
         lb)
             local z=1; [[ $sub == hinge || $sub == base || $sub == logo ]] && z=2
             local op=${w[z]}
-            if ((n == 1)); then COMPREPLY=($(compgen -W "hinge base logo on off color effect light" -- "$cur"))
+            if ((n == 1)); then COMPREPLY=($(compgen -W "ec hinge base logo on off color effect light" -- "$cur"))
+            elif ((n == 2)) && [[ $sub == ec ]]; then COMPREPLY=($(compgen -W "on off" -- "$cur"))
             elif ((n == z)); then COMPREPLY=($(compgen -W "on off color effect light" -- "$cur"))
             elif ((n == z + 1)) && [[ $op == effect ]]; then
                 COMPREPLY=($(compgen -W "static breathing breathing_multi wave cycle rainbow colorbreath colorwave" -- "$cur"))

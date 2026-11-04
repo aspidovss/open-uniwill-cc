@@ -1032,6 +1032,34 @@ class CustomModeService(MockService):
         self.assertIsInstance(self.get("history"), list)
         self.assertIn("present", self.get("gpu"))
 
+    def test_lightbar_ec_power(self):
+        """EC light bar power: the trigger toggles, so it is written only when the state differs."""
+        from uwccd.settings import SettingsManager
+
+        class Ec:
+            def __init__(self):
+                self.m, self.writes = {0x767: 0, 0x768: 0}, 0
+
+            def read(self, a):
+                return self.m.get(a, 0)
+
+            def write(self, a, v):
+                self.writes += 1
+                self.m[a] = v
+                if a == 0x767 and v & 2:                 # the firmware flips the bar and clears the trigger
+                    self.m[0x768] ^= 2
+                    self.m[0x767] = v & ~2
+        ec = Ec()
+        st = SettingsManager(ec, None, None, {}, lambda *a: None)
+        st.set_lightbar(True)
+        self.assertTrue(st.lightbar_on())
+        st.set_lightbar(True)
+        self.assertEqual(ec.writes, 1)
+        st.set_lightbar(False)
+        self.assertFalse(st.lightbar_on())
+        self.assertEqual(ec.writes, 2)
+        self.assertEqual(self.post("setting", {"key": "lightbar_power", "value": False})[0], 200)
+
     def test_lightbar(self):
         lb = self.get("state")["keyboard"]["lightbar"]
         self.assertEqual(sorted(lb["zones"]), ["base", "hinge", "logo"])
@@ -2176,6 +2204,21 @@ class LeishenUnit(unittest.TestCase):
         self.assertEqual(len(b), 32)
         self.assertEqual(b[:12].hex(), "00fb0502" + "3c000000" + "32000000")
         self.assertEqual(T.unpack(b)["a4"], 0xFF)
+
+    def test_report_summary(self):
+        """report.txt header: the module's data, not the Uniwill lines (keyboard none, fan_control False)."""
+        from types import SimpleNamespace
+        from uwccd import report
+        m, _ = self.manager(writes=False)
+        svc = SimpleNamespace(leishen=m, clevo=None, monitor=SimpleNamespace(cpu_model="cpu"), ec_info={},
+                              pf=SimpleNamespace(nv_gpu=None, project_raw=0))
+        d = report.summary(svc)
+        self.assertNotIn("project", d)
+        self.assertTrue(d["platform"].startswith("leishen"))
+        self.assertIn("single-colour", d["keyboard"])
+        self.assertEqual(d["fans"], "3, fan table 4")
+        self.assertIn("read only", d["fan_control"])
+        self.assertEqual(d["power_mode"], "gaming")
 
     def test_detect_and_sensors(self):
         m, _ = self.manager()

@@ -922,12 +922,16 @@ const LB_EFFECT_NAME = { static: "Static colour", breathing: "Breathing", breath
   cycle: "Colour cycle", rainbow: "Rainbow", colorbreath: "Colour breathing", colorwave: "Colour wave" };
 const LB_ZONE_NAME = { hinge: "Rear (hinge)", base: "Base", logo: "Logo" };
 let lbZone = null;
+// the EC power switch of the light bar (the Fn key's trigger): models with an RGB light bar in the EC caps
+const lbEc = () => !!(S.platform && S.platform.rgb_lightbar) || !!(S.settings && S.settings.lightbar_on);
 function renderLightbar() {
-  const lb = S.keyboard && S.keyboard.lightbar;
-  $("#nav-lightbar").classList.toggle("hidden", !lb);
+  const lb = S.keyboard && S.keyboard.lightbar, ec = lbEc();
+  $("#nav-lightbar").classList.toggle("hidden", !lb && !ec);
+  $("#lb-ec").classList.toggle("hidden", !ec);
+  if (ec) $("#lb-ec-power").checked = !!S.settings.lightbar_on;
   $("#lb-ui").classList.toggle("hidden", !lb);
-  $("#lb-none").classList.toggle("hidden", !!lb);
-  if (!lb) { $("#lb-sub").textContent = ""; return; }
+  $("#lb-none").classList.toggle("hidden", !!lb || ec);
+  if (!lb) { $("#lb-sub").textContent = ec ? t("Light bar of the embedded controller") : ""; return; }
   const zones = Object.keys(lb.zones);
   if (!zones.includes(lbZone)) lbZone = zones[0];
   const z = lb.zones[lbZone];
@@ -1153,6 +1157,7 @@ $(`#nav a[data-page="leishen"]`)?.addEventListener("click", () => setTimeout(lei
 
 function lbSet(body) { act(() => api("lightbar", { zone: lbZone, ...body })); }
 $("#lb-power").addEventListener("change", e => lbSet({ power: e.target.checked }));
+$("#lb-ec-power").addEventListener("change", e => act(() => api("setting", { key: "lightbar_power", value: e.target.checked })));
 $("#lb-effect").addEventListener("change", e => lbSet({ effect: e.target.value }));
 for (const k of ["light", "speed"]) {
   $("#lb-" + k).addEventListener("input", e => { e.target.nextElementSibling.textContent = e.target.value; });
@@ -1271,8 +1276,6 @@ function renderSwitches() {
   const sel = h("select", {}, ...[[0, t("Never")], [10, t("{0} seconds", 10)], [30, t("{0} seconds", 30)], [60, t("1 minute")], [300, t("{0} minutes", 5)], [600, t("{0} minutes", 10)]].map(([v, txt]) => { const o = h("option", { value: v }, txt); if (+s.kb_timeout === v) o.selected = true; return o; }));
   sel.addEventListener("change", () => act(() => api("setting", { key: "kb_timeout", value: +sel.value })));
   L.append(h("div", { class: "item" }, h("div", {}, h("h4", {}, t("Keyboard backlight auto-off")), h("p", {}, t("Turn the backlight off after inactivity and back on when a key is pressed."))), sel));
-  // EC light bar trigger (older models); hidden when the light bar is an ITE device with its own page
-  if ((S.platform.rgb_lightbar || s.lightbar_on) && !(S.keyboard && S.keyboard.lightbar)) L.append(h("div", { class: "item" }, h("div", {}, h("h4", {}, t("Light bar")), h("p", {}, t("Click to turn the LED bar on/off."))), h("button", { class: "btn ghost", onclick: () => act(() => api("setting", { key: "lightbar_trigger", value: true })) }, s.lightbar_on ? t("Turn off") : t("Turn on"))));
 }
 
 // ---------------------------------------------------------------- binding
@@ -2692,7 +2695,7 @@ const EC_FEATURES = {
   fan_monitor: { name: "Fan speed readings", sel: [] },
   battery: { name: "Battery protection and charge limits", sel: ["#page-battery .card"] },
   switches: { name: "Switches (Fn Lock, Win key, USB, touchpad)", sel: ["#switch-list"] },
-  lightbar_ec: { name: "Light bar (EC trigger)", sel: [] },
+  lightbar_ec: { name: "Light bar (EC trigger)", sel: ["#lb-ec"] },
   lc_ec: { name: "Liquid cooler: EC targets and flag", sel: [] },
   power_boost_lc: { name: "Power boost with liquid cooling", sel: ["#lc-hwoc-box"] },
 };

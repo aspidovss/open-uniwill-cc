@@ -16,6 +16,7 @@ Overview
   battery [mode|limit|typec] ... battery protection mode, charge limits, Type-C priority
   kb [on|off|effects|effect|level] ...   keyboard backlight
   lb [hinge|base|logo] on|off|color|effect|light ...   light bar
+  lb ec on|off                                        light bar power (EC)
   clevo ...                      Control Center 3.0 / Clevo (experimental, separate module): see uwccctl help clevo
   leishen ...                    Leishen / Thunderobot (experimental, separate module): see uwccctl help leishen
   detect [run|close]             which platform this is, vendor control programs running (close: end them)
@@ -225,6 +226,7 @@ HELP = {
         "uwccctl leishen light ZONE MODE LEVEL RRGGBB   RGB keyboards only: ZONE all|keyboard|zone1|zone2|zone3|rear|logo,\n"
         "                                           MODE static|breathing|cycle|ambilight, LEVEL 0 off, 1 low, 2 high"),
     "lb": (
+        "uwccctl lb ec on|off                   (whole bar through the EC, like the Fn key)\n"
         "uwccctl lb [hinge|base|logo] on|off\n"
         "uwccctl lb [ZONE] color RRGGBB [EFFECT]\n"
         "uwccctl lb [ZONE] effect static|breathing|breathing_multi|wave|cycle|rainbow|colorbreath|colorwave\n"
@@ -1017,6 +1019,12 @@ def cmd_lb(a):
     rest = list(a)
     zone = rest.pop(0) if rest and rest[0] in zones else "hinge"
     op = rest[0] if rest else "status"
+    if op == "ec":                              # power of the whole bar through the EC (the Fn key's trigger)
+        if rest[1:2] not in (["on"], ["off"]):
+            usage("lb")
+        call("setting", {"key": "lightbar_power", "value": rest[1] == "on"})
+        on = call("state")["settings"].get("lightbar_on")
+        return out({"lightbar_on": on}, f"light bar (EC): {'on' if on else 'off'}")
     if op in ("on", "off"):
         call("lightbar", {"zone": zone, "power": op == "on"})
     elif op == "color" and rest[1:]:
@@ -1027,12 +1035,16 @@ def cmd_lb(a):
         call("lightbar", {"zone": zone, "light": num(rest[1], "lb")})
     elif op != "status":
         usage("lb")
-    lb = call("state")["keyboard"].get("lightbar")
-    if not lb:
+    st = call("state")
+    lb = st["keyboard"].get("lightbar")
+    ec = bool((st.get("platform") or {}).get("rgb_lightbar") or (st.get("settings") or {}).get("lightbar_on"))
+    if not lb and not ec:
         fail("no light bar", 1)
-    out(lb, lambda d: [f"{z:6} {'on ' if v.get('power') else 'off'} {v.get('effect'):16} light {v.get('light')} "
-                       f"speed {v.get('speed')} {' '.join(hexrgb(c) for c in v.get('colors') or [])}"
-                       for z, v in d["zones"].items()])
+    d = {**(lb or {}), **({"ec_power": bool(st["settings"].get("lightbar_on"))} if ec else {})}
+    out(d, lambda d: ([f"EC     {'on ' if d['ec_power'] else 'off'} (whole bar)"] if "ec_power" in d else [])
+        + [f"{z:6} {'on ' if v.get('power') else 'off'} {v.get('effect'):16} light {v.get('light')} "
+           f"speed {v.get('speed')} {' '.join(hexrgb(c) for c in v.get('colors') or [])}"
+           for z, v in (d.get("zones") or {}).items()])
 
 
 # -- automatic profile switching (load rules) -------------------------------------------------------

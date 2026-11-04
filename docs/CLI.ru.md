@@ -110,6 +110,7 @@ uwccctl fan set current cpu 0/45:0 55/50:30 70/65:60 85/80:100
 | `kb fx ИМЯ\|N [--light 0..4] [КЛЮЧ=ЗНАЧЕНИЕ ...]` | включить эффект BetterRGB; неуказанные параметры сохраняются |
 | `kb fx-config КЛЮЧ=ЗНАЧЕНИЕ ...` | `fps_ac`, `fps_battery` (10..60), `transition`, `transition_ms`, `bar`, `bar_direction`, `bar_start`, `bar_end` |
 | `kb fx-calibrate start\|cancel\|reset` / `kb fx-calibrate apply RRGGBB` | калибровка белого (RRGGBB — цвет, который вы видите) |
+| `lb ec on\|off` | питание всей полосы через встроенный контроллер, как клавишей Fn (модели со световой полосой в EC) |
 | `lb [hinge\|base\|logo] on\|off` | зона световой полосы (по умолчанию `hinge`) |
 | `lb [ЗОНА] color RRGGBB [ЭФФЕКТ]` | цвет |
 | `lb [ЗОНА] effect static\|breathing\|breathing_multi\|wave\|cycle\|rainbow\|colorbreath\|colorwave` | эффект |

@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.6.13
+
+- **Light bar power on the *Laptop light bar* page.** Models with an RGB light bar in the embedded controller (EC caps
+  `0x78E` bit 4) get a switch for the whole bar, like the Fn key (trigger `0x767` bit 1, state `0x768` bit 1); it is
+  sent only when the state differs, because the firmware toggles. The page also opens on models with only this switch;
+  the button on *Settings* is gone. Command line: `uwccctl lb ec on|off`.
+- **Diagnostic report on Leishen / Thunderobot:** the head of `report.txt` shows the platform, the module's keyboard
+  type, fans and fan table, power mode and whether commands are allowed, instead of the Uniwill lines (`keyboard none`,
+  `fan_control False`) that do not apply there. Other laptops get a `platform` line too.
+
 ## 1.6.12
 
 - **Liquid cooler: the Behaviour belongs to the profile.** A change of the Behaviour applies at once (no Save button)

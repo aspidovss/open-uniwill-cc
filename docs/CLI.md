@@ -109,6 +109,7 @@ uwccctl fan set current cpu 0/45:0 55/50:30 70/65:60 85/80:100
 | `kb fx NAME\|N [--light 0..4] [KEY=VALUE ...]` | start a BetterRGB effect; parameters not given keep their values |
 | `kb fx-config KEY=VALUE ...` | `fps_ac`, `fps_battery` (10..60), `transition`, `transition_ms`, `bar`, `bar_direction`, `bar_start`, `bar_end` |
 | `kb fx-calibrate start\|cancel\|reset` / `kb fx-calibrate apply RRGGBB` | white calibration (RRGGBB: the colour you see) |
+| `lb ec on\|off` | power of the whole light bar through the EC, like the Fn key (models with an RGB light bar in the EC) |
 | `lb [hinge\|base\|logo] on\|off` | light bar zone (default `hinge`) |
 | `lb [ZONE] color RRGGBB [EFFECT]` | colour |
 | `lb [ZONE] effect static\|breathing\|breathing_multi\|wave\|cycle\|rainbow\|colorbreath\|colorwave` | effect |

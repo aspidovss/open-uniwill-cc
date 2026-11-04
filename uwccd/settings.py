@@ -157,6 +157,11 @@ class SettingsManager:
         v = self.ec.read(R.TRIGGER_767)
         self.ec.write(R.TRIGGER_767, (v & 0xFD) + 2)
 
+    def set_lightbar(self, on):
+        """Light bar power through the EC: the trigger toggles it, so it is sent only when the state differs."""
+        if self.lightbar_on() != bool(on):
+            self.lightbar_trigger()
+
     # -- radio switches (WIFI_/BT_ON/OFF) -> rfkill --------------------------------------------
     @staticmethod
     def rfkill(kind, on):

@@ -624,6 +624,8 @@ class Handler(BaseHTTPRequestHandler):
             st.set_dgpu_direct(bool(value))
         elif key == "lightbar_trigger":
             st.lightbar_trigger()
+        elif key == "lightbar_power":
+            st.set_lightbar(bool(value))
         elif key in ("wifi", "bluetooth"):
             st.rfkill(key if key == "bluetooth" else "wifi", bool(value))
         elif key == "kb_timeout":

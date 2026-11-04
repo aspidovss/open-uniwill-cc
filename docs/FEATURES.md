@@ -183,6 +183,7 @@ to the hardware differs (see the last section).
 | *Not in the original:* transitions, white calibration, top-row bar, frame rate on AC / battery | ✅ | ✅ | `uwccd/lighting/fx.py`; key presses: Linux `/dev/input`, Windows the tray app; screen: Windows tray app, Linux agent (X11) |
 | LED colour correction per keyboard type / LED vendor | ✅ | ✅ | `WKDColor.cheatRGB_*` (`uwccd/lighting/oem`, proprietary) |
 | Chassis light bar (hinge / base / logo) | ✅ | ✅ | HIDLightbar4, HID `048D:7000`; `048D:7001` (XMG NEO 16 E25, experimental) |
+| Light bar power through the EC (the Fn key's switch), on the *Laptop light bar* page | ✅ | ✅ | EC `0x767` bit 1 (trigger), state `0x768` bit 1; models with an RGB light bar in `0x78E` bit 4 |
 | Single-colour backlight (on/off, level) | ✅ | ✅ | EC `0x78C` |
 | Backlight auto-off on inactivity | ✅ | ✅ | Linux: `/dev/input` events; Windows: idle time of the tray app |
 | Windows key lock, Fn Lock | ✅ | ✅ | EC `0x767/0x768`, `0x74E`, NVRAM `FnKeyStatus` |
