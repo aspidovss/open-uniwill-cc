@@ -239,6 +239,9 @@ class Service:
         for t in self.threads:
             t.start()
         self.liquid.start()
+        from .detect import Detector
+        self.detect = Detector(self)             # which platform: shown once, at the first start
+        self.detect.start()
         from . import version_string
         log.info("service started: open-uniwill-cc %s (hotkeys: %s)", version_string(),
                  "kernel module" if hk.available else "polling")
@@ -387,6 +390,7 @@ class Service:
             "ec_access": self.ec_access(),
             "clevo": self.clevo.status() if self.clevo.present else {"present": False},
             "leishen": self.leishen.status() if self.leishen.present else {"present": False},
+            "detect": self.detect.status() if getattr(self, "detect", None) else {"pending": True},
             "busy": self.busy.state(),
             "monitoring": self.monitor_level(),
         }

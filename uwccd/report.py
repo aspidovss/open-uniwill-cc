@@ -27,7 +27,7 @@ from . import regs as R
 
 log = logging.getLogger("uwccd.report")
 
-SECTIONS = ("system", "platform", "ec", "bios", "acpi", "firmware", "selfcheck", "clevo", "leishen", "oem_registry", "oem_software", "oem_files",
+SECTIONS = ("system", "platform", "detect", "ec", "bios", "acpi", "firmware", "selfcheck", "clevo", "leishen", "oem_registry", "oem_software", "oem_files",
             "oem_files_full", "power", "lighting", "nvidia", "sensors", "original", "cooler", "log", "settings")
 DEFAULT_SECTIONS = tuple(s for s in SECTIONS if s != "oem_files_full")      # the complete OEM folders are large
 PRIVATE = ("serial", "uuid", "mac", "names", "apps")
@@ -415,6 +415,7 @@ def build(svc, sections=DEFAULT_SECTIONS, private=()):
         "clevo": lambda: clevo_diag.collect(svc),                       # Control Center 3.0 / Clevo, every laptop
         "leishen": lambda: (svc.leishen.diagnostics() if getattr(svc, "leishen", None)       # Leishen / Thunderobot
                             else {"present": False}),
+        "detect": lambda: (svc.detect.status() if getattr(svc, "detect", None) else {}),    # platform, vendor programs
     }
     from . import report_oem as O
     from .clevo import diag as clevo_diag

@@ -1311,6 +1311,7 @@ function tipLabel(label, text) {
 }
 document.addEventListener("click", () => $$(".has-tip.open").forEach(x => { x.classList.remove("open"); x.setAttribute("aria-expanded", "false"); }));
 function renderInfo() {
+  { const dl = $("#info-detect-line"); if (dl) dl.textContent = detectLine(S.detect); }
   if (S.settings) $("#rep-debug").checked = !!S.settings.debug;
   const i = S.info, p = S.platform;
   const dl = (el, rows) => { el.innerHTML = ""; for (const [k, v] of rows) el.append(h("dt", {}, k), h("dd", {}, v ?? "—")); };
@@ -2571,8 +2572,56 @@ function connect() {
   try { await refresh(); } catch (e) { toast(t("Service unavailable: {0}", e.message), true); }
   if (S && S.settings && (S.settings.eula_accepted || 0) < (S.settings.eula_version || 1)) await showAgreement();
   await offerWmiIfNoDriver();
+  if (S && S.detect && !S.detect.seen) await showDetect();          // first start: which platform, programs to close
   connect();
 })();
+
+// ---------------------------------------------------------------- platform found at the start (first start, Information)
+const DETECT_LEVEL = { tested: "tested", known: "known", experimental: "experimental", none: "not found" };
+const DETECT_PAGE = { clevo: "Open the Clevo page", leishen: "Open the Leishen page", modes: "Open Mode selection" };
+function detectLine(d) {
+  if (!d || d.pending) return t("Being detected…");
+  return `${d.name || t("Unknown platform")} — ${t(DETECT_LEVEL[d.level] || d.level)}` +
+    ((d.vendor_apps || []).length ? " · " + t("vendor programs running: {0}", [...new Set(d.vendor_apps.map(a => a.app))].join(", ")) : "");
+}
+async function showDetect() {
+  let d = S.detect || {};
+  for (let i = 0; i < 20 && (!d || d.pending); i++) { await new Promise(r => setTimeout(r, 500)); try { d = await api("detect"); } catch (_) { break; } }
+  if (!d || d.pending) return;
+  return new Promise(resolve => {
+    const card = h("div", { class: "eula-card narrow detect-card" });
+    const box = h("div", { class: "eula", role: "dialog", "aria-modal": "true" }, card);
+    const done = async () => { try { await api("setting", { key: "detect_seen", value: d.platform || "unknown" }); } catch (_) {} box.remove(); refresh().catch(() => {}); resolve(); };
+    const draw = () => {
+      const lap = d.laptop || {}, apps = d.vendor_apps || [];
+      const feats = h("ul", { class: "detect-feats" }, ...(d.features || []).map(([f, s]) =>
+        h("li", { class: "f-" + s }, h("span", { class: "mark" }, s === "ok" ? "✓" : s === "try" ? "?" : "✕"), " ", t(f))));
+      const warn = apps.length ? h("div", { class: "detect-warn" },
+        h("b", {}, t("Running at the same time:")), " ", [...new Set(apps.map(a => a.app))].join(", "),
+        h("p", { class: "muted tiny" }, t("Both programs send commands to the firmware and undo each other's settings (for example, fans that do not go back to automatic). Close the vendor program while you use this one; it may start again with Windows — turn off its autostart in its settings or in Task Scheduler.")),
+        h("button", { class: "btn", onclick: async e => {
+          e.target.disabled = true;
+          try { d = await api("detect", { action: "close", pids: apps.map(a => a.pid) }); toast(t("Closed: {0}", (d.closed || []).length)); }
+          catch (err) { toast(t("Error: {0}", errText(err.message)), true); }
+          draw();
+        } }, t("Close it"))) : "";
+      card.replaceChildren(
+        h("h2", {}, t("Your laptop")),
+        h("p", {}, h("b", {}, [lap.vendor, lap.model].filter(Boolean).join(" ") || t("Unknown laptop")), lap.board ? h("span", { class: "muted" }, ` · ${t("board")} ${lap.board}`) : ""),
+        h("p", {}, t("Platform:"), " ", h("b", {}, d.name || t("Unknown platform")), " ", h("span", { class: "detect-level l-" + d.level }, t(DETECT_LEVEL[d.level] || d.level))),
+        h("ul", { class: "muted tiny detect-sig" }, ...(d.signals || []).map(s => h("li", {}, s))),
+        h("h4", {}, t("What can be controlled")), feats,
+        d.level === "experimental" ? h("p", { class: "muted tiny" }, t("Experimental: the commands are off until you allow them on the module's page.")) : "",
+        d.platform === "unknown" ? h("p", { class: "muted tiny" }, t("No interface for modes or fans was found. A diagnostic report (Information) helps to add this laptop.")) : "",
+        warn,
+        h("div", { class: "row", style: "justify-content:flex-end;margin-top:12px" },
+          DETECT_PAGE[d.page] ? h("button", { class: "btn ghost", onclick: async () => { await done(); $(`#nav a[data-page="${d.page}"]`)?.click(); } }, t(DETECT_PAGE[d.page])) : "",
+          h("button", { class: "btn", onclick: done }, t("OK"))));
+    };
+    draw(); document.body.append(box);
+  });
+}
+$("#info-detect").addEventListener("click", async () => { try { S.detect = await api("detect", { action: "run" }); } catch (_) {} showDetect(); });
 
 // ---------------------------------------------------------------- user agreement (first start)
 function showAgreement() {

@@ -18,6 +18,7 @@ Overview
   lb [hinge|base|logo] on|off|color|effect|light ...   light bar
   clevo ...                      Control Center 3.0 / Clevo (experimental, separate module): see uwccctl help clevo
   leishen ...                    Leishen / Thunderobot (experimental, separate module): see uwccctl help leishen
+  detect [run|close]             which platform this is, vendor control programs running (close: end them)
   get [KEY]  /  set KEY VALUE    switches and automation (see: uwccctl help set)
   apps [add|remove|enable|disable] ...   switch the mode when a program runs
   rules [list|export FILE|import FILE|clear|enable N|disable N]   mode by power / temperature / load
@@ -199,6 +200,11 @@ HELP = {
         "uwccctl clevo kb effect random|breathe|cycle|wave|dance|tempo|flash\n"
         "uwccctl clevo kb sleep SECONDS             0 = never\n"
         "uwccctl clevo kb boot-effect on|off"),
+    "detect": (
+        "uwccctl detect                             which platform this is (found at the start of the service),\n"
+        "                                           the functions, vendor control programs running now\n"
+        "uwccctl detect run                         look again\n"
+        "uwccctl detect close                       end the vendor control programs (they would undo the settings)"),
     "leishen": (
         "Leishen / Thunderobot — experimental, separate module (Quanta laptops with Leishen ControlCenter 3.x)\n"
         "uwccctl leishen                            status: temperatures, fans, mode, saved state\n"
@@ -1174,6 +1180,37 @@ def leishen_text(c):
     return lines
 
 
+def detect_text(d):
+    if d.get("pending"):
+        return "platform: still being detected"
+    lap = d.get("laptop") or {}
+    lines = [f"laptop: {' '.join(x for x in (lap.get('vendor'), lap.get('model')) if x) or '-'}"
+             f"{' (board ' + lap['board'] + ')' if lap.get('board') else ''}",
+             f"platform: {d.get('platform')} — {d.get('name') or '-'} ({d.get('level')})"]
+    lines += [f"  {s}" for s in d.get("signals") or []]
+    lines.append("functions: " + ", ".join(f"{f} {'yes' if s == 'ok' else 'try' if s == 'try' else 'no'}"
+                                            for f, s in d.get("features") or []))
+    apps = d.get("vendor_apps") or []
+    lines.append("vendor programs running: " + (", ".join(f"{a['app']} ({a['name']}, pid {a['pid']})" for a in apps)
+                                                if apps else "none"))
+    if apps:
+        lines.append("  close them: uwccctl detect close")
+    return lines
+
+
+def cmd_detect(a):
+    op = a[0] if a else "status"
+    if op == "run":
+        out(call("detect", {"action": "run"}), detect_text)
+    elif op == "close":
+        d = call("detect")
+        out(call("detect", {"action": "close", "pids": [x["pid"] for x in d.get("vendor_apps") or []]}), detect_text)
+    elif op == "status":
+        out(call("detect"), detect_text)
+    else:
+        usage("detect")
+
+
 def cmd_leishen(a):
     op, rest = (a[0], a[1:]) if a else ("status", [])
     act = None
@@ -1605,6 +1642,7 @@ def main(a):
         "lb": lambda: cmd_lb(rest),
         "clevo": lambda: cmd_clevo(rest),
         "leishen": lambda: cmd_leishen(rest),
+        "detect": lambda: cmd_detect(rest),
         "rules": lambda: cmd_rules(rest),
         "get": lambda: cmd_get(rest),
         "set": lambda: cmd_set(rest),

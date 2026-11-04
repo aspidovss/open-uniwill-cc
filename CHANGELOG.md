@@ -16,6 +16,11 @@
   - After the first test on an R16: *Automatic* fans now also send `0xFF` for every fan (the bit alone did not bring
     the firmware's control back); the system fan stays automatic unless a speed is given for it; on battery the mode
     is Office like in Leishen ControlCenter, the mode chosen on AC comes back with the charger (*Office on battery*).
+- **Platform found at the first start:** the service checks, reading only, which interface the laptop has (Uniwill EC,
+  Control Center 3.0 / Clevo, Leishen / Thunderobot or none) and which vendor control programs run at the same time.
+  At the first start the window shows the laptop, the platform with its level (tested / known / experimental / not
+  found), what can be controlled, and offers to close the vendor program (both would undo each other's settings).
+  Again: *Information → Platform → Check the platform*, `uwccctl detect`; in the diagnostic report.
 
 ## 1.6.11
 

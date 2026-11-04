@@ -960,3 +960,19 @@ Object.assign(RU, {
     "Одна кривая для вентиляторов процессора и видеокарты, служба применяет её каждые 2 с: скорость самой высокой точки не выше температуры; на ступень ниже — только когда температура опустится на 5 °C ниже точки. Системный вентилятор остаётся автоматическим. Заводские значения этого ноутбука.",
   "Leishen / Thunderobot: answers of the firmware's WMI block (read only)": "Leishen / Thunderobot: ответы WMI-блока прошивки (только чтение)",
 });
+
+// Platform found at the start (first start, Information)
+Object.assign(RU, {
+  "Check the platform": "Проверить платформу", "Being detected…": "Определяется…", "Unknown platform": "Неизвестная платформа",
+  "vendor programs running: {0}": "запущены программы производителя: {0}", "known": "известная",
+  "Open Mode selection": "Открыть «Выбор режима»", "Running at the same time:": "Одновременно запущено:",
+  "Both programs send commands to the firmware and undo each other's settings (for example, fans that do not go back to automatic). Close the vendor program while you use this one; it may start again with Windows — turn off its autostart in its settings or in Task Scheduler.":
+    "Обе программы отправляют команды прошивке и отменяют настройки друг друга (например, вентиляторы не возвращаются в автоматический режим). Закройте программу производителя, пока пользуетесь этой; она может снова запуститься вместе с Windows — отключите её автозапуск в её настройках или в Планировщике заданий.",
+  "Closed: {0}": "Закрыто: {0}", "Close it": "Закрыть её", "Your laptop": "Ваш ноутбук", "Unknown laptop": "Неизвестный ноутбук",
+  "board": "плата", "Platform:": "Платформа:", "What can be controlled": "Чем можно управлять", "OK": "Понятно",
+  "Power modes": "Режимы питания", "Windows key, touchpad": "Клавиша Windows, тачпад", "Mode key": "Клавиша режима",
+  "Battery care": "Защита аккумулятора",
+  "Experimental: the commands are off until you allow them on the module's page.": "Экспериментально: команды выключены, пока вы не разрешите их на странице модуля.",
+  "No interface for modes or fans was found. A diagnostic report (Information) helps to add this laptop.":
+    "Интерфейс управления режимами и вентиляторами не найден. Диагностический отчёт (Информация) поможет добавить этот ноутбук.",
+});

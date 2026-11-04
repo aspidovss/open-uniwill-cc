@@ -2035,6 +2035,36 @@ class LoadRulesUnit(unittest.TestCase):
         self.lr.tick(self.m(ct=70), now=401)
         self.assertEqual(pw.option["FanBoostEnable"], 1)
 
+class DetectUnit2(unittest.TestCase):
+    """Platform found at the start (first start dialog, uwccctl detect)."""
+
+    def test_platform_and_programs(self):
+        from uwccd import detect as D
+
+        class Leishen:
+            present, info = True, {"kb_rgb": True, "fans3": True, "fan_table": 4}
+
+            class wmi:
+                name = "windows-wmi"
+
+        class Absent:
+            present = False
+
+        class Svc:
+            ec_info = {"active": "none"}
+            clevo, leishen, pf = Absent(), Leishen(), None
+        r = D.platform_of(Svc())
+        self.assertEqual((r["platform"], r["level"], r["page"]), ("leishen", "experimental", "leishen"))
+        self.assertIn(("Keyboard backlight", "ok"), r["features"])
+        Svc.leishen = Absent()
+        self.assertEqual(D.platform_of(Svc())["platform"], "unknown")
+        self.assertEqual(D.close_processes([1234], allowed=set()), [])          # only programs from the list
+        import re
+        rx = dict(D.VENDOR_APPS)
+        self.assertTrue(re.search(rx["Leishen ControlCenter"], r"c:\program files (x86)\leishen\controlcenter\controlcenter.exe"))
+        self.assertTrue(re.search(D.OWN_RE, r"c:\program files\uwcc control center\controlcenter.exe"))
+
+
 class LeishenUnit(unittest.TestCase):
     """Leishen / Thunderobot (experimental, uwccd/leishen) against the simulated firmware."""
 
