@@ -78,6 +78,9 @@ def parse(data):
 
 def import_data(svc, data, sections=("fans", "profiles"), check_project=True):
     """Returns a summary; raises ValueError for an unusable file. Settings need a service restart."""
+    if isinstance(data, dict) and data.get("format") == "open-uniwill-cc-clevo-fan-curve":
+        raise ValueError("this is a Control Center 3.0 / Clevo fan curve: it is imported on the Fan settings page of a "
+                         "Clevo laptop, not into the Uniwill fan tables")
     d = parse(data)
     p = svc.power
     if not any(d.get(k) for k in ("tables", "profiles", "settings", "liquid")):

@@ -13,7 +13,7 @@ _uwccctl() {
     local commands="status monitor mode profile boost super ramoc fan battery kb lb clevo leishen detect rules get set apps restore lc
         history export import report lang debug version update restart resume lighting nvram ec ec-direct release help driver"
     local onoff="on off"
-    local modes="office gaming turbo custom"
+    local modes="office gaming turbo custom quiet entertainment performance powersave"   # Uniwill, Clevo, Leishen
     local keys="winkey_lock fn_lock usb_charger touchpad_toggle touchpad_enabled ac_recovery dgpu_direct
         lightbar_trigger bluetooth wifi webcam kb_timeout osd lc_hwoc mem_oc super_performance history_record
         update_check kb_picture_modes tcc_extended debug alerts overheat_boost kb_off_on_battery ppd_sync ppd_follow ppd_modes
@@ -100,11 +100,12 @@ _uwccctl() {
             fi ;;
         clevo)
             local a2=${w[2]}
-            if ((n == 1)); then COMPREPLY=($(compgen -W "writes restore power fan antidust kb" -- "$cur"))
+            if ((n == 1)); then COMPREPLY=($(compgen -W "writes restore power fan curve antidust kb" -- "$cur"))
             elif ((n == 2)); then
                 case $sub in
                     writes | restore) COMPREPLY=($(compgen -W "$onoff" -- "$cur")) ;;
                     power) COMPREPLY=($(compgen -W "quiet powersave performance entertainment" -- "$cur")) ;;
+                    curve) COMPREPLY=($(compgen -W "export import" -- "$cur")) ;;
                     fan) COMPREPLY=($(compgen -W "auto max maxq custom offset curve defaults" -- "$cur")) ;;
                     kb) COMPREPLY=($(compgen -W "on off color brightness effect sleep boot-effect" -- "$cur")) ;;
                 esac

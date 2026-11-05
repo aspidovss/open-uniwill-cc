@@ -66,6 +66,10 @@ to standard output or
 .TP
 .BR "mode " [ office | gaming | turbo | custom ]
 Show or switch the performance mode.
+Control Center 3.0 / Clevo:
+.BR quiet ", " entertainment ", " performance ", " powersave ;
+Leishen / Thunderobot:
+.BR office ", " gaming ", " performance .
 .B custom
 exists on platforms with RamFan 1.5 and five custom slots.
 .TP
@@ -289,6 +293,9 @@ Custom curve of
 .TP
 .BR "clevo fan defaults" ", " "clevo antidust"
 Factory fan curve; anti-dust cycle.
+.TP
+.BR "clevo curve " export | import " FILE"
+The custom curve as a file in its own format (not the Uniwill fan tables); import checks it for this laptop, then applies it.
 .TP
 .BR "clevo kb " on | off
 .TP

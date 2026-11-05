@@ -41,7 +41,8 @@ uwccctl mode turbo || echo "failed: $?"
 
 | Command | |
 |---|---|
-| `mode [office\|gaming\|turbo\|custom]` | show / switch the mode |
+| `mode [office\|gaming\|turbo\|custom]` | show / switch the mode; Control Center 3.0 / Clevo: `quiet` `entertainment` `performance` `powersave`, Leishen: `office` `gaming` `performance` |
+| `detect [run\|close]` | platform found, what can be controlled, why not and what to do; `close` ends the vendor programs |
 | `profile [N]` | show the active profile / select slot N (from 0) of the current mode |
 | `profile list` | all profiles, the active one marked `*` |
 | `profile show [TARGET]` | values of a profile |
@@ -127,7 +128,7 @@ uwccctl kb fx-config transition=ripple_center bar=battery
 
 BetterRGB effects: see [LIGHTING.md](LIGHTING.md).
 
-Control Center 3.0 / Clevo (experimental): `uwccctl clevo …` — see [CLEVO.md](CLEVO.md).
+Control Center 3.0 / Clevo (experimental): `uwccctl clevo …`, the custom curve as a file: `uwccctl clevo curve export|import FILE` — see [CLEVO.md](CLEVO.md).
 
 ## Switches and automation
 
@@ -158,7 +159,7 @@ log of what the rules did) — see `uwccctl help rules`.
 | `conditions` | 1..3 of `{"metric", "op", "value"}`; `metric`: `cpu_power` `gpu_power` `total_power` (W), `cpu_temp` `gpu_temp` (°C), `cpu_load` `gpu_load` `battery` (%), `ac` (1 mains / 0 battery), `sys_profile` (0 power saver / 1 balanced / 2 performance), `saver` (Windows battery saver 1 / 0), `mode` (0..3, the laptop's mode), `lc_profile` (a cooler profile id), `rule` (1..12: that rule is on — its conditions held long enough or it is active; 0 = any other rule); `op` `>` / `<` (`=` for `ac`, `sys_profile`, `saver`; `=` / `!=` for `mode`, `lc_profile`, `rule`) |
 | `join` | `and` / `or` |
 | `hold`, `hold_unit` | seconds 0..86400 (0 = at once); `s` / `min` / `h` — only how the window shows it |
-| `mode`, `slot` | 0 office, 1 gaming, 2 turbo, 3 custom, or `null` = keep the mode; slot 0..4 or `null` = the current one |
+| `mode`, `slot` | 0 office, 1 gaming, 2 turbo, 3 custom, or `null` = keep the mode; slot 0..4 or `null` = the current one. Clevo: 0 silent, 1 entertainment, 2 performance, 3 power saving; Leishen: 0 office, 1 gaming, 2 high performance (no slots) |
 | `fan_boost` | `keep` / `on` / `off` |
 | `lc_mode` | `auto` `laptop` `ec` `manual` `high` `medium` `low` `off`, or `null` = keep |
 | `lc_profile` | cooler profile ID, or `null` = keep |

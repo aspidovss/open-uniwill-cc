@@ -141,14 +141,28 @@ leave the cooler unusable. Use the vendor tool or nRF Connect with the right pac
 Laptops with Control Center 3.x have no Uniwill EC; the module `uwccd/clevo/` drives them with Clevo DCHU commands
 (ACPI `_DSM` of `CLV0001`): power modes, fan modes / offset / custom curve / anti-dust, fan monitoring, keyboard
 colour / brightness / effects / sleep timer / boot effect. Windows: the Control Center 3 driver; Linux: the `uwcc`
-module. Not tested on a Clevo laptop yet; commands are off until allowed — [CLEVO.md](CLEVO.md).
+module. Also Tongfang laptops with Control Center 3.x, where reports confirmed that all functions work. Since 1.7.0
+on the usual pages (*Mode selection*, *Fan settings*, *Keyboard backlight*), the tray, the automation rules and
+`uwccctl mode`; the custom curve is exported / imported in its own file format. Still experimental (badge
+*CC 3.0 · EXPERIMENTAL*); commands are off until allowed — [CLEVO.md](CLEVO.md).
 
 ## Leishen / Thunderobot (experimental, separate module)
 
 Thunderobot laptops built by Quanta with Leishen ControlCenter 3.x (e.g. R16) have neither the Uniwill nor the Clevo
 interface; the module `uwccd/leishen/` uses their firmware's WMI block `RW_GMWMI`: temperatures and fan speeds, power
-mode, own fan speeds or a curve, Windows key, touchpad, RGB keyboard light, the mode key. Not tested on such a laptop
-yet; commands are off until allowed — [LEISHEN.md](LEISHEN.md).
+mode, own fan speeds or a curve, Windows key, touchpad, RGB keyboard light, the mode key. Checked on a Thunderobot
+R16. Since 1.7.0 on the usual pages (*Switches*: Windows key, touchpad), the tray, the rules and `uwccctl mode`; still
+experimental (badge *LEISHEN · EXPERIMENTAL*); commands are off until allowed — [LEISHEN.md](LEISHEN.md).
+
+## Platform window
+
+At the first start — and again when what it shows changes (a driver installed, commands allowed) — a window shows
+the laptop, the platform found and its level, and *What can be controlled*. For every function that does not work it
+says why and offers the next step: *Allow commands* (experimental module), *Install the OEM driver*, *Run the
+self-check* (an unknown project, WMI without a profile), or *Make a report and send it* — the report is made and the
+GitHub issue form *New laptop* opens with the laptop, the platform and the functions filled in; the zip is attached by
+hand, nothing is sent by itself. Serial numbers, the system UUID, MAC addresses, the computer and user names stay out of
+the report unless ticked. *Information → Check the platform*, `uwccctl detect`.
 
 ## What was ported
 
@@ -201,7 +215,7 @@ to the hardware differs (see the last section).
 | Liquid cooling over Bluetooth (BT Cooling) | ✅ | ✅ | `bleak` (BlueZ / WinRT); see above |
 | Liquid cooler firmware update (DFU) | ❌ | ❌ | not done on purpose: a failed update can leave the cooler unusable |
 | Updates of this program | ✅ check | ✅ download + install | GitHub releases, checked against `SHA256SUMS.txt` |
-| Diagnostic report for new laptops / bug reports | ✅ | ✅ | `uwccctl report`, *Information → Diagnostic report* |
+| Diagnostic report for new laptops / bug reports | ✅ | ✅ | `uwccctl report`, *Information → Diagnostic report*; serial numbers, UUID, MAC, computer and user names hidden unless ticked (also inside ACPI tables, with the same length) |
 | Platform profiles, EC self-check, administrator unlock of EC settings | ✅ `uwccctl ec` | ✅ EC Manager | [EC/Platforms.md](EC/Platforms.md) |
 | EC access without the OEM driver: Windows WMI (open, beta) | ➖ | ✅ beta | `root\WMI AcpiTest_MULong`; no `PWUP` / `SMRW`, ~125 ms per access — see [EC/WMI-vs-Driver.md](EC/WMI-vs-Driver.md) |
 | Full control from the command line (`uwccctl`, JSON output) | ✅ `man uwccctl`, bash completion | ✅ `uwccctl help` | everything the window changes; see [CLI.md](CLI.md) |

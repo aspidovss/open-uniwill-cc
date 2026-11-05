@@ -92,6 +92,10 @@ class Service:
             self.monitor = WinMonitor(self.ec, self.pf)
         else:
             self.monitor = Monitor(self.ec, self.pf)
+        from .altplat import alt_platform, clevo_monitor_fans
+        self.alt = alt_platform(self)            # no Uniwill EC: Clevo / Leishen on the main pages, tray, rules
+        if self.alt is not None and self.alt.kind == "clevo":
+            self.monitor.fans = clevo_monitor_fans(self.clevo)
         if self.leishen.present:                 # Leishen / Thunderobot: fan speeds come from its WMI block
             self.monitor.fans = self.leishen.monitor_fans
             self.leishen.ac_fn = lambda: getattr(self.power, "ac_online", True)
@@ -391,6 +395,7 @@ class Service:
             "clevo": self.clevo.status() if self.clevo.present else {"present": False},
             "leishen": self.leishen.status() if self.leishen.present else {"present": False},
             "detect": self.detect.status() if getattr(self, "detect", None) else {"pending": True},
+            "alt": self.alt.status() if self.alt is not None else None,
             "busy": self.busy.state(),
             "monitoring": self.monitor_level(),
         }

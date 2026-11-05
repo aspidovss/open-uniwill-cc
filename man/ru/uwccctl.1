@@ -67,6 +67,10 @@ uwccctl \- управление open-uniwill-cc из командной стро
 .TP
 .BR "mode " [ office | gaming | turbo | custom ]
 Показать или сменить режим: офисный, игровой, турбо, пользовательский.
+Control Center 3.0 / Clevo:
+.BR quiet ", " entertainment ", " performance ", " powersave ;
+Leishen / Thunderobot:
+.BR office ", " gaming ", " performance .
 .B custom
 есть на платформах с RamFan 1.5 и пятью пользовательскими ячейками.
 .TP
@@ -290,6 +294,9 @@ FanBoost: оба вентилятора на максимуме.
 .TP
 .BR "clevo fan defaults" ", " "clevo antidust"
 Заводская кривая; цикл очистки от пыли.
+.TP
+.BR "clevo curve " export | import " ФАЙЛ"
+Своя кривая в файл собственного формата (не таблицы вентиляторов Uniwill); импорт проверяет её для этого ноутбука и применяет.
 .TP
 .BR "clevo kb " on | off
 .TP

@@ -4,10 +4,13 @@
 
 Some Thunderobot laptops (for example the **R16**, board NLY, BIOS TP162) are built by Quanta and come with
 **Leishen ControlCenter 3.x**. They have neither the Uniwill embedded-controller interface of the rest of this program
-nor the Clevo DCHU interface (`CLV0001`), so the usual pages do not work on them. The separate module `uwccd/leishen`
+nor the Clevo DCHU interface (`CLV0001`), so the Uniwill functions do not work on them. The separate module `uwccd/leishen`
 talks to their firmware instead. It is **experimental**: it was written from the firmware's ACPI tables and from how
-Leishen ControlCenter 3.0.0.18 uses them (interoperability analysis, no vendor code or files), and has not been tested
-on such a laptop yet.
+Leishen ControlCenter 3.0.0.18 uses them (interoperability analysis, no vendor code or files). Since 1.7.0 it works on
+the **usual pages** of the window — *Mode selection* (power mode and the module's switches), *Fan settings*,
+*Keyboard backlight*, *Switches* (Windows key, touchpad), *Information* — and with the tray menu, the automation rules
+and `uwccctl mode` (0 Office, 1 Gaming, 2 High performance); the badge *LEISHEN · EXPERIMENTAL* marks it like the WMI
+driver.
 
 **Checked on a Thunderobot R16 (1.6.11_Leishen_dev):** sensors, power modes, own fan speeds, keyboard light,
 Windows key, touchpad and the mode key work.
@@ -52,7 +55,8 @@ back with the next read and the last speeds stay.
 | **Keyboard** | Windows key lock, touchpad on / off; on RGB keyboards zone, effect (static, breathing, colour cycle, ambilight), level and colour. On a single-colour keyboard the firmware's light command is not sent (it waits for an RGB controller); the level is shown and changed with the Fn keys |
 | **Mode key** | (Windows, off by default) Fn mode key switches Office → Gaming → High performance, like Leishen ControlCenter does. Turn it on only when Leishen ControlCenter is closed |
 
-Nothing is sent until **Allow commands** is on (page *Leishen (experimental)* or `uwccctl leishen writes on`).
+Nothing is sent until **Allow commands** is on (the banner at the top of the window, the platform window,
+*Mode selection → Allow commands* or `uwccctl leishen writes on`).
 The firmware does not report the Windows key, the touchpad or the light colours: the page shows the values last set
 there. Saved settings (mode, fixed fan speeds, Windows key) are sent again when the service starts (can be turned off).
 
@@ -77,6 +81,6 @@ uwccctl leishen battery-office off      # keep the chosen mode on battery
 ## Testing
 
 1. Close Leishen ControlCenter (tray) — both programs would send commands.
-2. Open *Leishen (experimental)*: temperatures and fan speeds should match Leishen ControlCenter.
+2. Open *Fan settings*: temperatures and fan speeds should match Leishen ControlCenter.
 3. Turn on *Allow commands*, try the power mode, then the fans (*Fixed speed* 60 %, then *Automatic*).
 4. Make a diagnostic report (*Information → Diagnostic report*): it contains the raw answers of the firmware.

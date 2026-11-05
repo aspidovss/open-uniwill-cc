@@ -28,10 +28,6 @@
       <a data-page="lightbar" id="nav-lightbar" class="hidden"><i class="ico ico-lightbar"></i><span data-i>Laptop light bar</span></a>
       <div class="nav-group" data-i>Power</div>
       <a data-page="battery"><i class="ico ico-battery"></i><span data-i>Battery</span></a>
-      <div class="nav-group hidden" id="nav-clevo-group" data-i>Control Center 3.0 / Clevo</div>
-      <a data-page="clevo" id="nav-clevo" class="hidden"><i class="ico ico-chip"></i><span data-i>Clevo (experimental)</span></a>
-      <div class="nav-group hidden" id="nav-leishen-group" data-i>Leishen / Thunderobot</div>
-      <a data-page="leishen" id="nav-leishen" class="hidden"><i class="ico ico-chip"></i><span data-i>Leishen (experimental)</span></a>
       <div class="nav-group" data-i>Settings</div>
       <a data-page="switches"><i class="ico ico-switch"></i><span data-i>Switches</span></a>
       <a data-page="auto"><i class="ico ico-auto"></i><span data-i>Automation</span></a>
@@ -40,6 +36,7 @@
     </nav>
     <div class="nav-foot">
       <div class="wmi-badge hidden" id="wmi-badge" role="button" title="EC Manager">WMI DRIVER ON</div>
+      <div class="wmi-badge alt-badge hidden" id="alt-badge" role="button"></div>
       <div class="busy-chip hidden" id="busy-chip"></div>
       <div class="modepill" id="modepill">—</div>
       <div class="lc-pill hidden" id="lc-pill"></div>
@@ -95,6 +92,7 @@
     <!-- INFO -->
     <section class="page" id="page-info">
       <header class="ph"><h1 data-i>System information</h1><p data-i>Device details and service status</p></header>
+      <div class="alt-box" id="info-alt"></div>
       <div class="grid g2">
         <div class="card"><h3 data-i>Device</h3><dl class="kv" id="info-dev"></dl></div>
         <div class="card"><h3 data-i>Control Center service</h3><dl class="kv" id="info-svc"></dl></div>
@@ -208,7 +206,8 @@
 
     <!-- MODES -->
     <section class="page" id="page-modes">
-      <header class="ph"><h1 data-i>Mode selection</h1><p data-i>Power and fan operating mode. The Fn + mode key cycles through them.</p></header>
+      <header class="ph"><h1 data-i>Mode selection</h1><p data-i>Power and fan operating mode. The Fn + mode key cycles through them.</p><p class="alt-sub" data-i>The power modes of this laptop's own firmware interface.</p></header>
+      <div class="alt-box" id="modes-alt"></div>
       <div class="modes" id="mode-cards"></div>
       <div class="card">
         <div class="row between">
@@ -246,7 +245,8 @@
 
     <!-- FANS -->
     <section class="page" id="page-fans">
-      <header class="ph"><h1 data-i>Fan settings</h1><p data-i>Fan curves for every profile. Changes apply immediately if the profile is active.</p></header>
+      <header class="ph"><h1 data-i>Fan settings</h1><p data-i>Fan curves for every profile. Changes apply immediately if the profile is active.</p><p class="alt-sub" data-i>The fans of this laptop's own firmware interface: automatic, fixed speed or your own curve.</p></header>
+      <div class="alt-box" id="fans-alt"></div>
       <div class="card">
         <div class="row between wrap">
           <div class="seg grouped" id="table-seg"></div>
@@ -384,6 +384,7 @@
     <!-- LIGHT -->
     <section class="page" id="page-light">
       <header class="ph"><h1 data-i>Keyboard backlight</h1><p id="light-sub"></p></header>
+      <div class="alt-box" id="light-alt"></div>
       <div class="card row between">
         <div><h3 data-i>Keyboard backlight</h3><p class="muted" data-i>Turn the keyboard backlight on or off</p></div>
         <label class="sw"><input type="checkbox" id="kb-power"><span></span></label>
@@ -493,18 +494,6 @@
       <div id="lb-none" class="card hidden"><p data-i>No light bar found on this laptop.</p></div>
     </section>
 
-    <!-- CONTROL CENTER 3.0 / CLEVO (experimental, separate module: uwccd/clevo) -->
-    <section class="page" id="page-clevo">
-      <header class="ph"><h1>Control Center 3.0 / Clevo</h1><p id="clevo-sub"></p></header>
-      <div id="clevo-root"></div>
-    </section>
-
-    <!-- LEISHEN / THUNDEROBOT (experimental, separate module: uwccd/leishen) -->
-    <section class="page" id="page-leishen">
-      <header class="ph"><h1>Leishen / Thunderobot</h1><p id="leishen-sub"></p></header>
-      <div id="leishen-root"></div>
-    </section>
-
     <!-- BATTERY -->
     <section class="page" id="page-battery">
       <header class="ph"><h1 data-i>Battery</h1><p data-i>Battery status and wear protection mode</p></header>
@@ -529,6 +518,7 @@
     <!-- SWITCHES -->
     <section class="page" id="page-switches">
       <header class="ph"><h1 data-i>Switches</h1><p data-i>Keyboard, touchpad and system functions</p></header>
+      <div class="alt-box" id="switches-alt"></div>
       <div class="list" id="switch-list"></div>
       <div class="card" id="backup-card">
         <h3 data-i>Backup and transfer</h3>

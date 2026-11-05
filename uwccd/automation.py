@@ -390,7 +390,21 @@ class PowerSourceRules:
         svc, st = self.svc, self.svc.settings_store
         binding_active = any(getattr(t, "active", None) for t in svc.threads if t.name == "appbind")
         rule_active = getattr(getattr(svc, "load_rules", None), "active", None) is not None   # load rules come first
-        if svc.fan_control and not binding_active and not rule_active:
+        alt = getattr(svc, "alt", None)
+        if alt is not None and not rule_active:          # Clevo / Leishen: the mode of their own interface
+            cur = alt.mode_index()
+            want = setting(st, "mode_on_ac" if online else "mode_on_battery")
+            target = (self.mode_before_battery if online and want == "previous"
+                      else None if want in ("keep", "previous", None) else int(want))
+            if not online:
+                self.mode_before_battery = cur
+            if target is not None and target != cur:
+                try:
+                    log.info("power source %s -> %s mode %s", "AC" if online else "battery", alt.kind, target)
+                    alt.set_mode(target)
+                except (ValueError, LookupError, OSError) as e:
+                    log.warning("power source mode: %s", e)
+        elif svc.fan_control and not binding_active and not rule_active:
             cur = svc.power.option["OperatingMode"]
             want = setting(st, "mode_on_ac" if online else "mode_on_battery")
             target = None
@@ -661,7 +675,8 @@ class LoadRules:
         """The laptop's mode and the cooler profile, for the conditions on them."""
         out = dict(m)
         try:
-            out["mode"] = self.svc.power.option.get("OperatingMode")
+            alt = getattr(self.svc, "alt", None)
+            out["mode"] = alt.mode_index() if alt is not None else self.svc.power.option.get("OperatingMode")
         except Exception:  # noqa: BLE001
             out["mode"] = None
         lc = self._lc()
@@ -670,6 +685,9 @@ class LoadRules:
 
     # -- what a rule can change ----------------------------------------------------------------------
     def _current(self):
+        alt = getattr(self.svc, "alt", None)
+        if alt is not None:                       # Clevo / Leishen: their mode, no profile slots
+            return alt.mode_index(), None
         p = self.svc.power
         mode = p.option.get("OperatingMode")
         try:
@@ -684,7 +702,9 @@ class LoadRules:
 
     def _snapshot(self):
         lc = self._lc()
-        snap = {"mode": self._current(), "fan_boost": bool(self.svc.power.option.get("FanBoostEnable"))}
+        alt = getattr(self.svc, "alt", None)
+        snap = {"mode": self._current(),
+                "fan_boost": False if alt is not None else bool(self.svc.power.option.get("FanBoostEnable"))}
         if lc is not None:
             snap["lc_mode"] = lc.cfg.get("mode")
             if hasattr(lc, "curves_snapshot"):
@@ -694,6 +714,18 @@ class LoadRules:
     def _apply(self, mode, slot, why):
         p = self.svc.power
         if mode is None:
+            return True
+        alt = getattr(self.svc, "alt", None)
+        if alt is not None:
+            if alt.mode_index() == mode:
+                return True
+            try:
+                log.info("load rule: %s -> %s mode %s", why, alt.kind, mode)
+                alt.set_mode(mode)
+            except (ValueError, LookupError, OSError) as e:
+                log.warning("load rule: %s mode %s: %s", alt.kind, mode, e)
+                return False
+            self.svc.emit("load_rule", {"rule": why, "mode": mode, "slot": None})
             return True
         if mode == 2 and not self.svc.pf.turbo_support or mode not in p.MODES:
             log.warning("load rule: mode %s is not available here", mode)
@@ -710,6 +742,8 @@ class LoadRules:
         return True
 
     def _fan_boost(self, on):
+        if getattr(self.svc, "alt", None) is not None:       # Uniwill only
+            return
         p = self.svc.power
         if bool(p.option.get("FanBoostEnable")) != on:
             log.info("load rule: Fan Boost %s", "on" if on else "off")

@@ -3,14 +3,16 @@
 **English** · [Русский](CLEVO.ru.md)
 
 Since 1.6.6 the program has a **separate, experimental module** for laptops that come with **Control Center 3.x**
-(Clevo chassis and the brands that sell them; Control Center 3 is the Microsoft Store app by Clevo). These laptops
-have no Uniwill EC interface: they are driven through Clevo **DCHU** commands. The module lives in `uwccd/clevo/` and
-has its own page in the window — *Control Center 3.0 / Clevo → Clevo (experimental)* — and its own command,
-`uwccctl clevo`. It does not change anything on Uniwill laptops.
+(Clevo chassis, Tongfang laptops with Control Center 3.x and the brands that sell them; Control Center 3 is the
+Microsoft Store app by Clevo). These laptops have no Uniwill EC interface: they are driven through Clevo **DCHU**
+commands. The module lives in `uwccd/clevo/`. Since 1.7.0 it works on the **usual pages** of the window — *Mode
+selection*, *Fan settings*, *Keyboard backlight*, *Information* — and with the tray menu, the automation rules and
+`uwccctl mode`; `uwccctl clevo` has everything else. It does not change anything on Uniwill laptops.
 
-> **Not tested on a Clevo laptop yet.** The commands were written from the interface description (see *Sources*).
-> Commands that change something are **off** until you allow them. A diagnostic report from a Clevo laptop
-> (*Information → Diagnostic report*, section *Control Center 3.0 / Clevo*) helps to test the module.
+> **Experimental.** Reports from a Tongfang laptop with Control Center 3.x confirmed that all functions work; the
+> module still carries the *experimental* label (the badge *CC 3.0 · EXPERIMENTAL* in the window), like the WMI
+> driver. Commands that change something are **off** until you allow them. A diagnostic report
+> (*Information → Diagnostic report*, section *Control Center 3.0 / Clevo*) helps on other models.
 
 ![Control Center 3.0 / Clevo](screenshots/clevo.png)
 
@@ -26,8 +28,17 @@ device `CLV0001`. The function number is the command and the argument is a buffe
 | Linux | our kernel module `uwcc` (ioctl `UWCC_IOC_CLEVO`); it is loaded on Clevo laptops too | `install.sh` with the module (DKMS), as on Uniwill laptops |
 
 The program finds the interface at start. If there is a Clevo interface and no Uniwill EC, the service runs in
-**Clevo-only** mode: the Uniwill pages (modes, fan tables, battery…) do not work, and a banner leads to the Clevo
-page. Monitoring of the operating system (temperatures, load, memory…) works as usual.
+**Clevo-only** mode: *Mode selection*, *Fan settings* and *Keyboard backlight* show the Clevo functions instead of
+the Uniwill ones, the *Monitor* page shows the Clevo fans, and the pages that need the Uniwill EC (battery care,
+switches…) say so. Monitoring of the operating system (temperatures, load, memory…) works as usual.
+
+| Page | Clevo |
+|---|---|
+| Mode selection | the module's switches (*Allow commands*, *Send the saved settings at start*), power mode |
+| Fan settings | fans, fan mode, fan offset, anti-dust; custom curve with *Export curve* / *Import curve* |
+| Keyboard backlight | on / off, colour, brightness, firmware effect, sleep timer, colour cycle at power-on (a USB keyboard controller keeps its own page below) |
+| Information | capability words of the firmware |
+| Automation, tray, `uwccctl mode` | the four modes: 0 Silent, 1 Entertainment, 2 Performance, 3 Power saving (numbers as in the rules) |
 
 ## Functions
 
@@ -57,9 +68,15 @@ with *Send the saved settings at start* (`clevo_restore`, on by default) they ar
 Per-key RGB keyboards of Clevo laptops are usually ITE controllers on USB; the normal *Keyboard backlight* page
 (and BetterRGB) may already work with them — a report tells.
 
+**Curve file.** *Export curve* saves the custom curve in its own format (`open-uniwill-cc-clevo-fan-curve`, 3 points per
+fan): it does not mix with the fan tables of Uniwill laptops, and each import refuses the other one. On import the
+first point stays the factory one of this laptop and fans it does not have are left out; nothing is sent until
+*Apply curve*.
+
 ## Allowing commands
 
-On the page: *Experimental commands → Allow commands*. Or:
+The banner at the top of the window (*Allow commands*), the platform window, or *Mode selection → Allow commands*.
+Or:
 
 ```bash
 uwccctl clevo writes on
@@ -76,6 +93,8 @@ uwccctl clevo fan auto                          # auto | max | maxq | custom
 uwccctl clevo fan offset 20
 uwccctl clevo fan curve cpu 30,0 55,40 75,80    # first point = factory, then Custom mode
 uwccctl clevo fan defaults
+uwccctl clevo curve export curve.json           # the custom curve as a file
+uwccctl clevo curve import curve.json           # checked for this laptop, then applied
 uwccctl clevo antidust
 uwccctl clevo kb color FF2000                   # [ZONE 0-3]
 uwccctl clevo kb brightness 180                 # 0-255

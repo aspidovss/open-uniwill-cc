@@ -271,6 +271,21 @@ class Handler(BaseHTTPRequestHandler):
                                         "profile": platformdb.export(s.pf.project_raw)})
             if u.path == "/api/clevo":                    # Control Center 3.0 / Clevo (experimental)
                 return self._json(200, s.clevo.status())
+            if u.path == "/api/clevo/curve-export":       # its own file format (uwccd/clevo/tables.py)
+                from . import version_string
+                from .clevo import tables as clevo_tables
+                from .hw import dmi
+                data = json.dumps(clevo_tables.export(s.clevo, laptop=f"{dmi('sys_vendor')} {dmi('product_name')}".strip(),
+                                                      program=version_string()), ensure_ascii=False, indent=1).encode()
+                name = time.strftime("uwcc-clevo-fan-curve-%Y%m%d-%H%M%S.json")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Content-Disposition", f'attachment; filename="{name}"')
+                self.send_header("Content-Length", str(len(data)))
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(data)
+                return None
             if u.path == "/api/leishen":                  # Leishen / Thunderobot (experimental)
                 return self._json(200, s.leishen.status())
             if u.path == "/api/detect":                   # which platform, vendor programs running
@@ -316,6 +331,9 @@ class Handler(BaseHTTPRequestHandler):
             if busy and (path in BUSY_PATHS or path.startswith(("/api/profiles/", "/api/profile-reset/", "/api/selfcheck"))
                          or (path == "/api/setting" and b.get("key") in BUSY_SETTINGS)):
                 return self._json(409, {"error": "busy", "busy": busy})
+            if path == "/api/mode" and s.alt is not None:      # Clevo / Leishen: the mode of their own interface
+                s.alt.set_mode(b["mode"])
+                return self._json(200, s.state())
             if (path in ("/api/mode", "/api/profile", "/api/fanboost", "/api/restore")
                     or path.startswith(("/api/profiles/", "/api/table/", "/api/profile-reset/"))) and not s.fan_control:
                 return self._json(409, {"error": "fan control disabled on this EC (no RamFan 1.5)"})
@@ -446,6 +464,9 @@ class Handler(BaseHTTPRequestHandler):
                 r = s.keyboard.fx_calibrate(str(b.get("action", "")), b.get("observed"))
                 s.emit("keyboard", s.keyboard.status())
                 return self._json(200, r)
+            elif path == "/api/clevo" and b.get("action") == "curve_import":     # checks a curve file, sends nothing
+                from .clevo import tables as clevo_tables
+                return self._json(200, {"curves": clevo_tables.load(b.get("data"), s.clevo)})
             elif path == "/api/clevo":                    # Control Center 3.0 / Clevo (experimental)
                 return self._json(200, s.clevo.command(b))
             elif path == "/api/leishen":                  # Leishen / Thunderobot (experimental)
@@ -662,7 +683,7 @@ class Handler(BaseHTTPRequestHandler):
             s.settings_store.set(key, bool(value))
             s.emit("clevo", {})
         elif key == "detect_seen":                     # the first-start summary was shown
-            s.settings_store.set("detect_seen", str(value)[:40] if value else None)
+            s.settings_store.set("detect_seen", str(value)[:60] if value else None)
         elif key in ("leishen_writes", "leishen_restore", "leishen_hotkey", "leishen_battery_office"):     # Leishen / Thunderobot (experimental)
             s.settings_store.set(key, bool(value))
             if key == "leishen_writes" and not value and s.leishen.present \

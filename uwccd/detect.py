@@ -1,7 +1,7 @@
 """Which laptop platform this is, and what can be controlled — found at the start of the service, read only.
 
-The window shows the result once, at the first start (setting detect_seen), together with the vendor programs that run
-at the same time (Uniwill Control Center, Clevo Control Center 3, Leishen ControlCenter): two programs that both send
+The window shows the result at the first start and again when it changes (setting detect_seen holds the signature
+of what was shown), together with the vendor programs that run at the same time (Uniwill Control Center, Clevo Control Center 3, Leishen ControlCenter): two programs that both send
 commands to the firmware undo each other's settings, so the window offers to close them.
 
 Signals, from cheap to exact:
@@ -80,37 +80,94 @@ def _laptop():
             "bios": dmi("bios_version")}
 
 
+def _f(name, state, reason=None, *actions):
+    """One line of "What can be controlled": [name, ok | try | no, why it is not ok, what to do about it]."""
+    return [name, state, reason, list(actions)]
+
+
+# reasons and what the window offers for them (the window explains each reason in a sentence):
+#   writes_off       experimental module, its commands are off           -> allow (the setting of that module)
+#   oem_missing      no OEM driver, WMI path not chosen (Windows)        -> driver (EC Manager)
+#   wmi_consent      WMI path chosen, its warning not accepted           -> driver
+#   wmi_no_profile   WMI path without a profile of this project          -> driver, selfcheck
+#   unknown_project  a project the official service does not know        -> selfcheck, report
+#   no_ramfan        the EC does not report fan control (RamFan 1.5)     -> report
+#   not_found        nothing of this kind on this laptop                 -> (none)
+#   no_platform      no interface for modes or fans                      -> report
+
+
 def platform_of(svc):
-    """{platform, level, name, signals, features}; level: tested / known / experimental / none."""
-    signals, feats = [], []
-    ec_active = (getattr(svc, "ec_info", None) or {}).get("active")
+    """{platform, level, name, signals, features, page}; level: tested / known / experimental / none."""
+    signals = []
+    ec_info = getattr(svc, "ec_info", None) or {}
+    ec_active = ec_info.get("active")
     clevo, leishen = getattr(svc, "clevo", None), getattr(svc, "leishen", None)
     if clevo is not None and clevo.present:
         signals.append(f"Control Center 3.0 / Clevo interface ({clevo.dchu.name})")
-        feats = [("Monitoring", "ok"), ("Power modes", "try"), ("Fans", "try"), ("Keyboard backlight", "try")]
+        w = clevo.writes_allowed()
+        st, why = ("try", None) if w else ("no", "writes_off")
+        act = () if w else ("allow",)
+        feats = [_f("Monitoring", "ok"), _f("Power modes", st, why, *act), _f("Fans", st, why, *act),
+                 _f("Keyboard backlight", st, why, *act)]
         return {"platform": "clevo", "level": "experimental", "name": "Control Center 3.0 / Clevo",
-                "signals": signals, "features": feats, "page": "clevo"}
+                "signals": signals, "features": feats, "page": "modes", "allow_key": "clevo_writes"}
     if leishen is not None and leishen.present:
         info = leishen.info or {}
         signals.append(f"Leishen / Thunderobot WMI block RW_GMWMI ({leishen.wmi.name})")
         signals.append(f"firmware answers: {'RGB' if info.get('kb_rgb') else 'single-colour'} keyboard, "
                        f"{3 if info.get('fans3') else 2} fans, fan table {info.get('fan_table')}")
-        feats = [("Monitoring", "ok"), ("Power modes", "ok"), ("Fans", "ok"),
-                 ("Keyboard backlight", "ok" if info.get("kb_rgb") else "no"), ("Windows key, touchpad", "ok"),
-                 ("Mode key", "ok" if IS_WIN else "no")]
+        w = leishen.writes_allowed()
+        st, why = ("ok", None) if w else ("no", "writes_off")
+        act = () if w else ("allow",)
+        feats = [_f("Monitoring", "ok"), _f("Power modes", st, why, *act), _f("Fans", st, why, *act),
+                 _f("Keyboard backlight", st, why, *act) if info.get("kb_rgb") else _f("Keyboard backlight", "no", "not_found"),
+                 _f("Windows key, touchpad", st, why, *act),
+                 _f("Mode key", "ok", None) if IS_WIN else _f("Mode key", "no", "not_found")]
         return {"platform": "leishen", "level": "experimental", "name": "Leishen / Thunderobot",
-                "signals": signals, "features": feats, "page": "leishen"}
+                "signals": signals, "features": feats, "page": "modes", "allow_key": "leishen_writes"}
     pf = getattr(svc, "pf", None)
     if ec_active not in (None, "none") and pf is not None and pf.project_raw:
         signals.append(f"Uniwill embedded controller via {ec_active}, project {pf.project_name} (0x{pf.project_raw:X})")
-        ok = "ok" if svc.fan_control else "no"
-        feats = [("Monitoring", "ok"), ("Power modes", ok), ("Fans", ok), ("Battery care", "ok"),
-                 ("Keyboard backlight", "ok" if (svc.keyboard.status() or {}).get("kind") not in (None, "none") else "no")]
-        return {"platform": "uniwill", "level": pf.support, "name": pf.display_name or pf.project_name,
+        level = pf.support
+        no_profile = False
+        if ec_active == "wmi":
+            try:
+                from . import platformdb
+                no_profile = bool(platformdb.summary(pf.project_raw).get("fallback"))
+            except Exception:  # noqa: BLE001
+                no_profile = False
+            if no_profile:
+                signals.append("WMI path without a profile of this project")
+        if not svc.fan_control:
+            ctl = ("no", "no_ramfan", "report")
+        elif no_profile:
+            ctl = ("no", "wmi_no_profile", "driver", "selfcheck")
+        elif level == "experimental":
+            ctl = ("try", "unknown_project", "selfcheck", "report")
+        else:
+            ctl = ("ok", None)
+        kb = (svc.keyboard.status() or {}).get("kind") not in (None, "none")
+        feats = [_f("Monitoring", "ok"), _f("Power modes", *ctl), _f("Fans", *ctl),
+                 _f("Battery care", *(("no", "wmi_no_profile", "driver", "selfcheck") if no_profile else ("ok", None))),
+                 _f("Keyboard backlight", "ok") if kb else _f("Keyboard backlight", "no", "not_found")]
+        return {"platform": "uniwill", "level": level, "name": pf.display_name or pf.project_name,
                 "signals": signals, "features": feats, "page": "modes"}
-    signals.append("no firmware interface for modes or fans was found")
+    reason = ec_info.get("reason")
+    if reason in ("oem_missing", "wmi_consent") and IS_WIN:
+        signals.append("the Uniwill embedded controller is not reachable yet: " + reason)
+        why, act = reason, ("driver",)
+    else:
+        signals.append("no firmware interface for modes or fans was found")
+        why, act = "no_platform", ("report",)
     return {"platform": "unknown", "level": "none", "name": "", "signals": signals,
-            "features": [("Monitoring", "ok"), ("Power modes", "no"), ("Fans", "no")], "page": "monitor"}
+            "features": [_f("Monitoring", "ok"), _f("Power modes", "no", why, *act), _f("Fans", "no", why, *act)],
+            "page": "driver" if why != "no_platform" else "info"}
+
+
+def signature(r):
+    """What the window showed: when it changes (a driver installed, commands allowed), the window comes again."""
+    feats = "".join((f[1] or "?")[0] for f in r.get("features") or [])
+    return f"{r.get('platform')}:{r.get('level')}:{feats}"[:60]
 
 
 class Detector:
@@ -130,6 +187,7 @@ class Detector:
         except Exception as e:  # noqa: BLE001
             log.warning("platform detection: %s", e)
             r = {"platform": "unknown", "level": "none", "signals": [str(e)], "features": [], "vendor_apps": []}
+        r["signature"] = signature(r)
         with self.lock:
             self.result = r
         log.info("platform: %s (%s)%s", r.get("platform"), r.get("level"),

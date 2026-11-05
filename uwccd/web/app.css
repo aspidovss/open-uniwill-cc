@@ -360,7 +360,13 @@ pre.code{margin:0;padding:10px 12px;background:var(--bg0);border:1px solid var(-
 .leishen-curve div{display:flex;align-items:center;gap:4px}.leishen-curve input{width:70px}
 .clevo-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:8px 0}
 .clevo-row > span:first-child{min-width:170px;color:var(--muted)}
-#page-clevo .card.locked .clevo-cmd{opacity:.45;pointer-events:none}
+.alt-box .card.locked .clevo-cmd{opacity:.45;pointer-events:none}
+.page.alt>:not(.ph):not(.alt-box){display:none!important}
+.alt-box:empty{display:none}
+.ph .alt-sub{display:none}.page.alt .ph p[data-i]:not(.alt-sub){display:none}.page.alt .ph .alt-sub{display:block}
+.alt-badge{border-color:var(--warn,#f5a524);color:var(--warn,#f5a524);background:rgba(245,165,36,.10);font-size:12px}
+.alt-badge:hover{background:rgba(245,165,36,.18)}
+.ec-banner.alt-warn{border-color:var(--warn,#f5a524);background:rgba(245,165,36,.08)}
 .clevo-row input[type=range]{flex:1;min-width:180px;max-width:420px;width:auto;margin:0}
 .clevo-row output{min-width:44px}
 /* liquid cooler curves (1.6.8): the look of the laptop fan curve (.curve) */
@@ -432,3 +438,7 @@ svg.lc-curve text.draglbl{font-size:16px}
 .detect-level{font-size:12px;padding:2px 8px;border-radius:9px;background:var(--bg3);margin-left:4px}
 .detect-level.l-tested,.detect-level.l-known{color:var(--acc)}.detect-level.l-experimental{color:var(--warn,#e6a23c)}
 .detect-warn{margin-top:14px;padding:12px;border:1px solid var(--warn,#e6a23c);border-radius:10px}
+.detect-todo{margin-top:12px;display:grid;gap:8px}
+.detect-why{padding:10px 12px;border:1px solid var(--line,#2a333b);border-radius:10px;background:rgba(255,255,255,.02)}
+.detect-why p{margin:0 0 8px;font-size:13px}
+.detect-ok{margin-top:12px;color:var(--acc)}

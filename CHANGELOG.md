@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.7.0
+
+- **Control Center 3.0 / Clevo and Leishen / Thunderobot on the usual pages.** Without a Uniwill embedded controller
+  the modules no longer have pages of their own: *Mode selection* shows their power modes and switches, *Fan settings*
+  their fans, *Keyboard backlight* their keyboard (a USB keyboard controller keeps its own page), *Switches* the
+  Windows key and the touchpad (Leishen), *Information* the firmware data. The tray menu, the automation rules (mode
+  conditions and actions, mode on AC / battery) and `uwccctl mode` work with their modes too, numbered like the Uniwill
+  ones (Clevo: 0 Silent, 1 Entertainment, 2 Performance, 3 Power saving; Leishen: 0 Office, 1 Gaming, 2 High
+  performance). Both stay experimental, like the WMI driver: a badge *CC 3.0 · EXPERIMENTAL* / *LEISHEN ·
+  EXPERIMENTAL*, and a banner with *Allow commands* until their commands are allowed. Control Center 3.x also covers
+  Tongfang laptops, where reports confirmed all functions (new module `uwccd/altplat.py`).
+- **Clevo fan curve as a file.** *Export curve* / *Import curve* on *Fan settings* (`uwccctl clevo curve export|import
+  FILE`) in its own format (`open-uniwill-cc-clevo-fan-curve`): it does not mix with the Uniwill fan tables, each import
+  refuses the other one, and the first point stays the factory one of this laptop (`uwccd/clevo/tables.py`).
+- **The platform window says why and what to do.** Every function that does not work gets a reason and the next step:
+  *Allow commands* (experimental module), *Install the OEM driver*, *Run the self-check* (unknown project, WMI without
+  a profile) or *Make a report and send it* — the report is made and the GitHub issue form *New laptop* opens with the
+  laptop, the platform and the functions filled in (the zip is attached by hand; nothing is sent by itself). The window
+  comes again when what it shows changes (a driver installed, commands allowed); its technical lines are translated.
+  `uwccctl detect` prints the same with commands.
+- **Diagnostic report: fewer personal details.** Serial numbers and the system UUID are now also hidden on Windows
+  (they were read only on Linux before), the chassis serial too, inside the ACPI tables as well (same length, so the
+  tables stay readable); computer names in any letter case, `COMPUTER\user` and the user name outside paths are hidden.
+- **PR #4 by noteMASTER11:** a constant per-key picture is sent again once a second, so Windows does not suspend the
+  USB keyboard (a held colour no longer drops).
+
 ## 1.6.13
 
 - **Light bar power on the *Laptop light bar* page.** Models with an RGB light bar in the embedded controller (EC caps

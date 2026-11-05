@@ -123,7 +123,8 @@ Control Center **5.52.x** (checked against 5.52.49.6, MBB). It replaces that Con
 |---|---|
 | 5.52.x (service GCUService 1.0.2.x) | **supported** — the program is ported from it |
 | 5.56.x with the newer service 1.2 (e.g. Mechrevo 5.56.60.12) | runs (same EC layout, RamFan 1.5), **not tested** — its code is protected, nothing was taken from it |
-| 3.x for Clevo and Tongfang (Microsoft Store app) | **experimental** since 1.6.6 — separate module *Control Center 3.0 / Clevo* (DCHU interface), not tested on such a laptop yet: [docs/CLEVO.md](docs/CLEVO.md) |
+| 3.x for Clevo and Tongfang (Microsoft Store app) | **experimental** since 1.6.6 — module *Control Center 3.0 / Clevo* (DCHU interface), on the usual pages since 1.7.0; reports from a Tongfang laptop confirmed all functions: [docs/CLEVO.md](docs/CLEVO.md) |
+| Leishen ControlCenter 3.x (Thunderobot, built by Quanta) | **experimental** since 1.6.12 — module *Leishen / Thunderobot* (WMI block `RW_GMWMI`), on the usual pages since 1.7.0; checked on a Thunderobot R16: [docs/LEISHEN.md](docs/LEISHEN.md) |
 | other vendor centers (e.g. Mechrevo's own 3.x) | **not supported** — not ported, not tested |
 
 **Theoretical list of platforms.** The program reads the **project ID** from the EC (`0x740`) and recognises these

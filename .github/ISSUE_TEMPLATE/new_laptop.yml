@@ -1,0 +1,48 @@
+name: New laptop / Новый ноутбук
+description: The program does not support your laptop yet, or only in part — send the diagnostic report / Программа ещё не поддерживает ваш ноутбук или поддерживает частично — пришлите диагностический отчёт
+title: "[Laptop] "
+labels: ["new laptop"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The *Make a report and send it* button of the platform window fills in the fields below. Drag the report zip
+        (Downloads folder) into the last field: GitHub cannot attach it by itself. Serial numbers, the system UUID,
+        MAC addresses, the computer and user names are left out of the report unless you ticked them.
+
+        Кнопка *Сделать отчёт и прислать* в окне платформы заполняет поля ниже. Перетащите zip с отчётом (папка
+        «Загрузки») в последнее поле: GitHub не прикрепляет его сам. Серийные номера, UUID системы, MAC-адреса, имя
+        компьютера и пользователя в отчёт не попадают, если вы их не отметили.
+  - type: input
+    id: laptop
+    attributes:
+      label: Laptop / Ноутбук
+      description: Vendor, model, board, BIOS / Производитель, модель, плата, BIOS
+    validations:
+      required: true
+  - type: input
+    id: control_center
+    attributes:
+      label: Vendor's control program / Программа производителя
+      description: e.g. Control Center 5.52, Control Center 3.0 (Microsoft Store), Leishen ControlCenter 3.x
+  - type: input
+    id: platform
+    attributes:
+      label: Platform found by open-uniwill-cc / Платформа, которую нашла программа
+  - type: textarea
+    id: functions
+    attributes:
+      label: What can be controlled (platform window) / Что можно настроить (окно платформы)
+      render: text
+  - type: textarea
+    id: works
+    attributes:
+      label: What works and what does not / Что работает и что нет
+      description: In the vendor's program and in this one / В программе производителя и в этой
+  - type: textarea
+    id: report
+    attributes:
+      label: Diagnostic report / Диагностический отчёт
+      description: Drag the zip here / Перетащите сюда zip-файл
+    validations:
+      required: true

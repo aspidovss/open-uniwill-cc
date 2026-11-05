@@ -130,7 +130,8 @@ class Tray:
             self.icon.icon = make_icon(offline=True)
             self.icon.title = "Control Center — " + self.T("offline")
         else:
-            mode = st["power"]["mode"] if st["platform"].get("fan_control") else None
+            alt = st.get("alt")                   # Clevo / Leishen: their own modes (uwccd/altplat.py)
+            mode = alt.get("mode") if alt else st["power"]["mode"] if st["platform"].get("fan_control") else None
             self.icon.icon = make_icon(mode)
             name = self.mode_name(mode) if mode is not None else ""
             lc = st.get("liquid") or {}
@@ -142,6 +143,10 @@ class Tray:
             pass
 
     def mode_name(self, m):
+        alt = (self.state or {}).get("alt")
+        if alt:
+            key = next((x["id"] for x in alt.get("modes") or [] if x.get("index") == m), None)
+            return self.T(f"{alt['platform']}_{key}") if key else ""
         return {0: self.T("mode0"), 1: self.T("mode1"), 2: self.T("mode2"), 3: self.T("custom")}.get(m, "")
 
     def act(self, path, body):
@@ -210,7 +215,14 @@ class Tray:
                 items.append(I(T("svc_restart"), self.restart_service))
         else:
             p = st["power"]
-            if st["platform"].get("fan_control"):
+            alt = st.get("alt")
+            if alt and alt.get("writes"):             # Clevo / Leishen: their modes, no Fan Boost
+                items.append(I(T("mode"), pystray.Menu(*[
+                    I(self.mode_name(m["index"]), (lambda m: lambda *_: self.act("mode", {"mode": m}))(m["index"]),
+                      checked=(lambda m: lambda *_: ((self.state or {}).get("alt") or {}).get("mode") == m)(m["index"]),
+                      radio=True)
+                    for m in alt.get("modes") or []])))
+            elif st["platform"].get("fan_control"):
                 modes = [0, 1] + ([2] if p.get("turbo_support") else []) + ([3] if p.get("custom_support") else [])
                 items.append(I(T("mode"), pystray.Menu(*[
                     I(self.mode_name(m), (lambda m: lambda *_: self.act("mode", {"mode": m}))(m),

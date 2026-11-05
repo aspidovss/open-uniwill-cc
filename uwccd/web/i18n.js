@@ -987,3 +987,55 @@ Object.assign(RU, {
   "Laptop mode": "Режим ноутбука", "Cooler profile": "Профиль СЖО", "Automation rule": "Правило автоматизации",
   "any other rule": "любое другое правило", "is on": "сработало", "is not on": "не сработало",
 });
+
+// 1.7.0: Clevo / Leishen on the main pages, the platform window with reasons and actions
+Object.assign(RU, {
+  "Laptops with Control Center 3.x (Clevo, Tongfang) via {0}.": "Ноутбуки с Control Center 3.x (Clevo, Tongfang), через {0}.",
+  "The firmware does not report the current power mode, fan mode or backlight, so the pages show the values last set here.":
+    "Прошивка не сообщает текущий режим питания, режим вентиляторов и подсветку, поэтому страницы показывают значения, заданные здесь последними.",
+  "Close Control Center 3 while using this program: both programs would send commands. Its driver must stay installed (Windows).":
+    "Закройте Control Center 3, пока пользуетесь этой программой: иначе команды будут отправлять обе. Его драйвер должен остаться установленным (Windows).",
+  "Curve loaded: check it and press Apply curve": "Кривая загружена: проверьте её и нажмите «Применить кривую»",
+  "Not a Clevo fan curve: {0}": "Это не кривая вентиляторов Clevo: {0}",
+  "Export curve": "Экспорт кривой", "Import curve": "Импорт кривой",
+  "A Clevo curve file is its own format: it does not mix with the fan tables of Uniwill laptops.":
+    "У файла кривой Clevo свой формат: он не смешивается с таблицами вентиляторов ноутбуков Uniwill.",
+  "The switches of this page belong to the Uniwill embedded controller; Control Center 3.0 laptops do not have them.":
+    "Переключатели этой страницы относятся к встроенному контроллеру Uniwill; у ноутбуков с Control Center 3.0 их нет.",
+  "Control Center 3.0 / Clevo: firmware capabilities": "Control Center 3.0 / Clevo: возможности прошивки",
+  "Quanta laptops with Leishen ControlCenter via {0}. The commands are the ones Leishen ControlCenter sends; first checked on a Thunderobot R16. When the service stops, the fans go back to automatic.":
+    "Ноутбуки Quanta с Leishen ControlCenter, через {0}. Команды те же, что отправляет Leishen ControlCenter; впервые проверено на Thunderobot R16. Когда служба останавливается, вентиляторы возвращаются в автоматический режим.",
+  "Close Leishen ControlCenter while using this program: both programs would send commands.":
+    "Закройте Leishen ControlCenter, пока пользуетесь этой программой: иначе команды будут отправлять обе.",
+  "Keyboard and touchpad": "Клавиатура и тачпад", "Leishen / Thunderobot: firmware": "Leishen / Thunderobot: прошивка",
+  "Commands allowed": "Команды разрешены", "Self-check: uwccctl ec selfcheck 1": "Самопроверка: uwccctl ec selfcheck 1",
+  "Everything found works.": "Всё найденное работает.", "EXPERIMENTAL": "ЭКСПЕРИМЕНТАЛЬНО", "{0} — experimental": "{0} — экспериментально",
+  "This laptop has no Uniwill embedded controller: it is controlled through the Control Center 3.0 interface (Clevo, Tongfang). Mode selection, Fan settings and Keyboard backlight work with it, but the module is experimental, so its commands are sent only after you allow them. Close Control Center 3 first.":
+    "У этого ноутбука нет встроенного контроллера Uniwill: он управляется через интерфейс Control Center 3.0 (Clevo, Tongfang). «Выбор режима», «Вентиляторы» и «Подсветка клавиатуры» работают через него, но модуль экспериментальный, поэтому его команды отправляются только после вашего разрешения. Сначала закройте Control Center 3.",
+  "This laptop has no Uniwill embedded controller: it is controlled through the Leishen / Thunderobot firmware interface. Mode selection, Fan settings, Keyboard backlight and Switches work with it, but the module is experimental, so its commands are sent only after you allow them. Close Leishen ControlCenter first.":
+    "У этого ноутбука нет встроенного контроллера Uniwill: он управляется через интерфейс прошивки Leishen / Thunderobot. «Выбор режима», «Вентиляторы», «Подсветка клавиатуры» и «Переключатели» работают через него, но модуль экспериментальный, поэтому его команды отправляются только после вашего разрешения. Сначала закройте Leishen ControlCenter.",
+  "Open Information": "Открыть «Информацию»", "Run the self-check": "Пройти самопроверку", "Make a report and send it": "Сделать отчёт и прислать",
+  "The module is experimental: its commands are off until you allow them. Close the vendor program first.":
+    "Модуль экспериментальный: его команды выключены, пока вы их не разрешите. Сначала закройте программу производителя.",
+  "The OEM driver UWACPIDriver is not installed: the program cannot reach the embedded controller yet.":
+    "OEM-драйвер UWACPIDriver не установлен: программа пока не может обращаться к встроенному контроллеру.",
+  "The WMI path is chosen, but its warning has not been accepted yet.": "Выбран путь WMI, но его предупреждение ещё не принято.",
+  "On the WMI path (without the OEM driver) only laptops with a profile get these functions, and there is none for this one yet. Install the OEM driver, or run the self-check to make a profile.":
+    "Через WMI (без OEM-драйвера) эти функции получают только ноутбуки с профилем, а для этого его пока нет. Установите OEM-драйвер или пройдите самопроверку, чтобы создать профиль.",
+  "The official service does not know this project: the functions may work only in part. The self-check shows what works; a report helps to add the laptop.":
+    "Официальная служба не знает этот проект: функции могут работать лишь частично. Самопроверка покажет, что работает; отчёт поможет добавить ноутбук.",
+  "The embedded controller does not report fan control (RamFan 1.5). A report helps to find out why.":
+    "Встроенный контроллер не сообщает об управлении вентиляторами (RamFan 1.5). Отчёт поможет понять почему.",
+  "No interface for modes or fans was found. Make a report and send it to us: this is how new laptops get support.":
+    "Интерфейс режимов и вентиляторов не найден. Сделайте отчёт и пришлите нам: так новые ноутбуки получают поддержку.",
+  "Control Center 3.0 / Clevo interface ({0})": "интерфейс Control Center 3.0 / Clevo ({0})",
+  "Leishen / Thunderobot WMI block RW_GMWMI ({0})": "WMI-блок Leishen / Thunderobot RW_GMWMI ({0})",
+  "firmware answers: {0} keyboard, {1} fans, fan table {2}": "ответ прошивки: клавиатура {0}, вентиляторов {1}, таблица вентиляторов {2}",
+  "single-colour": "одноцветная",
+  "Uniwill embedded controller via {0}, project {1}": "встроенный контроллер Uniwill через {0}, проект {1}",
+  "WMI path without a profile of this project": "путь WMI без профиля этого проекта",
+  "the Uniwill embedded controller is not reachable yet: {0}": "встроенный контроллер Uniwill пока недоступен: {0}",
+  "no firmware interface for modes or fans was found": "интерфейс прошивки для режимов и вентиляторов не найден",
+  "The power modes of this laptop's own firmware interface.": "Режимы питания собственного интерфейса прошивки этого ноутбука.",
+  "The fans of this laptop's own firmware interface: automatic, fixed speed or your own curve.": "Вентиляторы через собственный интерфейс прошивки этого ноутбука: автоматически, постоянная скорость или своя кривая.",
+});

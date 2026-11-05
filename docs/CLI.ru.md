@@ -41,7 +41,8 @@ uwccctl mode turbo || echo "ошибка: $?"
 
 | Команда | |
 |---|---|
-| `mode [office\|gaming\|turbo\|custom]` | показать / сменить режим |
+| `mode [office\|gaming\|turbo\|custom]` | показать / сменить режим; Control Center 3.0 / Clevo: `quiet` `entertainment` `performance` `powersave`, Leishen: `office` `gaming` `performance` |
+| `detect [run\|close]` | найденная платформа, чем можно управлять, почему нет и что делать; `close` закрывает программы производителя |
 | `profile [N]` | активный профиль / выбрать ячейку N (с 0) текущего режима |
 | `profile list` | все профили, активный отмечен `*` |
 | `profile show [ЦЕЛЬ]` | значения профиля |
@@ -128,7 +129,7 @@ uwccctl kb fx-config transition=ripple_center bar=battery
 
 Эффекты BetterRGB: [LIGHTING.ru.md](LIGHTING.ru.md).
 
-Control Center 3.0 / Clevo (экспериментально): `uwccctl clevo …` — см. [CLEVO.ru.md](CLEVO.ru.md).
+Control Center 3.0 / Clevo (экспериментально): `uwccctl clevo …`, своя кривая в файл: `uwccctl clevo curve export|import ФАЙЛ` — см. [CLEVO.ru.md](CLEVO.ru.md).
 
 ## Переключатели и автоматизация
 
@@ -159,7 +160,7 @@ Control Center 3.0 / Clevo (экспериментально): `uwccctl clevo �
 | `conditions` | 1..3 условия `{"metric", "op", "value"}`; `metric`: `cpu_power` `gpu_power` `total_power` (Вт), `cpu_temp` `gpu_temp` (°C), `cpu_load` `gpu_load` `battery` (%), `ac` (1 сеть / 0 батарея), `sys_profile` (0 энергосбережение / 1 сбалансированный / 2 производительность), `saver` (экономия заряда Windows 1 / 0), `mode` (0..3, режим ноутбука), `lc_profile` (ID профиля СЖО), `rule` (1..12: правило сработало — его условия держатся нужное время или оно активно; 0 = любое другое правило); `op` `>` / `<` (`=` для `ac`, `sys_profile`, `saver`; `=` / `!=` для `mode`, `lc_profile`, `rule`) |
 | `join` | `and` / `or` |
 | `hold`, `hold_unit` | секунды 0..86400 (0 = сразу); `s` / `min` / `h` — только то, как время показывает окно |
-| `mode`, `slot` | 0 office, 1 gaming, 2 turbo, 3 custom или `null` = не менять режим; слот 0..4 или `null` = текущий |
+| `mode`, `slot` | 0 office, 1 gaming, 2 turbo, 3 custom или `null` = не менять режим; слот 0..4 или `null` = текущий. Clevo: 0 тихий, 1 развлечения, 2 производительность, 3 энергосбережение; Leishen: 0 офисный, 1 игровой, 2 высокая производительность (без слотов) |
 | `fan_boost` | `keep` / `on` / `off` (не менять / включить / выключить) |
 | `lc_mode` | `auto` `laptop` `ec` `manual` `high` `medium` `low` `off` или `null` = не менять |
 | `lc_profile` | ID профиля охладителя или `null` = не менять |

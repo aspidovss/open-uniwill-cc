@@ -276,28 +276,85 @@ def settings_info(svc, private):
 
 
 # ---------------------------------------------------------------- report
+NOT_SECRET = ("to be filled by o.e.m.", "default string", "none", "0", "system serial number", "not applicable",
+              "123456789", "03000200-0400-0500-0006-000700080009", "00000000-0000-0000-0000-000000000000")
+
+
 def _redact(text, private, secrets_):
     if "names" not in private:
         text = USER_PATH_RE.sub(lambda m: (m.group(1) or m.group(3)) + "<user>", text)
-        host = socket.gethostname()
-        if host and len(host) > 2:
-            text = text.replace(host, "<computer>")
+        for host in _hostnames():
+            text = re.sub(r"(?<![\w-])" + re.escape(host) + r"(?![\w-])", "<computer>", text, flags=re.I)
+        # DOMAIN\user (owners, task authors) after the computer name was hidden
+        text = re.sub(r"<computer>(\\{1,2})[^\\/\"'\s,;]+", r"<computer>\1<user>", text)
+        user = _username()
+        if user and len(user) > 2 and user.lower() not in COMMON_USERS:     # short or generic names would hit
+            # ordinary words ("user mode"); paths are done above
+            text = re.sub(r"(?<![\w-])" + re.escape(user) + r"(?![\w-])", "<user>", text, flags=re.I)
     if "mac" not in private:
         text = MAC_RE.sub("XX:XX:XX:XX:XX:XX", text)
     for s in secrets_:
         if s and len(s) > 3:
-            text = text.replace(s, HIDDEN)
+            text = re.sub(re.escape(s), HIDDEN, text, flags=re.I)
     return text
+
+
+COMMON_USERS = {"user", "users", "admin", "administrator", "owner", "guest", "root", "default", "public", "system",
+                "home", "test", "pc", "dell", "asus", "lenovo", "acer", "hp", "msi"}
+
+
+def _hostnames():
+    names = {socket.gethostname(), os.environ.get("COMPUTERNAME", ""), platform_mod.node()}
+    return sorted({n for n in names if n and len(n) > 2 and n.lower() not in ("localhost",)}, key=len, reverse=True)
+
+
+def _username():
+    try:
+        import getpass
+        return getpass.getuser()
+    except Exception:  # noqa: BLE001
+        return os.environ.get("USERNAME") or os.environ.get("USER")
 
 
 def _secrets(private):
     """Values that must not appear anywhere in the report unless their private item is ticked."""
     out = []
-    if "serial" not in private:
-        out += [_read("/sys/class/dmi/id/product_serial"), _read("/sys/class/dmi/id/board_serial")]
-    if "uuid" not in private:
-        out.append(_read("/sys/class/dmi/id/product_uuid"))
-    return [s for s in out if s and s.lower() not in ("to be filled by o.e.m.", "default string", "none", "0")]
+    if sys.platform == "win32":
+        ids = _safe(_win_ids) if ("serial" not in private or "uuid" not in private) else {}
+        ids = ids if isinstance(ids, dict) else {}
+        if "serial" not in private:
+            out += [ids.get("bios"), ids.get("board"), ids.get("chassis")]
+        if "uuid" not in private:
+            out.append(ids.get("uuid"))
+    else:
+        if "serial" not in private:
+            out += [_read("/sys/class/dmi/id/product_serial"), _read("/sys/class/dmi/id/board_serial"),
+                    _read("/sys/class/dmi/id/chassis_serial")]
+        if "uuid" not in private:
+            out.append(_read("/sys/class/dmi/id/product_uuid"))
+    out = [str(s).strip() for s in out if s]
+    return [s for s in out if len(s) > 3 and s.lower() not in NOT_SECRET]
+
+
+def _win_ids():
+    from .win.winplat import powershell
+    _rc, txt, _e = powershell("[pscustomobject]@{bios=(Get-CimInstance Win32_BIOS).SerialNumber; "
+                              "board=(Get-CimInstance Win32_BaseBoard).SerialNumber; "
+                              "chassis=@(Get-CimInstance Win32_SystemEnclosure)[0].SerialNumber; "
+                              "uuid=(Get-CimInstance Win32_ComputerSystemProduct).UUID} | ConvertTo-Json -Compress")
+    return json.loads(txt) if txt else {}
+
+
+def redact_blob(blob, secrets_):
+    """Binary files (ACPI tables): each secret replaced by as many 'X', so offsets and lengths stay."""
+    for s in secrets_:
+        for enc in ("ascii", "utf-16-le"):
+            try:
+                b = s.encode(enc)
+            except UnicodeEncodeError:
+                continue
+            blob = blob.replace(b, b"X\0" * len(s) if enc != "ascii" else b"X" * len(b))
+    return blob
 
 
 def summary(svc):
@@ -507,7 +564,7 @@ def build(svc, sections=DEFAULT_SECTIONS, private=()):
         z.writestr("report.json", js)
         z.writestr("report.txt", _redact("\n".join(txt) + "\n", private, secrets_))
         for path, blob in sorted(extra.items()):
-            z.writestr(path, blob)
+            z.writestr(path, redact_blob(blob, secrets_) if isinstance(blob, bytes) else blob)
         if "log" in sections:
             lt = _safe(log_tail)
             z.writestr("uwccd.log", _redact(lt, private, secrets_) if isinstance(lt, str) else json.dumps(lt))

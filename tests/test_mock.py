@@ -1770,6 +1770,51 @@ class ClevoUnit(unittest.TestCase):
         finally:
             del os.environ["UWCC_MOCK_CLEVO"]
 
+    def test_main_pages_mode(self):
+        """1.7.0: the Clevo modes on the main pages, the tray and the rules, numbered like the Uniwill ones."""
+        from types import SimpleNamespace
+        from uwccd.altplat import AltPlatform, alt_platform, clevo_monitor_fans
+        m, st = self.manager(writes=True)
+        svc = SimpleNamespace(ec_info={"reason": "clevo_only"}, clevo=m, leishen=None)
+        alt = alt_platform(svc)
+        self.assertEqual(alt.kind, "clevo")
+        self.assertEqual(alt.set_mode("performance"), 2)
+        self.assertEqual(st["clevo_state"]["power_mode"], "performance")
+        self.assertEqual(alt.mode_index(), 2)
+        alt.set_mode(0)
+        self.assertEqual(alt.status()["mode_id"], "quiet")
+        with self.assertRaises(ValueError):
+            alt.set_mode(5)
+        self.assertIsNone(alt_platform(SimpleNamespace(ec_info={"reason": None}, clevo=m, leishen=None)))
+        fans = clevo_monitor_fans(m)()
+        self.assertIn("cpu_rpm", fans)
+        off, _ = self.manager(writes=False)
+        with self.assertRaises(LookupError):                        # experimental: nothing without "Allow commands"
+            AltPlatform("clevo", off).set_mode("quiet")
+
+    def test_curve_file(self):
+        """The Clevo curve file is its own format: export -> load; a Uniwill file is refused."""
+        from uwccd.clevo import tables as T
+        m, st = self.manager(writes=True)
+        f = T.export(m, laptop="Test", program="x")
+        self.assertEqual(f["format"], T.FORMAT)
+        self.assertTrue(f["curves"])
+        fan = next(iter(f["curves"]))
+        f["curves"][fan][1] = [60, 50]
+        f["curves"][fan][2] = [80, 80]
+        f["curves"][fan][0] = [1, 1]                               # the factory first point is kept
+        cur = T.load(f, m)
+        self.assertEqual(cur[fan][1:], [[60, 50], [80, 80]])
+        self.assertEqual(cur[fan][0], list(m.table["curves"][fan][0]))
+        with self.assertRaises(ValueError):
+            T.load({"format": "open-uniwill-cc", "tables": {}}, m)
+        with self.assertRaises(ValueError):
+            T.load({"format": T.FORMAT, "curves": {fan: [[80, 50], [60, 40], [90, 90]]}}, m)
+        from types import SimpleNamespace
+        from uwccd import backup
+        with self.assertRaises(ValueError):                         # and the Uniwill import refuses a Clevo curve
+            backup.import_data(SimpleNamespace(power=None), f)
+
     def test_windows_ioctl_layout(self):
         import struct
         import uuid
@@ -2150,10 +2195,13 @@ class DetectUnit2(unittest.TestCase):
         from uwccd import detect as D
 
         class Leishen:
-            present, info = True, {"kb_rgb": True, "fans3": True, "fan_table": 4}
+            present, info, allowed = True, {"kb_rgb": True, "fans3": True, "fan_table": 4}, False
 
             class wmi:
                 name = "windows-wmi"
+
+            def writes_allowed(self):
+                return self.allowed
 
         class Absent:
             present = False
@@ -2162,15 +2210,61 @@ class DetectUnit2(unittest.TestCase):
             ec_info = {"active": "none"}
             clevo, leishen, pf = Absent(), Leishen(), None
         r = D.platform_of(Svc())
-        self.assertEqual((r["platform"], r["level"], r["page"]), ("leishen", "experimental", "leishen"))
-        self.assertIn(("Keyboard backlight", "ok"), r["features"])
+        self.assertEqual((r["platform"], r["level"], r["page"]), ("leishen", "experimental", "modes"))
+        feats = {f[0]: f for f in r["features"]}
+        self.assertEqual(feats["Fans"], ["Fans", "no", "writes_off", ["allow"]])      # commands off: why and what to do
+        self.assertEqual(r["allow_key"], "leishen_writes")
+        Svc.leishen.allowed = True
+        r2 = D.platform_of(Svc())
+        self.assertEqual({f[0]: f for f in r2["features"]}["Keyboard backlight"][:2], ["Keyboard backlight", "ok"])
+        self.assertNotEqual(D.signature(r), D.signature(r2))          # the window comes again when it changes
         Svc.leishen = Absent()
-        self.assertEqual(D.platform_of(Svc())["platform"], "unknown")
+        u = D.platform_of(Svc())
+        self.assertEqual(u["platform"], "unknown")
+        self.assertIn("report", u["features"][1][3])                 # nothing found: make a report
         self.assertEqual(D.close_processes([1234], allowed=set()), [])          # only programs from the list
         import re
         rx = dict(D.VENDOR_APPS)
         self.assertTrue(re.search(rx["Leishen ControlCenter"], r"c:\program files (x86)\leishen\controlcenter\controlcenter.exe"))
         self.assertTrue(re.search(D.OWN_RE, r"c:\program files\uwcc control center\controlcenter.exe"))
+
+
+class ReportPrivacyUnit(unittest.TestCase):
+    """The report is meant for a public issue: names, serial numbers and the UUID stay out unless ticked."""
+
+    def test_redact(self):
+        from unittest import mock
+        from uwccd import report
+        with mock.patch.object(report, "_hostnames", return_value=["DESKTOP-K7Q2"]), \
+                mock.patch.object(report, "_username", return_value="sergei"):
+            t = report._redact(r'C:\\Users\\Sergei\\AppData x desktop-k7q2\\sergei Sergei user mode '
+                               "serial NXA1B2C3D4 aa:bb:cc:dd:ee:ff", [], ["NXA1B2C3D4"])
+        self.assertNotIn("Sergei", t)
+        self.assertNotIn("sergei", t)
+        self.assertNotIn("k7q2", t.lower())
+        self.assertNotIn("NXA1B2C3D4", t)
+        self.assertNotIn("aa:bb", t)
+        self.assertIn("user mode", t)
+        self.assertIn(r"<computer>\\<user>", t)
+        with mock.patch.object(report, "_hostnames", return_value=[]), \
+                mock.patch.object(report, "_username", return_value="User"):
+            self.assertEqual(report._redact("user mode", [], []), "user mode")       # generic names stay
+        self.assertEqual(report._redact("serial NXA1B2C3D4", ["serial"], []), "serial NXA1B2C3D4")
+
+    def test_blob_keeps_length(self):
+        from uwccd import report
+        blob = b"\x00ABC NXA1B2C3D4 " + "NXA1B2C3D4".encode("utf-16-le")
+        out = report.redact_blob(blob, ["NXA1B2C3D4"])
+        self.assertEqual(len(out), len(blob))
+        self.assertNotIn(b"NXA1", out)
+        self.assertNotIn("NXA1".encode("utf-16-le"), out)
+
+    def test_placeholder_serials_are_not_secrets(self):
+        from unittest import mock
+        from uwccd import report
+        with mock.patch.object(report, "_read", side_effect=lambda p, *a: "To be filled by O.E.M."), \
+                mock.patch.object(report.sys, "platform", "linux"):
+            self.assertEqual(report._secrets([]), [])
 
 
 class LeishenUnit(unittest.TestCase):

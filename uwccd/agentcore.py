@@ -3,6 +3,10 @@
 
 TEXT = {
     "en": {"mode0": "Office mode", "mode1": "Gaming mode", "mode2": "Turbo mode", "mode3": "Custom mode · {}",
+           # Control Center 3.0 / Clevo and Leishen / Thunderobot modes (uwccd/altplat.py)
+           "clevo_quiet": "Silent", "clevo_entertainment": "Entertainment", "clevo_performance": "Performance",
+           "clevo_powersave": "Power saving", "leishen_office": "Office", "leishen_gaming": "Gaming",
+           "leishen_performance": "High performance",
            "hot_cpu": "CPU at {} °C", "hot_gpu": "GPU at {} °C",
            "hot_body": "It has stayed at or above {} °C for 30 seconds.",
            "hot_body_boost": "It has stayed at or above {} °C for 30 seconds. If it does not cool down within 30 seconds, Fan Boost turns on.",
@@ -24,6 +28,9 @@ TEXT = {
            "lc_fan_boost": "Cooler fan boost {}", "lc_pump_boost": "Cooler pump boost {}", "on": "on", "off": "off",
            "lc_primed": "Liquid cooler: filling cycle finished"},
     "ru": {"mode0": "Офисный режим", "mode1": "Игровой режим", "mode2": "Турборежим", "mode3": "Пользовательский режим · {}",
+           "clevo_quiet": "Тихий", "clevo_entertainment": "Развлечения", "clevo_performance": "Производительность",
+           "clevo_powersave": "Энергосбережение", "leishen_office": "Офисный", "leishen_gaming": "Игровой",
+           "leishen_performance": "Высокая производительность",
            "hot_cpu": "ЦП нагрелся до {} °C", "hot_gpu": "ГП нагрелся до {} °C",
            "hot_body": "Температура держится на уровне {} °C и выше уже 30 секунд.",
            "hot_body_boost": "Температура держится на уровне {} °C и выше уже 30 секунд. Если за 30 секунд не остынет, включится турбовентиляция.",

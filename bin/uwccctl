@@ -6,7 +6,7 @@ Usage: uwccctl [--json] COMMAND [ARGS]       uwccctl help [COMMAND]       Linux:
 Overview
   status                         mode, fans, temperatures, battery, liquid cooler, settings
   monitor [--watch [SEC]]        sensors once, or every SEC seconds (default 2) until Ctrl+C
-  mode [office|gaming|turbo|custom]
+  mode [office|gaming|turbo|custom]   (Clevo / Leishen: their own modes)
   profile [N]                    show / select the profile slot of the current mode (from 0)
   profile show|set|reset [TARGET] ...   PL1/PL2/PL4, TCC, cTGP, Dynamic Boost, GPU limit, name
   boost [on|off]                 FanBoost (fans at maximum)
@@ -124,7 +124,9 @@ HELP = {
     "monitor": "uwccctl monitor [--watch [SEC]] [--json]\n  CPU/GPU temperature, load, clock, power, fans, memory, battery.\n"
                "  --watch repeats every SEC seconds (default 2, minimum 0.5) until Ctrl+C;\n"
                "  with --json every sample is one line of JSON (NDJSON).",
-    "mode": "uwccctl mode [office|gaming|turbo|custom]\n  Without an argument prints the current mode.",
+    "mode": "uwccctl mode [office|gaming|turbo|custom]\n  Without an argument prints the current mode.\n"
+            "  Control Center 3.0 / Clevo: quiet | entertainment | performance | powersave;\n"
+            "  Leishen / Thunderobot: office | gaming | performance (experimental modules).",
     "profile": (
         "uwccctl profile [N]                      show / select slot N (from 0) of the current mode\n"
         "uwccctl profile show [TARGET]            values of a profile\n"
@@ -196,6 +198,7 @@ HELP = {
         "uwccctl clevo fan offset 0-100              fan offset %\n"
         "uwccctl clevo fan curve cpu|gpu1|gpu2 T,D T,D T,D   custom curve (first point = factory), then custom mode\n"
         "uwccctl clevo fan defaults                 factory fan curve\n"
+        "uwccctl clevo curve export|import FILE     the custom curve as a file (Clevo format, not the Uniwill tables)\n"
         "uwccctl clevo antidust                     run the anti-dust cycle\n"
         "uwccctl clevo kb on|off\n"
         "uwccctl clevo kb color RRGGBB [ZONE 0-3]\n"
@@ -576,6 +579,16 @@ def cmd_monitor(a):
 
 # -- modes and profiles ---------------------------------------------------------------------------
 def cmd_mode(a):
+    alt = call("state").get("alt")
+    if alt:                                   # Control Center 3.0 / Clevo, Leishen: their own modes
+        ids = [m["id"] for m in alt["modes"]]
+        if a:
+            if a[0] not in ids:
+                fail(f"{alt['name']}: mode {' | '.join(ids)}", 2)
+            call("mode", {"mode": a[0]})
+            alt = call("state")["alt"]
+        return out({"mode": alt.get("mode_id"), "id": alt.get("mode"), "platform": alt["platform"]},
+                   lambda d: f"{d['mode'] or '?'}  ({alt['name']}, experimental)")
     if a:
         if a[0] not in MODES:
             usage("mode")
@@ -1155,6 +1168,15 @@ def cmd_clevo(a):
             act = {"action": "curve", "curves": {rest[1]: pts}}
         else:
             act = {"action": "fan_mode", "mode": rest[0]}
+    elif op == "curve" and len(rest) == 2 and rest[0] in ("export", "import"):
+        # its own file format (uwccd/clevo/tables.py): does not mix with the Uniwill fan tables
+        if rest[0] == "export":
+            with open(rest[1], "wb") as f:
+                f.write(call_raw("clevo/curve-export"))
+            return out({"file": rest[1]}, f"curve saved: {rest[1]}")
+        with open(rest[1], encoding="utf-8") as f:
+            curves = call("clevo", {"action": "curve_import", "data": json.load(f)})["curves"]
+        act = {"action": "curve", "curves": curves}            # checked for this laptop, then applied
     elif op == "antidust":
         act = {"action": "anti_dust"}
     elif op == "kb" and rest:
@@ -1212,8 +1234,25 @@ def detect_text(d):
              f"{' (board ' + lap['board'] + ')' if lap.get('board') else ''}",
              f"platform: {d.get('platform')} — {d.get('name') or '-'} ({d.get('level')})"]
     lines += [f"  {s}" for s in d.get("signals") or []]
+    feats = [(f[0], f[1], f[2] if len(f) > 2 else None, f[3] if len(f) > 3 else []) for f in d.get("features") or []]
     lines.append("functions: " + ", ".join(f"{f} {'yes' if s == 'ok' else 'try' if s == 'try' else 'no'}"
-                                            for f, s in d.get("features") or []))
+                                            for f, s, _w, _a in feats))
+    # why a function is not available and what to do (the window shows the same with buttons)
+    hints = {"allow": f"uwccctl {d.get('platform')} writes on" if d.get("platform") in ("clevo", "leishen") else None,
+             "driver": "uwccctl ec fetch-driver, then uwccctl ec install-driver (or EC Manager)",
+             "selfcheck": "uwccctl ec selfcheck 1", "report": "uwccctl report — and send it in a GitHub issue"}
+    why = {"writes_off": "experimental module: its commands are off until allowed",
+           "oem_missing": "the OEM driver is not installed", "wmi_consent": "the WMI warning is not accepted yet",
+           "wmi_no_profile": "the WMI path has no profile of this laptop",
+           "unknown_project": "a project the official service does not know",
+           "no_ramfan": "the EC does not report fan control (RamFan 1.5)",
+           "no_platform": "no interface for modes or fans was found"}
+    seen = set()
+    for _f, _s, w, acts in feats:
+        if w and w in why and w not in seen:
+            seen.add(w)
+            todo = [hints[x] for x in acts if hints.get(x)]
+            lines.append(f"  {why[w]}" + (f": {'; '.join(todo)}" if todo else ""))
     apps = d.get("vendor_apps") or []
     lines.append("vendor programs running: " + (", ".join(f"{a['app']} ({a['name']}, pid {a['pid']})" for a in apps)
                                                 if apps else "none"))

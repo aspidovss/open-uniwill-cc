@@ -108,6 +108,15 @@ const MODES = [
   { id: 2, name: "Turbo mode", osd: "Turbo", glyph: "⚡", desc: "Best performance for gaming." },
   { id: 3, name: "Custom mode", osd: "Custom", glyph: "✎", desc: "Your own power limits and fan curves in five slots." },
 ];
+// Clevo / Leishen without a Uniwill EC: their own modes, numbered like the Uniwill ones (uwccd/altplat.py)
+function platModes() {
+  if (S && S.alt) {
+    const names = S.alt.platform === "clevo" ? CLEVO_POWER : LEISHEN_MODES;
+    return S.alt.modes.map(m => { const d = names.find(x => x[0] === m.id) || [m.id, m.id, ""]; return { id: m.index, key: m.id, name: d[1], osd: d[1], desc: d[2] }; });
+  }
+  return MODES.filter(m => (m.id !== 3 || S.power.custom_support) && (m.id !== 2 || S.power.turbo_support));
+}
+function modeName(i) { const m = (S && S.alt ? platModes() : MODES).find(x => x.id === i); return m ? t(m.name) : ""; }
 const CML_TABLES = ["M1T1", "M1T2", "M1T3", "M2T1", "M2T2", "M2T3"];
 const MODE_OF_PREFIX = { 1: "Gaming", 2: "Office", 3: "Turbo", 4: "Custom" };
 function isStd() { return S && S.power && S.power.manager === "std"; }
@@ -165,7 +174,7 @@ function render() {
   }
   renderModes(); renderFanPage(); renderLiquid(); renderLight(); renderBattery(); renderSwitches(); renderBinding(); renderInfo(); renderAuto(); renderAbout(); renderReportCard();
   renderHistSeg(); drawHistory();
-  renderClevo(); renderLeishen(); renderDriver(); renderEcBanner(); applyFeatures(); renderBusy(S.busy || []); renderMonOff(); setupCollapsible();
+  renderAltPages(); renderDriver(); renderEcBanner(); applyFeatures(); renderBusy(S.busy || []); renderMonOff(); setupCollapsible();
 }
 
 // ---------------------------------------------------------------- monitor
@@ -965,34 +974,30 @@ function clevoFans(c) {
   return box;
 }
 async function clevoPoll() {
-  if (!$("#page-clevo").classList.contains("active") || !S || !S.clevo || !S.clevo.present) return;
+  if (!$("#page-fans").classList.contains("active") || !S || !S.alt || S.alt.platform !== "clevo") return;
   try { const c = await api("clevo"); const old = $("#clevo-fans"); if (old) old.replaceWith(clevoFans(c)); } catch (_) {}
 }
-function renderClevo() {
-  const c = S.clevo || {}, on = !!c.present;
-  $("#nav-clevo").classList.toggle("hidden", !on); $("#nav-clevo-group").classList.toggle("hidden", !on);
+const altSw = (checked, fn) => h("label", { class: "sw" }, h("input", { type: "checkbox", ...(checked ? { checked: true } : {}), onchange: e => fn(e.target.checked) }), h("span"));
+// Control Center 3.0 / Clevo on the main pages: boxes = {modes, fans, light, switches, info} (renderAltPages)
+function renderClevo(B) {
+  const c = S.clevo || {};
   if (!clevoTimer) clevoTimer = setInterval(clevoPoll, 2000);
-  const root = $("#clevo-root"); if (!root) return;
-  root.innerHTML = "";
-  if (!on) { $("#clevo-sub").textContent = ""; root.append(h("div", { class: "card" }, h("p", {}, t("No Control Center 3.0 / Clevo interface on this laptop.")))); return; }
-  const st = c.state || {}, kb = st.kb || {}, caps = c.caps || {}, locked = !c.writes;
-  $("#clevo-sub").replaceChildren(t("Separate module for laptops with Control Center 3.x · via {0}", c.transport === "windows-cc3-driver" ? t("the Control Center 3 driver") : c.transport === "uwcc-module" ? t("the uwcc kernel module") : c.transport),
-    c.ec_version ? ` · EC ${c.ec_version}` : "", h("span", { class: "clevo-exp" }, t("experimental")));
-  const sw = (checked, fn) => h("label", { class: "sw" }, h("input", { type: "checkbox", ...(checked ? { checked: true } : {}), onchange: e => fn(e.target.checked) }), h("span"));
-  // access
-  root.append(h("div", { class: "card warn" }, h("h3", {}, t("Experimental commands")),
-    h("p", { class: "muted" }, t("These functions talk to the firmware the way Control Center 3 does. They were written from the interface description and have not been tested on a Clevo laptop yet. The firmware does not report the current power mode, fan mode or backlight, so the values below are the ones last set here.")),
-    h("div", { class: "clevo-row" }, h("span", {}, t("Allow commands")), sw(c.writes, v => act(() => api("setting", { key: "clevo_writes", value: v })))),
-    h("div", { class: "clevo-row" }, h("span", {}, t("Send the saved settings at start")), sw(c.restore, v => act(() => api("setting", { key: "clevo_restore", value: v })))),
-    h("p", { class: "muted tiny" }, t("Close Control Center 3 while using this page: both programs would send commands. Its driver must stay installed (Windows)."))));
-  // power modes
+  const st = c.state || {}, kb = st.kb || {}, caps = c.caps || {}, locked = !c.writes, lk = locked ? " locked" : "";
+  const via = c.transport === "windows-cc3-driver" ? t("the Control Center 3 driver") : c.transport === "uwcc-module" ? t("the uwcc kernel module") : c.transport;
+  // mode selection: the module's settings, then the power modes
+  B.modes.append(h("div", { class: "card warn" }, h("h3", {}, t("Control Center 3.0 / Clevo"), h("span", { class: "clevo-exp" }, t("experimental"))),
+    h("p", { class: "muted" }, t("Laptops with Control Center 3.x (Clevo, Tongfang) via {0}.", via) + (c.ec_version ? ` EC ${c.ec_version}.` : "") + " " +
+      t("The firmware does not report the current power mode, fan mode or backlight, so the pages show the values last set here.")),
+    h("div", { class: "clevo-row" }, h("span", {}, t("Allow commands")), altSw(c.writes, v => act(() => api("setting", { key: "clevo_writes", value: v })))),
+    h("div", { class: "clevo-row" }, h("span", {}, t("Send the saved settings at start")), altSw(c.restore, v => act(() => api("setting", { key: "clevo_restore", value: v })))),
+    h("p", { class: "muted tiny" }, t("Close Control Center 3 while using this program: both programs would send commands. Its driver must stay installed (Windows)."))));
   if (caps.power_modes !== false) {
     const box = h("div", { class: "choices clevo-cmd" });
-    for (const [id, name, desc] of CLEVO_POWER) box.append(h("div", { class: "choice" + (st.power_mode === id ? " on" : ""), onclick: () => clevoCmd({ action: "power_mode", mode: id }, t(name)) }, h("h4", {}, t(name)), h("p", {}, t(desc))));
-    root.append(h("div", { class: "card" + (locked ? " locked" : "") }, h("h3", {}, t("Power mode")), box));
+    for (const m of platModes()) box.append(h("div", { class: "choice" + (st.power_mode === m.key ? " on" : ""), onclick: () => act(() => api("mode", { mode: m.id }), t(m.name)) }, h("h4", {}, t(m.name)), h("p", {}, t(m.desc))));
+    B.modes.append(h("div", { class: "card" + lk }, h("h3", {}, t("Power mode")), box));
   }
-  // fans
-  const fc = h("div", { class: "card" + (locked ? " locked" : "") }, h("h3", {}, t("Fans")), clevoFans(c));
+  // fan settings
+  const fc = h("div", { class: "card" + lk }, h("h3", {}, t("Fans")), clevoFans(c));
   const seg = h("div", { class: "seg clevo-cmd" });
   for (const m of c.fan_modes || []) seg.append(h("button", { class: st.fan_mode === m ? "on" : "", onclick: () => clevoCmd({ action: "fan_mode", mode: m }, t(CLEVO_FAN[m] || m)) }, t(CLEVO_FAN[m] || m)));
   fc.append(h("div", { class: "clevo-row" }, h("span", {}, t("Fan mode")), seg));
@@ -1001,6 +1006,8 @@ function renderClevo() {
     fc.append(h("div", { class: "clevo-row clevo-cmd" }, h("span", {}, t("Fan offset")),
       h("input", { type: "range", min: 0, max: 100, step: 5, value: st.fan_offset ?? 0, oninput: e => { out.textContent = e.target.value + "%"; }, onchange: e => clevoCmd({ action: "fan_offset", value: +e.target.value }) }), out));
   }
+  if (caps.anti_dust) fc.append(h("div", { class: "row clevo-cmd", style: "margin-top:10px" }, h("button", { class: "btn ghost", onclick: () => clevoCmd({ action: "anti_dust" }, t("Anti-dust started")) }, t("Anti-dust cycle"))));
+  B.fans.append(fc);
   const tbl = (c.fan_table || {}).curves || {};
   if ((c.fan_modes || []).includes("custom") && Object.keys(tbl).length) {
     clevoCurve = clevoCurve || JSON.parse(JSON.stringify(st.curve || Object.fromEntries(Object.entries(tbl).map(([k, v]) => [k, v.slice(0, 3)]))));
@@ -1012,15 +1019,20 @@ function renderClevo() {
       pts.forEach((p, i) => g.append(h("span", {}, ...[0, 1].map(k => h("input", { type: "number", min: 0, max: k ? 100 : 99, value: p[k], disabled: i === 0, title: i === 0 ? t("Factory point") : "",
         onchange: e => { pts[i][k] = +e.target.value; } })))));
     }
-    fc.append(h("h4", {}, t("Custom curve")), h("p", { class: "muted tiny" }, t("The first point is the factory one; above the third point the fan rises to 100 % at 100 °C.")), g,
-      h("div", { class: "row clevo-cmd" }, h("button", { class: "btn", onclick: () => clevoCmd({ action: "curve", curves: clevoCurve }, t("Curve applied")) }, t("Apply curve")),
-        h("button", { class: "btn ghost", onclick: () => { clevoCurve = null; clevoCmd({ action: "fan_defaults" }, t("Factory curve")); } }, t("Factory curve"))));
+    const file = h("input", { type: "file", accept: ".json,application/json", class: "hidden", onchange: async e => {
+      const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+      try { const r = await api("clevo", { action: "curve_import", data: JSON.parse(await f.text()) }); clevoCurve = r.curves; renderAltPages(); toast(t("Curve loaded: check it and press Apply curve")); }
+      catch (err) { toast(t("Not a Clevo fan curve: {0}", err.message || err), true); } } });
+    B.fans.append(h("div", { class: "card" + lk }, h("h3", {}, t("Custom curve")), h("p", { class: "muted tiny" }, t("The first point is the factory one; above the third point the fan rises to 100 % at 100 °C.")), g,
+      h("div", { class: "row wrap clevo-cmd" }, h("button", { class: "btn", onclick: () => clevoCmd({ action: "curve", curves: clevoCurve }, t("Curve applied")) }, t("Apply curve")),
+        h("button", { class: "btn ghost", onclick: () => { clevoCurve = null; clevoCmd({ action: "fan_defaults" }, t("Factory curve")); } }, t("Factory curve"))),
+      h("div", { class: "row wrap", style: "margin-top:10px" }, h("button", { class: "btn ghost sm", onclick: () => download("/api/clevo/curve-export") }, t("Export curve")),
+        h("button", { class: "btn ghost sm", onclick: () => file.click() }, t("Import curve")), file),
+      h("p", { class: "muted tiny" }, t("A Clevo curve file is its own format: it does not mix with the fan tables of Uniwill laptops."))));
   }
-  if (caps.anti_dust) fc.append(h("div", { class: "row clevo-cmd", style: "margin-top:10px" }, h("button", { class: "btn ghost", onclick: () => clevoCmd({ action: "anti_dust" }, t("Anti-dust started")) }, t("Anti-dust cycle"))));
-  root.append(fc);
-  // keyboard
-  const kc = h("div", { class: "card" + (locked ? " locked" : "") }, h("h3", {}, t("Keyboard backlight")),
-    h("div", { class: "clevo-row clevo-cmd" }, h("span", {}, t("Backlight")), sw(kb.on !== false, v => clevoCmd({ action: "kb_power", on: v }))));
+  // keyboard backlight
+  const kc = h("div", { class: "card" + lk }, h("h3", {}, t("Keyboard backlight")),
+    h("div", { class: "clevo-row clevo-cmd" }, h("span", {}, t("Backlight")), altSw(kb.on !== false, v => clevoCmd({ action: "kb_power", on: v }))));
   const cur = kb.color || [255, 255, 255], hex = "#" + cur.map(x => x.toString(16).padStart(2, "0")).join("");
   const sws = h("div", { class: "swatches" });
   for (const col of [[255, 0, 0], [255, 120, 0], [255, 255, 0], [0, 255, 0], [0, 255, 255], [0, 0, 255], [160, 0, 255], [255, 255, 255]])
@@ -1036,16 +1048,17 @@ function renderClevo() {
   const sl = h("select", { onchange: e => clevoCmd({ action: "kb_sleep", seconds: +e.target.value }) });
   for (const [v, n] of CLEVO_SLEEP) sl.append(h("option", { value: v, ...((kb.sleep ?? 0) === v ? { selected: true } : {}) }, t(n)));
   kc.append(h("div", { class: "clevo-row clevo-cmd" }, h("span", {}, t("Turn off after")), sl));
-  kc.append(h("div", { class: "clevo-row clevo-cmd" }, h("span", {}, t("Colour cycle at power-on")), sw(!kb.boot_effect_off, v => clevoCmd({ action: "boot_effect", off: !v }))));
-  root.append(kc);
-  // capabilities
+  kc.append(h("div", { class: "clevo-row clevo-cmd" }, h("span", {}, t("Colour cycle at power-on")), altSw(!kb.boot_effect_off, v => clevoCmd({ action: "boot_effect", off: !v }))));
+  B.light.append(kc);
+  B.switches.append(h("div", { class: "card" }, h("p", { class: "muted" }, t("The switches of this page belong to the Uniwill embedded controller; Control Center 3.0 laptops do not have them."))));
+  // information: the capability words of the firmware
   const dl = h("dl", { class: "kv" });
   for (const [k, v] of Object.entries(c.caps_raw || {})) dl.append(h("dt", {}, `DCHU ${k}`), h("dd", {}, "0x" + (v >>> 0).toString(16).toUpperCase().padStart(8, "0")));
   dl.append(h("dt", {}, t("Capabilities")), h("dd", {}, Object.entries(caps).filter(([, v]) => v).map(([k]) => k).join(", ") || "—"));
-  root.append(h("div", { class: "card" }, h("h3", {}, t("Firmware capabilities")), dl,
+  B.info.append(h("div", { class: "card" }, h("h3", {}, t("Control Center 3.0 / Clevo: firmware capabilities")), dl,
     h("p", { class: "muted tiny" }, t("A diagnostic report (Information) includes these values: it helps to test this module."))));
 }
-$(`#nav a[data-page="clevo"]`)?.addEventListener("click", () => setTimeout(clevoPoll, 50));
+$(`#nav a[data-page="fans"]`)?.addEventListener("click", () => setTimeout(clevoPoll, 50));
 
 // ---------------------------------------------------------------- Leishen / Thunderobot (experimental, uwccd/leishen)
 const LEISHEN_MODES = [["performance", "High performance", "Highest CPU and GPU power"], ["gaming", "Gaming", "Balanced"],
@@ -1065,41 +1078,35 @@ function leishenSensors(c) {
   return box;
 }
 async function leishenPoll() {
-  if (!$("#page-leishen").classList.contains("active") || !S || !S.leishen || !S.leishen.present) return;
+  if (!$("#page-fans").classList.contains("active") || !S || !S.alt || S.alt.platform !== "leishen") return;
   try { const c = await api("leishen"); const old = $("#leishen-sensors"); if (old) old.replaceWith(leishenSensors(c)); } catch (_) {}
 }
-function renderLeishen() {
-  const c = S.leishen || {}, on = !!c.present;
-  $("#nav-leishen").classList.toggle("hidden", !on); $("#nav-leishen-group").classList.toggle("hidden", !on);
+// Leishen / Thunderobot on the main pages: boxes = {modes, fans, light, switches, info} (renderAltPages)
+function renderLeishen(B) {
+  const c = S.leishen || {};
   if (!leishenTimer) leishenTimer = setInterval(leishenPoll, 2000);
-  const root = $("#leishen-root"); if (!root) return;
-  root.innerHTML = "";
-  if (!on) { $("#leishen-sub").textContent = ""; root.append(h("div", { class: "card" }, h("p", {}, t("No Leishen / Thunderobot interface on this laptop.")))); return; }
-  const st = c.state || {}, info = c.info || {}, locked = !c.writes;
-  $("#leishen-sub").replaceChildren(t("Separate module for Quanta laptops with Leishen ControlCenter · via {0}", c.transport === "windows-wmi" ? t("the Windows WMI driver") : c.transport),
-    h("span", { class: "clevo-exp" }, t("experimental")));
-  const sw = (checked, fn) => h("label", { class: "sw" }, h("input", { type: "checkbox", ...(checked ? { checked: true } : {}), onchange: e => fn(e.target.checked) }), h("span"));
-  root.append(h("div", { class: "card warn" }, h("h3", {}, t("Experimental commands")),
-    h("p", { class: "muted" }, t("These functions send the firmware the same commands as Leishen ControlCenter. They were read from the firmware and from how ControlCenter uses it and were first checked on a Thunderobot R16. When the service stops, the fans go back to automatic.")),
-    h("div", { class: "clevo-row" }, h("span", {}, t("Allow commands")), sw(c.writes, v => act(() => api("setting", { key: "leishen_writes", value: v })))),
-    h("div", { class: "clevo-row" }, h("span", {}, t("Send the saved settings at start")), sw(c.restore, v => act(() => api("setting", { key: "leishen_restore", value: v })))),
-    h("div", { class: "clevo-row" }, h("span", {}, t("Office on battery (the mode chosen on AC comes back with the charger)")), sw(c.battery_office, v => act(() => api("setting", { key: "leishen_battery_office", value: v })))),
-    h("div", { class: "clevo-row" }, h("span", {}, t("The mode key switches Office → Gaming → High performance")), sw(c.hotkey, v => act(() => api("setting", { key: "leishen_hotkey", value: v })))),
+  const st = c.state || {}, info = c.info || {}, locked = !c.writes, lk = locked ? " locked" : "";
+  const via = c.transport === "windows-wmi" ? t("the Windows WMI driver") : c.transport;
+  B.modes.append(h("div", { class: "card warn" }, h("h3", {}, t("Leishen / Thunderobot"), h("span", { class: "clevo-exp" }, t("experimental"))),
+    h("p", { class: "muted" }, t("Quanta laptops with Leishen ControlCenter via {0}. The commands are the ones Leishen ControlCenter sends; first checked on a Thunderobot R16. When the service stops, the fans go back to automatic.", via)),
+    h("div", { class: "clevo-row" }, h("span", {}, t("Allow commands")), altSw(c.writes, v => act(() => api("setting", { key: "leishen_writes", value: v })))),
+    h("div", { class: "clevo-row" }, h("span", {}, t("Send the saved settings at start")), altSw(c.restore, v => act(() => api("setting", { key: "leishen_restore", value: v })))),
+    h("div", { class: "clevo-row" }, h("span", {}, t("Office on battery (the mode chosen on AC comes back with the charger)")), altSw(c.battery_office, v => act(() => api("setting", { key: "leishen_battery_office", value: v })))),
+    h("div", { class: "clevo-row" }, h("span", {}, t("The mode key switches Office → Gaming → High performance")), altSw(c.hotkey, v => act(() => api("setting", { key: "leishen_hotkey", value: v })))),
     c.hotkey && c.hotkey_state && c.hotkey_state !== "listening" ? h("p", { class: "muted tiny" }, t("Mode key events: {0}", t(c.hotkey_state))) : "",
-    h("p", { class: "muted tiny" }, t("Close Leishen ControlCenter while using this page: both programs would send commands."))));
-  // power mode (the firmware reports it)
+    h("p", { class: "muted tiny" }, t("Close Leishen ControlCenter while using this program: both programs would send commands."))));
   const box = h("div", { class: "choices clevo-cmd" });
   const batLock = c.on_battery && c.battery_office;
-  for (const [id, name, desc] of LEISHEN_MODES) box.append(h("div", { class: "choice" + (c.mode === id ? " on" : "") + (batLock && id !== "office" ? " disabled" : ""),
-    onclick: () => { if (!(batLock && id !== "office")) leishenCmd({ action: "mode", mode: id }, t(name)); } }, h("h4", {}, t(name)), h("p", {}, t(desc))));
-  root.append(h("div", { class: "card" + (locked ? " locked" : "") }, h("h3", {}, t("Power mode")), box,
+  for (const m of platModes()) box.append(h("div", { class: "choice" + (c.mode === m.key ? " on" : "") + (batLock && m.key !== "office" ? " disabled" : ""),
+    onclick: () => { if (!(batLock && m.key !== "office")) act(() => api("mode", { mode: m.id }), t(m.name)); } }, h("h4", {}, t(m.name)), h("p", {}, t(m.desc))));
+  B.modes.append(h("div", { class: "card" + lk }, h("h3", {}, t("Power mode")), box,
     h("p", { class: "muted tiny" }, batLock ? t("On battery: Office, like Leishen ControlCenter. The mode chosen on AC comes back with the charger.")
       : t("Sets the mode in the controller and the graphics card power limits, like the Fn mode key. Office also limits the graphics card and stops the system fan."))));
-  // fans
-  const fm = leishenView || st.fan_mode || "auto", fc = h("div", { class: "card" + (locked ? " locked" : "") }, h("h3", {}, t("Fans")), leishenSensors(c));
+  // fan settings
+  const fm = leishenView || st.fan_mode || "auto", fc = h("div", { class: "card" + lk }, h("h3", {}, t("Fans")), leishenSensors(c));
   const seg = h("div", { class: "seg clevo-cmd" });
   for (const [m, n] of [["auto", "Automatic"], ["fixed", "Fixed speed"], ["curve", "Curve"]])
-    seg.append(h("button", { class: fm === m ? "on" : "", onclick: () => { leishenView = m === "auto" ? null : m; m === "auto" ? leishenCmd({ action: "fans_auto" }, t(n)) : renderLeishen(); } }, t(n)));
+    seg.append(h("button", { class: fm === m ? "on" : "", onclick: () => { leishenView = m === "auto" ? null : m; m === "auto" ? leishenCmd({ action: "fans_auto" }, t(n)) : renderAltPages(); } }, t(n)));
   fc.append(h("div", { class: "clevo-row" }, h("span", {}, t("Fan mode")), seg));
   const names = info.fans3 ? ["cpu", "gpu", "sys"] : ["cpu", "gpu"];
   if (fm === "fixed") {
@@ -1122,19 +1129,16 @@ function renderLeishen() {
   if (fm === "curve") {
     leishenCurve = leishenCurve || JSON.parse(JSON.stringify((st.curves || {}).cpu || c.default_curve || []));
     const g = h("div", { class: "leishen-curve clevo-cmd" });
-    leishenCurve.forEach((p, i) => g.append(h("div", {}, h("input", { type: "number", min: 0, max: 110, value: p[0], onchange: e => { p[0] = +e.target.value; } }), h("small", {}, "°C"),
+    leishenCurve.forEach(p => g.append(h("div", {}, h("input", { type: "number", min: 0, max: 110, value: p[0], onchange: e => { p[0] = +e.target.value; } }), h("small", {}, "°C"),
       h("input", { type: "number", min: 0, max: 100, value: p[1], onchange: e => { p[1] = +e.target.value; } }), h("small", {}, "%"))));
     fc.append(h("p", { class: "muted tiny" }, t("One curve for the processor and graphics card fans, run by the service every 2 s: the speed of the highest point at or below the temperature; a lower step only 5 °C below it. The system fan stays automatic. Factory values of this laptop.")), g,
       h("div", { class: "row clevo-cmd" }, h("button", { class: "btn", onclick: () => { leishenView = null; leishenCmd({ action: "fans_curve", curves: { cpu: leishenCurve, gpu: leishenCurve } }, t("Curve applied")); } }, t("Apply curve")),
-        h("button", { class: "btn ghost", onclick: () => { leishenCurve = JSON.parse(JSON.stringify(c.default_curve || [])); renderLeishen(); } }, t("Factory curve"))));
+        h("button", { class: "btn ghost", onclick: () => { leishenCurve = JSON.parse(JSON.stringify(c.default_curve || [])); renderAltPages(); } }, t("Factory curve"))));
     if (c.curve_error) fc.append(h("p", { class: "muted" }, c.curve_error));
   }
-  root.append(fc);
-  // keyboard
-  const kc = h("div", { class: "card" + (locked ? " locked" : "") }, h("h3", {}, t("Keyboard")),
-    h("div", { class: "clevo-row clevo-cmd" }, h("span", {}, t("Windows key locked")), sw(!!st.win_lock, v => leishenCmd({ action: "win_lock", on: v }))),
-    h("div", { class: "clevo-row clevo-cmd" }, h("span", {}, t("Touchpad")), sw(st.touchpad !== false, v => leishenCmd({ action: "touchpad", on: v }))),
-    h("p", { class: "muted tiny" }, t("The firmware does not report the Windows key and the touchpad: the switches show what was last set here.")),
+  B.fans.append(fc);
+  // keyboard backlight
+  const kc = h("div", { class: "card" + lk }, h("h3", {}, t("Keyboard backlight")),
     h("div", { class: "clevo-row" }, h("span", {}, t("Backlight level")), h("b", {}, (c.sensors || {}).kb_level != null ? t(LEISHEN_LEVEL[c.sensors.kb_level] || String(c.sensors.kb_level)) : "—")));
   if (info.kb_rgb) {
     leishenLight = leishenLight || { zone: "all", mode: "static", level: 2, color: "#ffffff" };
@@ -1146,14 +1150,29 @@ function renderLeishen() {
   } else {
     kc.append(h("p", { class: "muted tiny" }, t("The firmware reports a single-colour keyboard: the light is changed with the Fn keys (the firmware's light command waits for an RGB controller and is not sent).")));
   }
-  root.append(kc);
+  B.light.append(kc);
+  // switches: Windows key, touchpad
+  B.switches.append(h("div", { class: "card" + lk }, h("h3", {}, t("Keyboard and touchpad")),
+    h("div", { class: "clevo-row clevo-cmd" }, h("span", {}, t("Windows key locked")), altSw(!!st.win_lock, v => leishenCmd({ action: "win_lock", on: v }))),
+    h("div", { class: "clevo-row clevo-cmd" }, h("span", {}, t("Touchpad")), altSw(st.touchpad !== false, v => leishenCmd({ action: "touchpad", on: v }))),
+    h("p", { class: "muted tiny" }, t("The firmware does not report the Windows key and the touchpad: the switches show what was last set here."))));
   const dl = h("dl", { class: "kv" });
   dl.append(h("dt", {}, t("Keyboard")), h("dd", {}, info.kb_rgb ? "RGB" : t("single colour") + ` (0x${(info.kb_code || 0).toString(16)})`),
     h("dt", {}, t("Fans")), h("dd", {}, String(info.fans3 ? 3 : 2)), h("dt", {}, t("Factory fan table")), h("dd", {}, String(info.fan_table ?? "—")));
-  root.append(h("div", { class: "card" }, h("h3", {}, t("Firmware")), dl,
+  B.info.append(h("div", { class: "card" }, h("h3", {}, t("Leishen / Thunderobot: firmware")), dl,
     h("p", { class: "muted tiny" }, t("A diagnostic report (Information) includes the answers of the firmware: it helps to test this module."))));
 }
-$(`#nav a[data-page="leishen"]`)?.addEventListener("click", () => setTimeout(leishenPoll, 50));
+// Clevo / Leishen (no Uniwill EC): their cards on Mode selection, Fan settings, Keyboard backlight, Switches, Information
+function renderAltPages() {
+  const k = S && S.alt ? S.alt.platform : null;
+  for (const id of ["modes", "fans", "switches"]) $("#page-" + id).classList.toggle("alt", !!k);
+  // a USB keyboard controller (ITE) works without the EC: its page stays, the module's card comes first
+  $("#page-light").classList.toggle("alt", !!k && !(S.keyboard && S.keyboard.kind === "rgb"));
+  const B = { modes: $("#modes-alt"), fans: $("#fans-alt"), light: $("#light-alt"), switches: $("#switches-alt"), info: $("#info-alt") };
+  for (const b of Object.values(B)) b.replaceChildren();
+  if (k === "clevo") renderClevo(B); else if (k === "leishen") renderLeishen(B);
+}
+$(`#nav a[data-page="fans"]`)?.addEventListener("click", () => setTimeout(leishenPoll, 50));
 
 function lbSet(body) { act(() => api("lightbar", { zone: lbZone, ...body })); }
 $("#lb-power").addEventListener("change", e => lbSet({ power: e.target.checked }));
@@ -1287,7 +1306,7 @@ function renderBinding() {
   rules.forEach((r, i) => {
     const en = h("input", { type: "checkbox" }); en.checked = r.enabled !== false;
     en.addEventListener("change", () => { rules[i].enabled = en.checked; saveRules(rules); });
-    tb.append(h("tr", {}, h("td", {}, r.process), h("td", {}, MODES[r.mode] ? t(MODES[r.mode].name) : ""), h("td", {}, en),
+    tb.append(h("tr", {}, h("td", {}, r.process), h("td", {}, modeName(r.mode)), h("td", {}, en),
       h("td", {}, h("button", { class: "btn ghost", onclick: () => { rules.splice(i, 1); saveRules(rules); } }, t("Delete")))));
   });
 }
@@ -2221,7 +2240,7 @@ function renderReportCard() {                      // rebuilt only when the lang
   for (const [k, n, why] of REP_PRIVATE) pri.append(h("label", { class: "chk" }, box(k, false), " ",
     h("span", {}, t(n), h("small", { class: "muted" }, " — " + t(why)))));
 }
-async function makeReport() {
+async function makeReport(opts = {}) {
   // the report is built in the background (it can take a minute on Windows); the file is downloaded with a click
   // on a link, so the browser treats every download as one the user asked for
   const pick = sel => $$(sel + " input:checked").map(i => i.dataset.k);
@@ -2244,16 +2263,24 @@ async function makeReport() {
     }
   } finally { btn.disabled = false; }
   if (st.state !== "done") throw new Error(st.error || "report failed");
-  showReport(st, sum);
+  showReport(st, sum, opts);
 }
-function showReport(st, sum) {
+function showReport(st, sum, opts = {}) {
   const name = st.name;
   const repo = (S.update && S.update.repo) || "https://github.com/aspidovss/open-uniwill-cc";
   const mail = (S.update && S.update.contact) || "OUCC@aspidov.ru";
   const lines = Object.entries(sum || {}).filter(([, v]) => typeof v !== "object").map(([k, v]) => `- ${k}: ${v}`).join("\n");
   const title = `Report: ${sum.vendor || ""} ${sum.model || sum.project || ""}`.replace(/\s+/g, " ").trim();
   const body = `${t("Describe the problem or the laptop here.")}\n\n${lines}\n\n${t("Attached: {0}", name)}\n`;
-  const issue = `${repo}/issues/new?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`;
+  let issue = `${repo}/issues/new?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`;
+  if (opts.template) {        // from the platform window: the "new laptop" issue form, its fields filled in (short ones only)
+    const d = opts.detect || {}, F = (d.features || []).map(feat4);
+    const q = { template: opts.template + ".yml", title: `Laptop: ${sum.vendor || ""} ${sum.model || ""}`.replace(/\s+/g, " ").trim(),
+      laptop: [sum.vendor, sum.model, sum.board && "board " + sum.board, /\w/.test(sum.bios || "") && "BIOS " + sum.bios].filter(Boolean).join(" · "),
+      platform: `${d.platform || "?"} — ${d.name || "-"} (${d.level || "?"}) · ${sum.program || ""}`,
+      functions: F.map(([f, s, w]) => `${f}: ${s}${w ? " (" + w + ")" : ""}`).join("\n"), report: name };
+    issue = `${repo}/issues/new?` + Object.entries(q).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join("&");
+  }
   const mailto = `mailto:${mail}?subject=${encodeURIComponent("open-uniwill-cc: " + title)}&body=${encodeURIComponent(body)}`;
   const reveal = async () => { try { const x = await api("reveal", { name }); if (!x.tray) toast(t("The file is in your Downloads folder: {0}", name)); } catch (_) {} };
   const mb = !st.size ? "?" : st.size < 1048576 ? (st.size / 1048576).toFixed(2) : (st.size / 1048576).toFixed(1);
@@ -2341,12 +2368,12 @@ $("#bk-original").addEventListener("click", () => act(async () => {
 // ---------------------------------------------------------------- automation page
 function renderAuto() {
   const a = S.automation || {}; if (!S.automation) return;
-  const modes = MODES.filter(m => (m.id !== 3 || S.power.custom_support) && (m.id !== 2 || S.power.turbo_support));
+  const modes = platModes();
   const fill = (sel, val, withPrev) => {
     sel.innerHTML = "";
     const opts = [["keep", t("Don't change")], ...(withPrev ? [["previous", t("The mode before unplugging")]] : []), ...modes.map(m => [String(m.id), t(m.name)])];
     for (const [v, n] of opts) { const o = h("option", { value: v }, n); if (String(val) === v) o.selected = true; sel.append(o); }
-    sel.disabled = !S.platform.fan_control;
+    sel.disabled = !S.platform.fan_control && !(S.alt && S.alt.writes);
   };
   fill($("#au-ac"), a.mode_on_ac, true); fill($("#au-bat"), a.mode_on_battery, false);
   $("#au-kb").checked = !!a.kb_off_on_battery; $("#au-ppd").checked = !!a.ppd_sync;
@@ -2412,7 +2439,7 @@ function renderLoadRules(force) {                 // force: our own change, redr
   const box = $("#au-rules"); if (!force && box.contains(document.activeElement) && document.activeElement.tagName !== "BUTTON") return;
   box.innerHTML = "";
   if (!auRules.length) { box.append(h("p", { class: "muted" }, t("No rules yet"))); return; }
-  const modes = MODES.filter(m => (m.id !== 3 || S.power.custom_support) && (m.id !== 2 || S.power.turbo_support));
+  const modes = platModes();
   const change = () => { auDirty = true; };
   const sel = (opts, val, on) => { const e = h("select", {}, ...opts.map(([v, n]) => { const o = h("option", { value: v }, n); if (String(val) === String(v)) o.selected = true; return o; })); e.addEventListener("change", () => { on(e.value); change(); renderLoadRules(true); }); return e; };
   const num = (val, min, max, on) => { const e = h("input", { type: "number", class: "num", min, max, value: val }); e.addEventListener("change", () => { on(+e.value); change(); }); return e; };
@@ -2442,7 +2469,7 @@ function renderLoadRules(force) {                 // force: our own change, redr
         ...(c.metric === "ac" ? [sel([[1, t("from the mains")], [0, t("on battery")]], c.value ? 1 : 0, v => { c.value = +v; })]
           : c.metric === "sys_profile" ? [sel(SYS_PROF.map((p, j) => [j, sysProfName(p)]), c.value, v => { c.value = +v; })]
           : c.metric === "saver" ? [sel([[1, t("on")], [0, t("off")]], c.value ? 1 : 0, v => { c.value = +v; })]
-          : c.metric === "mode" ? [eqOp, sel(MODES.map(m => [m.id, t(m.name)]), c.value, v => { c.value = +v; })]
+          : c.metric === "mode" ? [eqOp, sel(platModes().map(m => [m.id, t(m.name)]), c.value, v => { c.value = +v; })]
           : c.metric === "lc_profile" ? [eqOp, sel([...((S.liquid || {}).profiles || []).map(p => [p.id, lcName(p)]),
               ...(((S.liquid || {}).profiles || []).some(p => p.id === c.value) ? [] : [[c.value, c.value]])], c.value, v => { c.value = v; })]
           : c.metric === "rule" ? [sel([[0, t("any other rule")], ...auRules.map((x, j) => [j + 1, x.name || t("Rule {0}", j + 1)]).filter(([n]) => n !== i + 1)], c.value, v => { c.value = +v; }),
@@ -2466,11 +2493,11 @@ function renderLoadRules(force) {                 // force: our own change, redr
     const act1 = h("div", { class: "row wrap au-line" }, h("span", {}, t("for")), ...timeIn("hold", "hold_unit", 0),
       h("span", { class: "muted tiny" }, r.hold ? "" : t("(at once)")), h("span", {}, t("→ switch to")),
       sel([["", t("keep the mode")], ...modes.map(m => [m.id, t(m.name)])], r.mode ?? "", v => { r.mode = v === "" ? null : +v; r.slot = null; }),
-      ...(r.mode != null ? [sel(slotOpts, r.slot ?? "", v => { r.slot = v === "" ? null : +v; })] : []));
+      ...(r.mode != null && !S.alt ? [sel(slotOpts, r.slot ?? "", v => { r.slot = v === "" ? null : +v; })] : []));   // Clevo / Leishen: no profiles
     if (r.fan_boost === true) r.fan_boost = "on"; else if (r.fan_boost === false || r.fan_boost == null) r.fan_boost = "keep";
-    const act1b = h("div", { class: "row wrap au-line" }, h("span", {}, t("Fan Boost")),
-      sel([["keep", t("keep it")], ["on", t("turn on")], ["off", t("turn off")]], r.fan_boost, v => { r.fan_boost = v; }),
-      ...(S.liquid && S.liquid.profiles ? [h("span", { class: "au-sep" }, t("Liquid cooler")),
+    const act1b = h("div", { class: "row wrap au-line" }, ...(S.alt ? [] : [h("span", {}, t("Fan Boost")),          // Uniwill only
+      sel([["keep", t("keep it")], ["on", t("turn on")], ["off", t("turn off")]], r.fan_boost, v => { r.fan_boost = v; })]),
+      ...(S.liquid && S.liquid.profiles ? [h("span", { class: S.alt ? "" : "au-sep" }, t("Liquid cooler")),
         sel([["", t("keep its mode")], ...LC_MODES.map(m => [m.id, t(m.name)])], r.lc_mode ?? "", v => { r.lc_mode = v || null; }),
         sel([["", t("keep its curves")], ...S.liquid.profiles.map(p => [p.id, p.builtin ? t(LC_PROFILE_NAME[p.id] || p.name) : p.name])],
           r.lc_profile ?? "", v => { r.lc_profile = v || null; })] : []));
@@ -2488,7 +2515,7 @@ function renderRulesLog(R) {
   const L = R.log || [];
   box.classList.toggle("hidden", !L.length);
   if (!L.length) return;
-  const mname = m => (MODES[m] ? t(MODES[m].name) : "");
+  const mname = m => modeName(m);
   const lcn = id => { const p = ((S.liquid || {}).profiles || []).find(x => x.id === id); return p ? (p.builtin ? t(LC_PROFILE_NAME[p.id] || p.name) : p.name) : id; };
   const lcm = id => { const m = LC_MODES.find(x => x.id === id); return m ? t(m.name) : id; };
   const extra = x => [x.fan_boost === true ? t("Fan Boost on") : x.fan_boost === false ? t("Fan Boost off") : "",
@@ -2511,7 +2538,7 @@ $("#au-rule-add").addEventListener("click", () => {
   const tp = AU_TEMPLATES.find(x => x[0] === $("#au-rule-tpl").value) || AU_TEMPLATES[0];
   if (!auRules) auRules = [];
   const r = JSON.parse(JSON.stringify(tp[2])); r.name = r.name ? t(r.name) : ""; r.enabled = true;
-  if (r.mode === 2 && !S.power.turbo_support) r.mode = 1;
+  if (r.mode != null && !platModes().some(m => m.id === r.mode)) r.mode = r.mode === 2 && !S.alt ? 1 : (platModes()[0] || {}).id ?? null;
   auRules.push(r); auDirty = true; renderLoadRules(true);
 });
 $("#au-rules-save").addEventListener("click", () => act(async () => { await api("load-rules", { rules: auRules || [] }); auDirty = false; }, t("Saved")));
@@ -2580,7 +2607,7 @@ function connect() {
     if (m.type === "mode" && m.data.osd) osd(m.data.mode === 3 ? `Custom · ${slotName(S?.profiles?.["Mode4_Profile" + ((m.data.slot || 0) + 1)], (m.data.slot || 0) + 1)}` : (MODES[m.data.mode]?.osd || ""));
     if (m.type === "overheat") toast(t("{0} at {1} °C for 30 seconds", m.data.sensor === "gpu" ? t("GPU") : t("CPU"), m.data.temp), true);
     if (m.type === "overheat_boost") toast(t("Fan Boost turned on because of overheating"), true);
-    if (m.type === "load_rule") toast(t("Automation: {0} → {1}", m.data.rule === "back" ? t("back") : m.data.rule, t((MODES[m.data.mode] || {}).name || "")));
+    if (m.type === "load_rule") toast(t("Automation: {0} → {1}", m.data.rule === "back" ? t("back") : m.data.rule, modeName(m.data.mode)));
     if (m.type === "fanboost" && m.data.osd) osd(m.data.on ? "FanBoostOn" : "FanBoostOff");
     if (m.type === "lc" && m.data.event === "flow_fault") toast(t("Liquid cooler: no coolant flow! Check the tubes and the coolant level."), true);
     if (m.type === "lc" && m.data.event === "disconnected" && m.data.unexpected) toast(t("Liquid cooler disconnected — reconnecting automatically"), true);
@@ -2596,30 +2623,80 @@ function connect() {
   try { await refresh(); } catch (e) { toast(t("Service unavailable: {0}", e.message), true); }
   if (S && S.settings && (S.settings.eula_accepted || 0) < (S.settings.eula_version || 1)) await showAgreement();
   await offerWmiIfNoDriver();
-  if (S && S.detect && !S.detect.seen) await showDetect();          // first start: which platform, programs to close
+  if (S && S.detect && S.detect.seen !== S.detect.signature) await showDetect(true);   // first start or something changed
   connect();
 })();
 
 // ---------------------------------------------------------------- platform found at the start (first start, Information)
 const DETECT_LEVEL = { tested: "tested", known: "known", experimental: "experimental", none: "not found" };
-const DETECT_PAGE = { clevo: "Open the Clevo page", leishen: "Open the Leishen page", modes: "Open Mode selection" };
+const DETECT_PAGE = { modes: "Open Mode selection", driver: "Open EC Manager", info: "Open Information" };
+// why a function is not available (uwccd/detect.py) and what the window offers for it
+const DETECT_WHY = {
+  writes_off: "The module is experimental: its commands are off until you allow them. Close the vendor program first.",
+  oem_missing: "The OEM driver UWACPIDriver is not installed: the program cannot reach the embedded controller yet.",
+  wmi_consent: "The WMI path is chosen, but its warning has not been accepted yet.",
+  wmi_no_profile: "On the WMI path (without the OEM driver) only laptops with a profile get these functions, and there is none for this one yet. Install the OEM driver, or run the self-check to make a profile.",
+  unknown_project: "The official service does not know this project: the functions may work only in part. The self-check shows what works; a report helps to add the laptop.",
+  no_ramfan: "The embedded controller does not report fan control (RamFan 1.5). A report helps to find out why.",
+  no_platform: "No interface for modes or fans was found. Make a report and send it to us: this is how new laptops get support.",
+};
+const DETECT_ACT = { allow: "Allow commands", driver: "Install the OEM driver", selfcheck: "Run the self-check", report: "Make a report and send it" };
+const feat4 = f => [f[0], f[1], f[2] || null, f[3] || []];
+// the signals of uwccd/detect.py are English with values in them: translated by their pattern
+const DETECT_SIG = [
+  [/^Control Center 3\.0 \/ Clevo interface \((.*)\)$/, "Control Center 3.0 / Clevo interface ({0})"],
+  [/^Leishen \/ Thunderobot WMI block RW_GMWMI \((.*)\)$/, "Leishen / Thunderobot WMI block RW_GMWMI ({0})"],
+  [/^firmware answers: (RGB|single-colour) keyboard, (\d+) fans, fan table (.*)$/, "firmware answers: {0} keyboard, {1} fans, fan table {2}"],
+  [/^Uniwill embedded controller via (\S+), project (.*)$/, "Uniwill embedded controller via {0}, project {1}"],
+  [/^WMI path without a profile of this project$/, "WMI path without a profile of this project"],
+  [/^the Uniwill embedded controller is not reachable yet: (.*)$/, "the Uniwill embedded controller is not reachable yet: {0}"],
+  [/^no firmware interface for modes or fans was found$/, "no firmware interface for modes or fans was found"],
+];
+function sigText(s) {
+  for (const [re, tpl] of DETECT_SIG) { const m = re.exec(s); if (m) return t(tpl, ...m.slice(1).map(x => x === "single-colour" ? t("single-colour") : x)); }
+  return s;
+}
 function detectLine(d) {
   if (!d || d.pending) return t("Being detected…");
   return `${d.name || t("Unknown platform")} — ${t(DETECT_LEVEL[d.level] || d.level)}` +
     ((d.vendor_apps || []).length ? " · " + t("vendor programs running: {0}", [...new Set(d.vendor_apps.map(a => a.app))].join(", ")) : "");
 }
-async function showDetect() {
+function goPage(p, el) { $(`#nav a[data-page="${p}"]`)?.click(); if (el) setTimeout(() => $(el)?.scrollIntoView({ behavior: "smooth", block: "start" }), 150); }
+// auto: shown at the start, only when what it shows changed since the last time (setting detect_seen)
+async function showDetect(auto) {
   let d = S.detect || {};
   for (let i = 0; i < 20 && (!d || d.pending); i++) { await new Promise(r => setTimeout(r, 500)); try { d = await api("detect"); } catch (_) { break; } }
-  if (!d || d.pending) return;
+  if (!d || d.pending || (auto && d.seen === d.signature)) return;
   return new Promise(resolve => {
     const card = h("div", { class: "eula-card narrow detect-card" });
     const box = h("div", { class: "eula", role: "dialog", "aria-modal": "true" }, card);
-    const done = async () => { try { await api("setting", { key: "detect_seen", value: d.platform || "unknown" }); } catch (_) {} box.remove(); refresh().catch(() => {}); resolve(); };
+    const done = async () => { try { await api("setting", { key: "detect_seen", value: d.signature || d.platform || "unknown" }); } catch (_) {} box.remove(); refresh().catch(() => {}); resolve(); };
+    const doAct = async (a, btn) => {
+      if (a === "allow") {
+        btn.disabled = true;
+        try { await api("setting", { key: d.allow_key, value: true }); d = await api("detect", { action: "run" }); toast(t("Commands allowed")); }
+        catch (err) { toast(t("Error: {0}", errText(err.message)), true); }
+        return draw();
+      }
+      await done();
+      if (a === "driver") goPage("driver");
+      else if (a === "selfcheck") { if (ecWin()) goPage("driver", "#dm-selfcheck"); else toast(t("Self-check: uwccctl ec selfcheck 1"), false); }
+      else if (a === "report") {
+        goPage("info", "#rep-make");
+        act(async () => { await makeReport({ template: "new_laptop", detect: d }); $("#rep-done")?.scrollIntoView({ behavior: "smooth", block: "center" }); }, t("Report ready"));
+      }
+    };
     const draw = () => {
-      const lap = d.laptop || {}, apps = d.vendor_apps || [];
-      const feats = h("ul", { class: "detect-feats" }, ...(d.features || []).map(([f, s]) =>
+      const lap = d.laptop || {}, apps = d.vendor_apps || [], F = (d.features || []).map(feat4);
+      const feats = h("ul", { class: "detect-feats" }, ...F.map(([f, s]) =>
         h("li", { class: "f-" + s }, h("span", { class: "mark" }, s === "ok" ? "✓" : s === "try" ? "?" : "✕"), " ", t(f))));
+      // one line per reason: which functions, why, what to do
+      const why = [...new Set(F.filter(f => f[2] && DETECT_WHY[f[2]]).map(f => f[2]))];
+      const todo = why.length ? h("div", { class: "detect-todo" }, ...why.map(w => {
+        const fs = F.filter(f => f[2] === w), acts = [...new Set(fs.flatMap(f => f[3]))];
+        return h("div", { class: "detect-why" }, h("p", {}, h("b", {}, fs.map(f => t(f[0])).join(", ")), " — ", t(DETECT_WHY[w])),
+          acts.length ? h("div", { class: "row wrap" }, ...acts.map((a, i) => { const b = h("button", { class: i ? "btn ghost sm" : "btn sm", onclick: () => doAct(a, b) }, t(DETECT_ACT[a] || a)); return b; })) : "");
+      })) : (F.length && F.every(f => f[1] === "ok" || f[2] === "not_found") ? h("p", { class: "detect-ok" }, "✓ " + t("Everything found works.")) : "");
       const warn = apps.length ? h("div", { class: "detect-warn" },
         h("b", {}, t("Running at the same time:")), " ", [...new Set(apps.map(a => a.app))].join(", "),
         h("p", { class: "muted tiny" }, t("Both programs send commands to the firmware and undo each other's settings (for example, fans that do not go back to automatic). Close the vendor program while you use this one; it may start again with Windows — turn off its autostart in its settings or in Task Scheduler.")),
@@ -2633,13 +2710,10 @@ async function showDetect() {
         h("h2", {}, t("Your laptop")),
         h("p", {}, h("b", {}, [lap.vendor, lap.model].filter(Boolean).join(" ") || t("Unknown laptop")), lap.board ? h("span", { class: "muted" }, ` · ${t("board")} ${lap.board}`) : ""),
         h("p", {}, t("Platform:"), " ", h("b", {}, d.name || t("Unknown platform")), " ", h("span", { class: "detect-level l-" + d.level }, t(DETECT_LEVEL[d.level] || d.level))),
-        h("ul", { class: "muted tiny detect-sig" }, ...(d.signals || []).map(s => h("li", {}, s))),
-        h("h4", {}, t("What can be controlled")), feats,
-        d.level === "experimental" ? h("p", { class: "muted tiny" }, t("Experimental: the commands are off until you allow them on the module's page.")) : "",
-        d.platform === "unknown" ? h("p", { class: "muted tiny" }, t("No interface for modes or fans was found. A diagnostic report (Information) helps to add this laptop.")) : "",
-        warn,
+        h("ul", { class: "muted tiny detect-sig" }, ...(d.signals || []).map(s => h("li", {}, sigText(s)))),
+        h("h4", {}, t("What can be controlled")), feats, todo, warn,
         h("div", { class: "row", style: "justify-content:flex-end;margin-top:12px" },
-          DETECT_PAGE[d.page] ? h("button", { class: "btn ghost", onclick: async () => { await done(); $(`#nav a[data-page="${d.page}"]`)?.click(); } }, t(DETECT_PAGE[d.page])) : "",
+          DETECT_PAGE[d.page] && d.page !== "info" ? h("button", { class: "btn ghost", onclick: async () => { await done(); goPage(d.page); } }, t(DETECT_PAGE[d.page])) : "",
           h("button", { class: "btn", onclick: done }, t("OK"))));
     };
     draw(); document.body.append(box);
@@ -2691,7 +2765,7 @@ const EC_FEATURES = {
   power_limits: { name: "CPU power limits and TCC", sel: ["#profile-editor"] },
   gpu_power: { name: "Graphics power (cTGP, Dynamic Boost)", sel: [] },
   super_performance: { name: "Super performance", sel: ["#sp-row"] },
-  fan_tables: { name: "Fan curves", sel: ["#page-fans .card"] },
+  fan_tables: { name: "Fan curves", sel: ["#page-fans > .card"] },
   fan_monitor: { name: "Fan speed readings", sel: [] },
   battery: { name: "Battery protection and charge limits", sel: ["#page-battery .card"] },
   switches: { name: "Switches (Fn Lock, Win key, USB, touchpad)", sel: ["#switch-list"] },
@@ -2723,22 +2797,35 @@ function applyFeatures() {
 }
 
 function renderEcBanner() {
-  const a = ecA(), b = $("#ec-banner"), badge = $("#wmi-badge");
+  const a = ecA(), b = $("#ec-banner"), badge = $("#wmi-badge"), alt = S && S.alt;
   $("#nav-driver").classList.toggle("hidden", !ecWin());
   badge.classList.toggle("hidden", !(a && a.active === "wmi"));
+  // Clevo / Leishen: "experimental" like the WMI driver; the banner until their commands are allowed
+  const ab = $("#alt-badge");
+  ab.classList.toggle("hidden", !alt);
+  if (alt) { ab.textContent = alt.platform === "clevo" ? "CC 3.0 · " + t("EXPERIMENTAL") : "LEISHEN · " + t("EXPERIMENTAL"); ab.title = t(alt.name); }
+  b.classList.toggle("alt-warn", !!alt);
+  if (alt) {
+    b.classList.toggle("hidden", !!alt.writes);
+    if (alt.writes) return;
+    const key = alt.platform === "clevo" ? "clevo_writes" : "leishen_writes";
+    b.replaceChildren(h("div", {}, h("b", {}, t("{0} — experimental", t(alt.name))),
+      h("p", {}, alt.platform === "clevo"
+        ? t("This laptop has no Uniwill embedded controller: it is controlled through the Control Center 3.0 interface (Clevo, Tongfang). Mode selection, Fan settings and Keyboard backlight work with it, but the module is experimental, so its commands are sent only after you allow them. Close Control Center 3 first.")
+        : t("This laptop has no Uniwill embedded controller: it is controlled through the Leishen / Thunderobot firmware interface. Mode selection, Fan settings, Keyboard backlight and Switches work with it, but the module is experimental, so its commands are sent only after you allow them. Close Leishen ControlCenter first."))),
+      h("button", { class: "btn", onclick: () => act(() => api("setting", { key, value: true }), t("Commands allowed")) }, t("Allow commands")));
+    return;
+  }
   const show = a && a.active === "none";
   b.classList.toggle("hidden", !show);
   if (!show) return;
   const msg = { oem_missing: t("The OEM driver UWACPIDriver was not found — the program cannot reach the embedded controller (fans, modes, power limits, battery). Install the OEM driver (recommended) or switch to the open WMI implementation (beta)."),
     wmi_consent: t("The WMI path is selected, but its warning has not been accepted yet."),
-    wmi_failed: t("The WMI path could not be opened: {0}", a.wmi_error || ""),
-    clevo_only: t("This laptop has no Uniwill embedded controller interface but a Control Center 3.0 / Clevo one: modes, fans and backlight are on the Clevo (experimental) page; the Uniwill pages do not work here."),
-    leishen_only: t("This laptop has no Uniwill embedded controller interface but a Leishen / Thunderobot one: mode, fans and keyboard are on the Leishen (experimental) page; the Uniwill pages do not work here.") }[a.reason] || t("No access to the embedded controller.");
+    wmi_failed: t("The WMI path could not be opened: {0}", a.wmi_error || "") }[a.reason] || t("No access to the embedded controller.");
   b.replaceChildren(h("div", {}, h("b", {}, t("No access to the embedded controller")), h("p", {}, msg)),
-    a.reason === "clevo_only" ? h("button", { class: "btn", onclick: () => $(`#nav a[data-page="clevo"]`)?.click() }, t("Open the Clevo page"))
-      : a.reason === "leishen_only" ? h("button", { class: "btn", onclick: () => $(`#nav a[data-page="leishen"]`)?.click() }, t("Open the Leishen page"))
-      : h("button", { class: "btn", onclick: () => $(`#nav a[data-page="driver"]`)?.click() }, t("Open EC Manager")));
+    h("button", { class: "btn", onclick: () => $(`#nav a[data-page="driver"]`)?.click() }, t("Open EC Manager")));
 }
+$("#alt-badge").addEventListener("click", () => $(`#nav a[data-page="modes"]`)?.click());
 $("#wmi-badge").addEventListener("click", () => $(`#nav a[data-page="driver"]`)?.click());
 $("#info-ec-open").addEventListener("click", () => $(`#nav a[data-page="driver"]`)?.click());
 
