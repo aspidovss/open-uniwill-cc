@@ -185,7 +185,7 @@ if (-not $BuildFull) {
 Copy-Item -Force windows\install.ps1, windows\uninstall.ps1 $out
 Copy-Item -Force README.windows.md "$out\README.md"
 Copy-Item -Force windows\icon.ico $out
-foreach ($f in "LICENSE", "NOTICE.md", "THIRD_PARTY_LICENSES.txt") { if (Test-Path $f) { Copy-Item -Force $f $out } }
+foreach ($f in "LICENSE", "NOTICE.md", "CONTRIBUTORS.md", "THIRD_PARTY_LICENSES.txt") { if (Test-Path $f) { Copy-Item -Force $f $out } }
 Set-Content -Path "$out\VERSION" -Value $Version -Encoding ASCII
 Set-Content -Path "$out\EDITION" -Value "full" -Encoding ASCII
 

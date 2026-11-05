@@ -9,7 +9,7 @@ here only to describe what the software works with.
 
 | Path | License |
 |---|---|
-| everything not listed below | [MIT](LICENSE), Copyright (c) 2026 Sergei Aspidov |
+| everything not listed below | [MIT](LICENSE), Copyright (c) 2026 Sergei Aspidov and [contributors](CONTRIBUTORS.md) |
 | [`kernel/`](kernel/) (Linux kernel module `uwcc`) | [GPL-2.0](kernel/LICENSE) — required for Linux kernel modules |
 | [`proprietary/`](proprietary/) (OEM ACPI driver, factory fan tables) | [proprietary, all rights reserved by their owners](proprietary/LICENSE) |
 | [`uwccd/lighting/oem/`](uwccd/lighting/oem/) (LED colour correction, software keyboard effects) | [proprietary, all rights reserved by their owners](uwccd/lighting/oem/LICENSE) |
@@ -36,7 +36,7 @@ Third-party libraries bundled with the Windows build: [THIRD_PARTY_LICENSES.txt]
 | [faintonce/open-revo](https://github.com/faintonce/open-revo) | MIT | Ideas: custom performance mode, monitoring history, automation rules. No code copied. |
 | [ZavierChen/BetterRGB-ITE8291-Adaptive](https://github.com/ZavierChen/BetterRGB-ITE8291-Adaptive) (from [EpicYamo/Better-RGB-for-Tongfang-ITE8291](https://github.com/EpicYamo/Better-RGB-for-Tongfang-ITE8291)) | MIT | The BetterRGB keyboard effects, transitions, white calibration, top-row bar and frame pacing — rewritten in Python in `uwccd/lighting/fx.py`. Copyright (c) 2026 TheYamo, (c) 2026 ZavierChen and contributors; their MIT notice is kept in [THIRD_PARTY_LICENSES.txt](THIRD_PARTY_LICENSES.txt). |
 
-Thank you to all of them.
+Thank you to all of them — and to everyone who contributed code or sent reports: [CONTRIBUTORS.md](CONTRIBUTORS.md).
 
 ## Reverse-engineering note
 

@@ -290,6 +290,15 @@ debug logging, where the logs are, what to attach to a bug report.
 - Bugs, questions, new laptops: [GitHub issues](https://github.com/aspidovss/open-uniwill-cc/issues)
 - E-mail: **OUCC@aspidov.ru** (also for security reports, see [SECURITY.md](SECURITY.md))
 
+## Contributors
+
+Thanks to everyone who contributes code — [CONTRIBUTORS.md](CONTRIBUTORS.md),
+[GitHub contributors](https://github.com/aspidovss/open-uniwill-cc/graphs/contributors).
+
+**A special thank-you to every user who sent reports**: most new laptops are supported because someone tested a build
+and wrote back. If you would like your name listed as a tester, please write in the project's discussion thread or
+open an [issue](https://github.com/aspidovss/open-uniwill-cc/issues) — names are added only on request.
+
 ## License
 
 MIT — see [LICENSE](LICENSE), **except** `kernel/` (GPL-2.0), and `proprietary/` and `uwccd/lighting/oem/`
@@ -298,7 +307,7 @@ The BetterRGB keyboard effects (`uwccd/lighting/fx.py`) are rewritten from
 [BetterRGB ITE8291 Adaptive](https://github.com/ZavierChen/BetterRGB-ITE8291-Adaptive) by ZavierChen and
 [Better RGB](https://github.com/EpicYamo/Better-RGB-for-Tongfang-ITE8291) by TheYamo — MIT as well; their copyright
 notices are kept in [LICENSE](LICENSE) and [THIRD_PARTY_LICENSES.txt](THIRD_PARTY_LICENSES.txt).
-Credits and the projects that helped: [NOTICE.md](NOTICE.md).
+Credits and the projects that helped: [NOTICE.md](NOTICE.md), contributors: [CONTRIBUTORS.md](CONTRIBUTORS.md).
 
 **User agreement** ([English](uwccd/web/eula.en.txt) · [Русский](uwccd/web/eula.ru.txt)) — shown by the installers and
 at the first start of the window: the program is provided *as is*, you are responsible for using it, and you confirm
