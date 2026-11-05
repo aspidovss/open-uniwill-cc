@@ -1006,6 +1006,7 @@ DEFAULT_CONFIG = {"fps_ac": 30, "fps_battery": 15, "transition": "fade", "transi
                   "gains": [1000, 1000, 1000], "bar": dict(BAR_DEFAULT)}
 FPS_MIN, FPS_MAX = 10, 60
 ZONE_FPS_MAX = 25            # four-zone keyboards: five feature reports per frame
+PICTURE_KEEPALIVE_S = 1.0    # constant pictures must not let Windows suspend the USB keyboard
 
 
 def clean_config(cfg):
@@ -1067,6 +1068,7 @@ class FxEngine(threading.Thread):
         self.bar_mode_last = None
         self.last_volume, self.volume_until = None, 0.0
         self.last_out = None
+        self.last_sent = 0.0
         self.frames = 0
         self.errors = 0
 
@@ -1193,13 +1195,14 @@ class FxEngine(threading.Thread):
             self.kb.write_zones(out, self.light, announce=first)
         else:
             out = [(l2s(c[0]), l2s(c[1]), l2s(c[2])) for c in frame]
-            if out == self.last_out and not first:
+            if out == self.last_out and not first and time.monotonic() - self.last_sent < PICTURE_KEEPALIVE_S:
                 return
             if getattr(self.kb, "pictures_ok", True):
                 self.kb.write_picture(out, self.light, announce=first)
             else:
                 self.kb.write_rows(out, self.light, announce=first)
         self.last_out = out
+        self.last_sent = time.monotonic()
         self.frames += 1
 
     def _pace_result(self, ok, took):
