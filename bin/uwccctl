@@ -20,6 +20,7 @@ Overview
   clevo ...                      Control Center 3.0 / Clevo (experimental, separate module): see uwccctl help clevo
   leishen ...                    Leishen / Thunderobot (experimental, separate module): see uwccctl help leishen
   detect [run|close]             which platform this is, vendor control programs running (close: end them)
+  afterburner [1-5|on|off|launch on|off|mode MODE[.N] 1-5|default|keep|default [1-5|none]]   MSI Afterburner profile of every mode / preset (Windows)
   get [KEY]  /  set KEY VALUE    switches and automation (see: uwccctl help set)
   apps [add|remove|enable|disable] ...   switch the mode when a program runs
   rules [list|export FILE|import FILE|clear|enable N|disable N]   mode by power / temperature / load
@@ -206,6 +207,19 @@ HELP = {
         "uwccctl clevo kb effect random|breathe|cycle|wave|dance|tempo|flash\n"
         "uwccctl clevo kb sleep SECONDS             0 = never\n"
         "uwccctl clevo kb boot-effect on|off"),
+    "afterburner": (
+        "MSI Afterburner (Windows, experimental): every mode can switch an Afterburner profile slot 1-5;\n"
+        "the overclock itself stays in Afterburner. By default no mode changes the profile.\n"
+        "uwccctl afterburner                        found, running, the slot of every mode\n"
+        "uwccctl afterburner 1-5                    apply that profile now\n"
+        "uwccctl afterburner mode MODE 1-5|keep     the slot of a mode (office gaming turbo custom; Clevo / Leishen:\n"
+        "                                           their mode names)\n"
+        "uwccctl afterburner mode MODE.N 1-5|keep   the slot of preset N of a mode (turbo.2, custom.5): it wins\n"
+        "                                           over the mode's own slot\n"
+        "uwccctl afterburner default 1-5|none       the slot with the stock settings (Reset, then Save in Afterburner)\n"
+        "uwccctl afterburner default                apply it now; 'default' also works as the slot of a mode\n"
+        "uwccctl afterburner on|off                 switch profiles with the mode (on by default)\n"
+        "uwccctl afterburner launch on|off          start Afterburner when it is not running (on by default)"),
     "detect": (
         "uwccctl detect                             which platform this is (found at the start of the service),\n"
         "                                           the functions, vendor control programs running now\n"
@@ -1261,6 +1275,62 @@ def detect_text(d):
     return lines
 
 
+def cmd_afterburner(a):
+    st = call("state")
+    ab = st.get("afterburner") or {}
+    if not ab.get("available"):
+        fail("MSI Afterburner integration is for Windows", 1)
+    alt = st.get("alt")
+    names = ({m["id"]: m["index"] for m in alt["modes"]} if alt else dict(MODES))
+
+    def mname(i):
+        return next((k for k, v in names.items() if v == i), str(i))
+    if a and a[0] in ("on", "off"):
+        call("setting", {"key": "afterburner", "value": a[0] == "on"})
+    elif a[:1] == ["launch"] and a[1:2] in (["on"], ["off"]):
+        call("setting", {"key": "afterburner_launch", "value": a[1] == "on"})
+    elif a[:1] == ["mode"] and len(a) == 3 and a[1].split(".")[0] in names and a[2] in ("keep", "default", "1", "2", "3", "4", "5"):
+        m, _, pre = a[1].partition(".")              # turbo.2 = the second preset of Turbo
+        if pre and not (pre.isdigit() and 1 <= int(pre) <= 5):
+            usage("afterburner")
+        call("afterburner", {"action": "profile", "mode": names[m], "preset": int(pre) - 1 if pre else None,
+                             "slot": None if a[2] == "keep" else "default" if a[2] == "default" else int(a[2])})
+    elif a[:1] == ["default"] and len(a) == 2 and a[1] in ("1", "2", "3", "4", "5", "none"):
+        call("afterburner", {"action": "default", "slot": None if a[1] == "none" else int(a[1])})
+    elif a == ["default"]:
+        call("afterburner", {"action": "apply_default"})
+    elif len(a) == 1 and a[0] in ("1", "2", "3", "4", "5"):
+        call("afterburner", {"action": "apply", "slot": int(a[0])})
+    elif a:
+        usage("afterburner")
+    ab = call("afterburner")
+
+    def text(d):
+        if not d.get("found"):
+            return ["MSI Afterburner: not found"]
+        last = d.get("last") or {}
+        lines = [f"MSI Afterburner {d.get('version') or ''} ({'running' if d.get('running') else 'not running'}), "
+                 f"profiles with the mode: {'on' if d.get('enabled') else 'off'}, "
+                 f"start it when closed: {'on' if d.get('launch') else 'off'}  (experimental)"]
+        prof = d.get("profiles") or {}
+
+        def label(k):
+            m, _, pre = k.partition(".")
+            return mname(int(m)) + (f".{int(pre) + 1}" if pre else "")
+        def val(v):
+            return "default" if v == -1 else f"profile {v}" if v else "do not change"
+        lines.append(f"  default profile  {('profile ' + str(d['default'])) if d.get('default') else 'not set'}")
+        lines += [f"  {mname(i):16} {val(prof.get(str(i)))}" for i in sorted(set(names.values()))]
+        lines += [f"  {label(k):16} {val(v)}" for k, v in sorted(prof.items()) if "." in k]
+        if d.get("now"):
+            n = d["now"]
+            lines.append(f"now: {mname(n[0])}" + (f".{n[1] + 1}" if n[1] is not None else ""))
+        if last:
+            lines.append(f"last: profile {last.get('slot')} ({last.get('why')})" + (f" — {last['error']}" if last.get("error") else ""))
+        return lines
+    out(ab, text)
+
+
 def cmd_detect(a):
     op = a[0] if a else "status"
     if op == "run":
@@ -1705,6 +1775,7 @@ def main(a):
         "lb": lambda: cmd_lb(rest),
         "clevo": lambda: cmd_clevo(rest),
         "leishen": lambda: cmd_leishen(rest),
+        "afterburner": lambda: cmd_afterburner(rest),
         "detect": lambda: cmd_detect(rest),
         "rules": lambda: cmd_rules(rest),
         "get": lambda: cmd_get(rest),

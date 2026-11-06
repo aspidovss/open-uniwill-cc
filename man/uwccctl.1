@@ -308,6 +308,23 @@ The custom curve as a file in its own format (not the Uniwill fan tables); impor
 .BI "clevo kb sleep " SECONDS
 .TP
 .BR "clevo kb boot\-effect " on | off
+.SS MSI Afterburner (Windows, experimental)
+.TP
+.B afterburner
+Found, running, the profile slot of every mode.
+.TP
+.BI "afterburner " 1-5
+Apply that MSI Afterburner profile now.
+.TP
+.BI "afterburner mode " "MODE[.N]" " 1-5|keep"
+The profile a mode, or its preset N (turbo.2, custom.5), switches on; keep (the default) leaves Afterburner as it is.
+.TP
+.BR "afterburner default " [ 1-5 | none ]
+The slot with the stock settings (Reset, then Save in Afterburner); without an argument apply it now.
+A mode set to default follows this slot.
+.TP
+.BR "afterburner " on | off ", " "afterburner launch " on | off
+Switch profiles with the mode; start a closed Afterburner (both on by default).
 .SS Switches and automation
 .TP
 .BR "get " [\fIKEY\fR]

@@ -94,6 +94,15 @@ class Service:
             self.monitor = Monitor(self.ec, self.pf)
         from .altplat import alt_platform, clevo_monitor_fans
         self.alt = alt_platform(self)            # no Uniwill EC: Clevo / Leishen on the main pages, tray, rules
+        from .afterburner import Afterburner
+        if mock and os.environ.get("UWCC_MOCK_AFTERBURNER"):       # the window without Windows: a pretend Afterburner
+            self.afterburner = Afterburner(self.settings_store, self.current_preset, self.emit,
+                                           runner=lambda c: log.info("mock Afterburner: %s", " ".join(c)),
+                                           finder=lambda: {"path": r"C:\Program Files (x86)\MSI Afterburner\MSIAfterburner.exe",
+                                                           "version": "4.6.6"},
+                                           is_running=lambda: True, available=True)
+        else:
+            self.afterburner = Afterburner(self.settings_store, self.current_preset, self.emit)
         if self.alt is not None and self.alt.kind == "clevo":
             self.monitor.fans = clevo_monitor_fans(self.clevo)
         if self.leishen.present:                 # Leishen / Thunderobot: fan speeds come from its WMI block
@@ -246,11 +255,31 @@ class Service:
         from .detect import Detector
         self.detect = Detector(self)             # which platform: shown once, at the first start
         self.detect.start()
+        self.afterburner.start()                  # MSI Afterburner profile of every mode (Windows)
         from . import version_string
         log.info("service started: open-uniwill-cc %s (hotkeys: %s)", version_string(),
                  "kernel module" if hk.available else "polling")
 
+    def current_mode(self):
+        """The mode number now (Uniwill 0-3; Clevo / Leishen as in altplat.py), None when there is none."""
+        if self.alt is not None:
+            return self.alt.mode_index()
+        if self.fan_control:
+            return self.power.option.get("OperatingMode")
+        return None
+
+    PRESET_KEY = {0: "OfficeProfileIndex", 1: "GamingProfileIndex", 2: "TurboProfileIndex", 3: "CustomProfileIndex"}
+
+    def current_preset(self):
+        """(mode, preset index or None): the Uniwill modes have presets (Office 1 / 2 … Custom 1-5), Clevo / Leishen not."""
+        mode = self.current_mode()
+        if mode is None or self.alt is not None:
+            return mode, None
+        idx = self.power.option.get(self.PRESET_KEY.get(mode, ""))
+        return mode, (int(idx) if idx is not None else None)
+
     def stop(self):
+        self.afterburner.stop()
         self.leishen.stop()                # its fans go back to automatic
         t = self.power.tables
         t._pending = None
@@ -396,6 +425,7 @@ class Service:
             "leishen": self.leishen.status() if self.leishen.present else {"present": False},
             "detect": self.detect.status() if getattr(self, "detect", None) else {"pending": True},
             "alt": self.alt.status() if self.alt is not None else None,
+            "afterburner": self.afterburner.status(),
             "busy": self.busy.state(),
             "monitoring": self.monitor_level(),
         }

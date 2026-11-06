@@ -154,6 +154,13 @@ mode, own fan speeds or a curve, Windows key, touchpad, RGB keyboard light, the 
 R16. Since 1.7.0 on the usual pages (*Switches*: Windows key, touchpad), the tray, the rules and `uwccctl mode`; still
 experimental (badge *LEISHEN · EXPERIMENTAL*); commands are off until allowed — [LEISHEN.md](LEISHEN.md).
 
+## MSI Afterburner
+
+Windows, experimental, since 1.7.1: every mode — and every preset of a mode (Turbo 1 / 2, Custom 1–5) — can switch an MSI Afterburner profile slot 1–5 (the overclock stays in
+Afterburner); by default no mode changes it. Applied when the mode changes, when the service starts and when
+Afterburner starts later; *Start Afterburner if it is not running* (on). Card on *Mode selection*, tray, `uwccctl
+afterburner` — [AFTERBURNER.md](AFTERBURNER.md).
+
 ## Platform window
 
 At the first start — and again when what it shows changes (a driver installed, commands allowed) — a window shows

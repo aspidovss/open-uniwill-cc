@@ -363,6 +363,8 @@ pre.code{margin:0;padding:10px 12px;background:var(--bg0);border:1px solid var(-
 .alt-box .card.locked .clevo-cmd{opacity:.45;pointer-events:none}
 .page.alt>:not(.ph):not(.alt-box){display:none!important}
 .alt-box:empty{display:none}
+.ab-grid{display:grid;grid-template-columns:minmax(140px,max-content) minmax(160px,220px);gap:8px 16px;align-items:center;margin:10px 0}
+.ab-now{gap:6px;margin-top:8px}.ab-grid .ab-on{color:var(--acc);font-weight:600}.ab-grid .ab-on::after{content:" ●";font-size:10px}.ab-now .btn.on{border-color:var(--acc);color:var(--acc)}
 .ph .alt-sub{display:none}.page.alt .ph p[data-i]:not(.alt-sub){display:none}.page.alt .ph .alt-sub{display:block}
 .alt-badge{border-color:var(--warn,#f5a524);color:var(--warn,#f5a524);background:rgba(245,165,36,.10);font-size:12px}
 .alt-badge:hover{background:rgba(245,165,36,.18)}

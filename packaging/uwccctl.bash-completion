@@ -10,7 +10,7 @@ _uwccctl() {
     local w=() i
     for ((i = 1; i < cword; i++)); do [[ ${words[i]} == --json ]] || w+=("${words[i]}"); done
     local cmd=${w[0]} sub=${w[1]} n=${#w[@]}
-    local commands="status monitor mode profile boost super ramoc fan battery kb lb clevo leishen detect rules get set apps restore lc
+    local commands="status monitor mode profile boost super ramoc fan battery kb lb clevo leishen detect afterburner rules get set apps restore lc
         history export import report lang debug version update restart resume lighting nvram ec ec-direct release help driver"
     local onoff="on off"
     local modes="office gaming turbo custom quiet entertainment performance powersave"   # Uniwill, Clevo, Leishen
@@ -86,6 +86,12 @@ _uwccctl() {
             fi ;;
         rules) ((n == 1)) && COMPREPLY=($(compgen -W "list export import enable disable clear clear-log" -- "$cur")) ;;
         detect) ((n == 1)) && COMPREPLY=($(compgen -W "run close" -- "$cur")) ;;
+        afterburner)
+            if ((n == 1)); then COMPREPLY=($(compgen -W "1 2 3 4 5 on off launch mode default" -- "$cur"))
+            elif ((n == 2)) && [[ $sub == default ]]; then COMPREPLY=($(compgen -W "1 2 3 4 5 none" -- "$cur"))
+            elif ((n == 2)) && [[ $sub == launch ]]; then COMPREPLY=($(compgen -W "on off" -- "$cur"))
+            elif ((n == 2)) && [[ $sub == mode ]]; then COMPREPLY=($(compgen -W "$modes" -- "$cur"))
+            elif ((n == 3)) && [[ $sub == mode ]]; then COMPREPLY=($(compgen -W "1 2 3 4 5 default keep" -- "$cur")); fi ;;
         leishen)
             if ((n == 1)); then COMPREPLY=($(compgen -W "writes restore hotkey battery-office mode fan winkey touchpad light" -- "$cur"))
             elif ((n == 2)); then

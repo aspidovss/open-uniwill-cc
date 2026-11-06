@@ -309,6 +309,23 @@ FanBoost: оба вентилятора на максимуме.
 .BI "clevo kb sleep " СЕКУНДЫ
 .TP
 .BR "clevo kb boot\-effect " on | off
+.SS MSI Afterburner (Windows, экспериментально)
+.TP
+.B afterburner
+Найден ли, запущен ли, слот профиля каждого режима.
+.TP
+.BI "afterburner " 1-5
+Применить этот профиль MSI Afterburner сейчас.
+.TP
+.BI "afterburner mode " "РЕЖИМ[.N]" " 1-5|keep"
+Профиль, который включает режим или его пресет N (turbo.2, custom.5); keep (по умолчанию) оставляет Afterburner как есть.
+.TP
+.BR "afterburner default " [ 1-5 | none ]
+Слот с заводскими настройками (Reset, затем Save в Afterburner); без аргумента — применить его сейчас.
+Режим с default следует за этим слотом.
+.TP
+.BR "afterburner " on | off ", " "afterburner launch " on | off
+Переключать профили вместе с режимом; запускать закрытый Afterburner (по умолчанию оба вкл.).
 .SS Переключатели и автоматизация
 .TP
 .BR "get " [\fIКЛЮЧ\fR]

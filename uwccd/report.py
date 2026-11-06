@@ -496,7 +496,8 @@ def build(svc, sections=DEFAULT_SECTIONS, private=()):
         "clevo": lambda: clevo_diag.collect(svc),                       # Control Center 3.0 / Clevo, every laptop
         "leishen": lambda: (svc.leishen.diagnostics() if getattr(svc, "leishen", None)       # Leishen / Thunderobot
                             else {"present": False}),
-        "detect": lambda: (svc.detect.status() if getattr(svc, "detect", None) else {}),    # platform, vendor programs
+        "detect": lambda: {**(svc.detect.status() if getattr(svc, "detect", None) else {}),  # platform, vendor programs
+                           "afterburner": svc.afterburner.status() if getattr(svc, "afterburner", None) else None},
     }
     from . import report_oem as O
     from .clevo import diag as clevo_diag

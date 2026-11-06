@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.7.1
+
+- **MSI Afterburner profiles with the mode** (Windows, experimental). Every mode — and on Uniwill every preset of a mode
+  (Office 1 / 2, Gaming 1 / 2, Turbo 1 / 2, Custom 1–5) — can switch an Afterburner profile slot 1–5, for example an
+  undervolt in Office and an overclock in Turbo 2; the overclock itself stays in Afterburner. By default nothing changes
+  the profile. The slot is applied when the mode or preset changes (window, tray, rules, Fn mode key, AC / battery), when the service starts and when Afterburner starts later. The service runs Afterburner's own command
+  line (`MSIAfterburner.exe -ProfileN`) in the signed-in user's session with the user's full token, so there is no UAC
+  prompt. *Start Afterburner if it is not running* (on by default). **Default profile (stock settings)**: the slot saved
+  after Reset in Afterburner — the *Default* button and tray item apply it, *Default* in a mode's list follows it, and
+  *Restore default settings* also clears the Afterburner choices of all modes. Card on *Mode selection*, the tray menu
+  *MSI Afterburner → Profile N*, a line on *Information*, `uwccctl afterburner`, help page
+  [AFTERBURNER.md](docs/AFTERBURNER.md) (new module `uwccd/afterburner.py`).
+- **Contributors:** the license names the project's contributors, new [CONTRIBUTORS.md](CONTRIBUTORS.md), and a thank-you
+  to everyone who sent reports (names are added on request).
+
 ## 1.7.0
 
 - **Control Center 3.0 / Clevo and Leishen / Thunderobot on the usual pages.** Without a Uniwill embedded controller

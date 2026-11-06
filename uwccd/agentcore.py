@@ -56,6 +56,7 @@ TEXT = {
 
 TRAY = {
     "en": {"open": "Open Control Center", "mode": "Mode", "boost": "Fan Boost", "kb": "Keyboard backlight",
+           "ab": "MSI Afterburner", "ab_profile": "Profile {}", "ab_default": "Default (profile {})",
            "lc": "Liquid cooler", "lc_auto": "Automatic", "lc_laptop": "Follow the laptop", "lc_low": "Low",
            "lc_medium": "Medium", "lc_high": "High", "lc_off": "Off", "lc_connect": "Connect", "lc_disconnect": "Disconnect",
            "lang": "Language", "autostart": "Start with Windows", "exit": "Exit", "offline": "no connection to the service",
@@ -71,6 +72,7 @@ TRAY = {
            "admin_declined": "Administrator rights were not granted — EC Manager stays locked",
            "admin_fail": "uwccctl.exe not found"},
     "ru": {"open": "Открыть Control Center", "mode": "Режим", "boost": "Турбовентиляция", "kb": "Подсветка клавиатуры",
+           "ab": "MSI Afterburner", "ab_profile": "Профиль {}", "ab_default": "По умолчанию (профиль {})",
            "lc": "Система охлаждения", "lc_auto": "Автоматический", "lc_laptop": "Как у ноутбука", "lc_low": "Низкий",
            "lc_medium": "Средний", "lc_high": "Высокий", "lc_off": "Выкл", "lc_connect": "Подключить",
            "lc_disconnect": "Отключить", "lang": "Язык", "autostart": "Запускать вместе с Windows", "exit": "Выход",

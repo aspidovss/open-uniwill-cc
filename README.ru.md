@@ -104,6 +104,8 @@ OEM-драйвером — уровень мощности с СЖО (`PWUP`) и
   автоматическое переключение профилей по мощности / температуре / загрузке (1.6.8)
 - **Control Center 3.0 / Clevo** (новое в 1.6.6, экспериментально, отдельный модуль): режимы питания, режимы и кривая
   вентиляторов, цвет и эффекты клавиатуры на ноутбуках с Control Center 3.x — [docs/CLEVO.ru.md](docs/CLEVO.ru.md)
+- **MSI Afterburner** (новое в 1.7.1, экспериментально, Windows): каждый режим может включать профиль Afterburner 1–5 —
+  андервольт в Офисном, разгон в Турбо — [docs/AFTERBURNER.ru.md](docs/AFTERBURNER.ru.md)
 - **СЖО** XMG Oasis (LCT21001 Mk1 / LCT22002 Mk2), Eluktronics Liquid Pad Pro, PCS Liquid Series, TUXEDO Aquaris:
   кривые вентилятора и помпы (общая и по режимам ноутбука), профили охладителя, подсветка, контроль протока, цикл заполнения
 - Интерфейс **на английском и русском**; приложение в трее с уведомлениями в Windows, уведомления рабочего стола в Linux
@@ -135,7 +137,7 @@ OEM-драйвером — уровень мощности с СЖО (`PWUP`) и
 
 | Семейство | ID проекта | Проекты / ноутбуки | Уровень |
 |---|---|---|---|
-| — | `0x10` | MAIBENBEN Tsunami X629, Mechrevo Questyle 16 Super, XMG NEO 16 (E23) | **проверен** |
+| — | `0x10` | MAIBENBEN Tsunami X629, Mechrevo Questyle 16 Super (蛟龙16, Jiaolong 16), XMG NEO 16 (E23) | **проверен** |
 | PHxT | `0x12`–`0x16` | PH4TRX1, PH4TUX1, PH4TQx1, PH6TRX1, PH6TQxx | известен |
 | PHxA | `0x17`, `0x1701`–`0x1707` | PH4ARxx, PH4AUxx, PH4AXxx, PH6AQxx, PH6ARxx, PH6AGxx, PH4AUxf | известен |
 | PHxP | `0x18`, `0x1801`–`0x180D` | PH4PRxx, PH4PUxx, PH4PGx1, PH4PGx2, PH6PRxx, PH6PGEx, PH6PG0x, PH6PG3x, PH6PG7x (и версии 150 W), PH4AQE3 | известен |

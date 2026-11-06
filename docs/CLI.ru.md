@@ -42,6 +42,7 @@ uwccctl mode turbo || echo "ошибка: $?"
 | Команда | |
 |---|---|
 | `mode [office\|gaming\|turbo\|custom]` | показать / сменить режим; Control Center 3.0 / Clevo: `quiet` `entertainment` `performance` `powersave`, Leishen: `office` `gaming` `performance` |
+| `afterburner [1-5\|on\|off\|launch on\|off\|mode РЕЖИМ[.N] 1-5\|default\|keep\|default [1-5\|none]]` | профиль MSI Afterburner каждого режима или пресета (`turbo.2`), применить сейчас (Windows) — [AFTERBURNER.ru.md](AFTERBURNER.ru.md) |
 | `detect [run\|close]` | найденная платформа, чем можно управлять, почему нет и что делать; `close` закрывает программы производителя |
 | `profile [N]` | активный профиль / выбрать ячейку N (с 0) текущего режима |
 | `profile list` | все профили, активный отмечен `*` |

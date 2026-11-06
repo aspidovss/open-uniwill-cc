@@ -290,6 +290,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(200, s.leishen.status())
             if u.path == "/api/detect":                   # which platform, vendor programs running
                 return self._json(200, s.detect.status())
+            if u.path == "/api/afterburner":
+                return self._json(200, s.afterburner.status())
             if u.path == "/api/selfcheck":
                 return self._json(200, {**s.selfcheck.summary(), "result": s.selfcheck.last})
             if u.path == "/api/selfcheck/export":
@@ -345,6 +347,7 @@ class Handler(BaseHTTPRequestHandler):
                 s.power.set_fan_boost(bool(b["on"]))
             elif path == "/api/restore":
                 s.power.restore()
+                s.afterburner.reset()                    # no mode switches an Afterburner profile any more
             elif path.startswith("/api/profile-reset/"):
                 if not hasattr(s.power, "restore_profile"):
                     return self._json(409, {"error": "custom profiles are not available on this platform"})
@@ -471,6 +474,28 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(200, s.clevo.command(b))
             elif path == "/api/leishen":                  # Leishen / Thunderobot (experimental)
                 return self._json(200, s.leishen.command(b))
+            elif path == "/api/afterburner":              # {action: "apply", slot} / {action: "profile", mode, preset?, slot|null}
+                ab = s.afterburner
+                if b.get("action") == "apply":
+                    try:
+                        res = ab.apply(b.get("slot"), "manual", s.current_mode())
+                    except LookupError as e:
+                        raise ValueError(f"nobody is signed in: {e}") from e
+                    if res["error"]:
+                        raise ValueError(res["error"])
+                elif b.get("action") == "profile":           # preset: 0-based index inside the mode, or none
+                    ab.set_profile(b.get("mode"), b.get("slot"), b.get("preset"))
+                elif b.get("action") == "default":           # {slot: 1-5 | null}: which slot holds the stock settings
+                    ab.set_default(b.get("slot"))
+                elif b.get("action") == "apply_default":
+                    if not ab.default_slot():
+                        raise ValueError("no Default profile is set")
+                    res = ab.apply(ab.default_slot(), "default", s.current_mode())
+                    if res["error"]:
+                        raise ValueError(res["error"])
+                else:
+                    raise ValueError("action: apply | profile")
+                return self._json(200, ab.status())
             elif path == "/api/detect":                   # {action: "close", pids: [...]} / {action: "run"}
                 if b.get("action") == "close":
                     done = s.detect.close(b.get("pids") or [])
@@ -682,6 +707,8 @@ class Handler(BaseHTTPRequestHandler):
         elif key in ("clevo_writes", "clevo_restore"):     # Control Center 3.0 / Clevo (experimental)
             s.settings_store.set(key, bool(value))
             s.emit("clevo", {})
+        elif key in ("afterburner", "afterburner_launch"):      # MSI Afterburner integration (on by default)
+            s.settings_store.set(key, bool(value))
         elif key == "detect_seen":                     # the first-start summary was shown
             s.settings_store.set("detect_seen", str(value)[:60] if value else None)
         elif key in ("leishen_writes", "leishen_restore", "leishen_hotkey", "leishen_battery_office"):     # Leishen / Thunderobot (experimental)

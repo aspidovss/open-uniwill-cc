@@ -102,6 +102,8 @@ Super / XMG NEO 16 (E23); on other models every function stays off until the sel
   automatic profile switching by power / temperature / load (1.6.8)
 - **Control Center 3.0 / Clevo** (new in 1.6.6, experimental, separate module): power modes, fan modes and curve,
   keyboard colour and effects on laptops with Control Center 3.x — [docs/CLEVO.md](docs/CLEVO.md)
+- **MSI Afterburner** (new in 1.7.1, experimental, Windows): every mode can switch an Afterburner profile 1–5 —
+  undervolt in Office, overclock in Turbo — [docs/AFTERBURNER.md](docs/AFTERBURNER.md)
 - **Liquid cooler** XMG Oasis (LCT21001 Mk1 / LCT22002 Mk2), Eluktronics Liquid Pad Pro, PCS Liquid Series,
   TUXEDO Aquaris: fan and pump curves (common and per laptop mode), cooler profiles, lighting, coolant flow guard, filling cycle
 - **English and Russian** interface; tray app with notifications on Windows; desktop notifications on Linux
@@ -132,7 +134,7 @@ projects; only `0x10` has been checked on real hardware. The level is shown in t
 
 | Family | Project ID | Projects / laptops | Level |
 |---|---|---|---|
-| — | `0x10` | MAIBENBEN Tsunami X629, Mechrevo Questyle 16 Super, XMG NEO 16 (E23) | **tested** |
+| — | `0x10` | MAIBENBEN Tsunami X629, Mechrevo Questyle 16 Super (蛟龙16, Jiaolong 16), XMG NEO 16 (E23) | **tested** |
 | PHxT | `0x12`–`0x16` | PH4TRX1, PH4TUX1, PH4TQx1, PH6TRX1, PH6TQxx | known |
 | PHxA | `0x17`, `0x1701`–`0x1707` | PH4ARxx, PH4AUxx, PH4AXxx, PH6AQxx, PH6ARxx, PH6AGxx, PH4AUxf | known |
 | PHxP | `0x18`, `0x1801`–`0x180D` | PH4PRxx, PH4PUxx, PH4PGx1, PH4PGx2, PH6PRxx, PH6PGEx, PH6PG0x, PH6PG3x, PH6PG7x (also 150 W), PH4AQE3 | known |

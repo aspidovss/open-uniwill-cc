@@ -42,6 +42,7 @@ uwccctl mode turbo || echo "failed: $?"
 | Command | |
 |---|---|
 | `mode [office\|gaming\|turbo\|custom]` | show / switch the mode; Control Center 3.0 / Clevo: `quiet` `entertainment` `performance` `powersave`, Leishen: `office` `gaming` `performance` |
+| `afterburner [1-5\|on\|off\|launch on\|off\|mode MODE[.N] 1-5\|default\|keep\|default [1-5\|none]]` | MSI Afterburner profile of every mode or preset (`turbo.2`), apply one now (Windows) — [AFTERBURNER.md](AFTERBURNER.md) |
 | `detect [run\|close]` | platform found, what can be controlled, why not and what to do; `close` ends the vendor programs |
 | `profile [N]` | show the active profile / select slot N (from 0) of the current mode |
 | `profile list` | all profiles, the active one marked `*` |

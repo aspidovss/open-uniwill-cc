@@ -1039,3 +1039,20 @@ Object.assign(RU, {
   "The power modes of this laptop's own firmware interface.": "Режимы питания собственного интерфейса прошивки этого ноутбука.",
   "The fans of this laptop's own firmware interface: automatic, fixed speed or your own curve.": "Вентиляторы через собственный интерфейс прошивки этого ноутбука: автоматически, постоянная скорость или своя кривая.",
 });
+
+// 1.7.1: MSI Afterburner profiles with the mode
+Object.assign(RU, {
+  "not found": "не найден", "running": "запущен", "not running": "не запущен",
+  "Last: profile {0}": "Последний: профиль {0}", "do not change": "не менять", "Profile {0}": "Профиль {0}",
+  "Apply now:": "Применить сейчас:", "Afterburner: profile {0}": "Afterburner: профиль {0}",
+  "The overclock or undervolt stays in MSI Afterburner, saved in its profiles 1–5; here every mode and every preset of a mode can switch one of them. Nothing is changed for “do not change”.":
+    "Разгон или андервольт настраивается в MSI Afterburner и сохраняется в его профили 1–5; здесь каждый режим и каждый пресет режима может включать один из них. При «не менять» ничего не меняется.",
+  "Switch Afterburner profiles with the mode": "Переключать профили Afterburner вместе с режимом",
+  "Start Afterburner if it is not running": "Запускать Afterburner, если он не запущен",
+  "MSI Afterburner (experimental)": "MSI Afterburner (экспериментально)",
+  "Default ({0})": "По умолчанию ({0})", "Default (not set)": "По умолчанию (не задан)", "not set": "не задан",
+  "Default profile (stock settings)": "Стандартный профиль (заводские настройки)", "Default": "По умолчанию",
+  "In MSI Afterburner press Reset, then Save into a slot: that slot holds the stock clocks. “Default” in the list of a mode follows this slot.":
+    "В MSI Afterburner нажмите Reset, затем Save в один из слотов: в нём будут заводские частоты. «По умолчанию» в списке режима следует за этим слотом.",
+  "Afterburner: default profile": "Afterburner: стандартный профиль",
+});

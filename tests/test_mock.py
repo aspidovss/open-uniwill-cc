@@ -1413,7 +1413,7 @@ class DriverCheckUnit(unittest.TestCase):
 class MarkdownHelpUnit(unittest.TestCase):
     def test_docs_exist(self):
         for f in ("EC/Platforms.md", "EC/Platforms.ru.md", "EC/OEM-driver.md", "EC/OEM-driver.ru.md", "EC/WMI-config.md",
-                  "EC/WMI-vs-Driver.md", "EC/Registers.md", "EC/README.md", "FEATURES.md", "FEATURES.ru.md", "CLI.md", "CLI.ru.md", "LEISHEN.md", "LEISHEN.ru.md",
+                  "EC/WMI-vs-Driver.md", "EC/Registers.md", "EC/README.md", "FEATURES.md", "FEATURES.ru.md", "CLI.md", "CLI.ru.md", "LEISHEN.md", "LEISHEN.ru.md", "AFTERBURNER.md", "AFTERBURNER.ru.md",
                   "LIGHTING.md", "LIGHTING.ru.md"):
             self.assertTrue(os.path.isfile(os.path.join(ROOT, "docs", f)), f)
 
@@ -2227,6 +2227,122 @@ class DetectUnit2(unittest.TestCase):
         rx = dict(D.VENDOR_APPS)
         self.assertTrue(re.search(rx["Leishen ControlCenter"], r"c:\program files (x86)\leishen\controlcenter\controlcenter.exe"))
         self.assertTrue(re.search(D.OWN_RE, r"c:\program files\uwcc control center\controlcenter.exe"))
+
+
+class AfterburnerUnit(unittest.TestCase):
+    """1.7.1: every mode can switch an MSI Afterburner profile slot (its command line -Profile<N>)."""
+
+    def make(self, running=True, **st):
+        from uwccd import afterburner as A
+
+        class Store(dict):
+            def set(self, k, v):
+                self[k] = v
+        store = Store(st)
+        self.mode, self.preset = 0, None
+        self.cmds = []
+        self.run = running
+        ab = A.Afterburner(store, lambda: (self.mode, self.preset), runner=lambda c: self.cmds.append(c) or 1,
+                           finder=lambda: {"path": r"C:\MSI Afterburner\MSIAfterburner.exe", "version": "4.6.6"},
+                           is_running=lambda: self.run)
+        ab.install = ab.finder()
+        return ab, store
+
+    def test_default_changes_nothing(self):
+        ab, store = self.make()
+        self.assertTrue(ab.enabled())
+        ab.check()
+        self.mode = 2
+        ab.check()
+        self.assertEqual(self.cmds, [])                       # no slot set for any mode: Afterburner is left alone
+
+    def test_mode_slot(self):
+        ab, store = self.make(afterburner_profiles={"0": 1, "2": 3})
+        ab.check()                                            # the service starts in Office: slot 1
+        self.mode = 1
+        ab.check()                                            # Gaming has no slot: nothing
+        self.mode = 2
+        ab.check()
+        ab.check()                                            # the same mode again: not sent twice
+        self.assertEqual([c[1] for c in self.cmds], ["-Profile1", "-Profile3"])
+        self.assertEqual(ab.status()["last"]["slot"], 3)
+        ab.set_profile(2, 4)                                  # the slot of the current mode changed: applied now
+        self.assertEqual(self.cmds[-1][1], "-Profile4")
+        ab.set_profile(2, None)
+        self.assertNotIn("2", store["afterburner_profiles"])
+        with self.assertRaises(ValueError):
+            ab.set_profile(1, 7)
+
+    def test_presets(self):
+        """A preset inside a mode (Turbo 1 / 2, Custom 1-5) can have its own slot; without one it uses its mode's."""
+        ab, store = self.make(afterburner_profiles={"2": 3})
+        self.mode, self.preset = 2, 0
+        ab.check()
+        ab.set_profile(2, 4, preset=1)                     # Turbo 2 -> profile 4
+        ab.set_profile(2, None, preset=0)                  # Turbo 1: do not change, although Turbo has 3
+        self.assertEqual(store["afterburner_profiles"], {"2": 3, "2.1": 4, "2.0": 0})
+        self.preset = 1
+        ab.check()                                         # Turbo 1 -> Turbo 2: the preset's own slot
+        self.preset = 0
+        ab.check()                                         # back to Turbo 1: nothing sent
+        self.mode, self.preset = 3, 2
+        ab.check()                                         # Custom 3: no slot, nothing
+        ab.set_profile(3, 5, preset=2)                     # the preset running now: applied at once
+        self.assertEqual([c[1] for c in self.cmds], ["-Profile3", "-Profile4", "-Profile5"])
+        self.assertIsNone(ab.slot_for(1, 0))
+        self.assertEqual(ab.slot_for(2, 4), 3)              # a preset without an entry: its mode's slot
+        with self.assertRaises(ValueError):
+            ab.set_profile(2, 1, preset=7)
+
+    def test_default_slot(self):
+        """Default: the slot holding the stock settings; "Default" in a mode follows it; Restore clears the bindings."""
+        ab, store = self.make()
+        ab.set_default(1)
+        ab.set_profile(0, "default")                       # Office -> Default
+        ab.set_profile(2, 4, preset=1)
+        self.assertEqual(ab.slot_for(0, 0), 1)
+        ab.check()                                         # Office: the Default slot
+        ab.set_default(2)                                  # Default moved: Office follows it
+        self.assertEqual(ab.slot_for(0, None), 2)
+        self.assertEqual(ab.status()["default"], 2)
+        ab.set_default(None)
+        self.assertIsNone(ab.slot_for(0, None))            # no Default set: nothing to apply
+        ab.reset()
+        self.assertEqual(ab.profiles(), {})
+        self.assertEqual(self.cmds[0][1], "-Profile1")
+        with self.assertRaises(ValueError):
+            ab.set_default(9)
+
+    def test_not_running_and_launch_off(self):
+        ab, store = self.make(running=False, afterburner_launch=False, afterburner_profiles={"0": 2})
+        ab.check()
+        self.assertEqual(self.cmds, [])                       # closed and starting it is off: skipped, kept pending
+        self.assertEqual(ab.pending, 2)
+        self.run = True
+        from unittest import mock
+        with mock.patch("uwccd.afterburner.LATE_START_S", 0):
+            ab.check()                                        # it started: the slot of the mode now
+        self.assertEqual([c[1] for c in self.cmds], ["-Profile2"])
+
+    def test_launch_on_starts_it(self):
+        ab, _ = self.make(running=False, afterburner_profiles={"0": 5})
+        ab.check()
+        self.assertEqual(self.cmds[0][1], "-Profile5")       # the command starts a closed Afterburner
+
+    def test_off_and_nobody_signed_in(self):
+        ab, store = self.make(afterburner=False, afterburner_profiles={"0": 1})
+        ab.check()
+        self.assertEqual(self.cmds, [])
+        store["afterburner"] = True
+
+        def nobody(_c):
+            raise LookupError("no user")
+        ab.runner = nobody
+        ab.check()
+        self.assertEqual(ab.pending, 1)                       # again at the next check
+        ab.runner = lambda c: self.cmds.append(c)
+        ab.check()
+        self.assertEqual(self.cmds[-1][1], "-Profile1")
 
 
 class ReportPrivacyUnit(unittest.TestCase):

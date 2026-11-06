@@ -174,7 +174,7 @@ function render() {
   }
   renderModes(); renderFanPage(); renderLiquid(); renderLight(); renderBattery(); renderSwitches(); renderBinding(); renderInfo(); renderAuto(); renderAbout(); renderReportCard();
   renderHistSeg(); drawHistory();
-  renderAltPages(); renderDriver(); renderEcBanner(); applyFeatures(); renderBusy(S.busy || []); renderMonOff(); setupCollapsible();
+  renderAltPages(); renderAfterburner(); renderDriver(); renderEcBanner(); applyFeatures(); renderBusy(S.busy || []); renderMonOff(); setupCollapsible();
 }
 
 // ---------------------------------------------------------------- monitor
@@ -1344,7 +1344,8 @@ function renderInfo() {
     [t("Hotkeys"), p.hotkeys ? (p.os === "windows" ? "WMI (AcpiTest_EventULong)" : t("uwcc kernel module")) : t("EC polling (no module)")], ["NVRAM (UniWillVariable)", p.nvram ? t("available") : t("unavailable")],
     [tipLabel("RamFan 1.5", t("Fan control of the EC firmware (name from the original Uniwill service): fan curves in the EC memory, Custom mode, power limits. Without it the program does not control the fans.")), p.ramfan15 ? t("yes") : t("no")], [t("Turbo mode"), p.turbo_support ? t("supported") : t("no")], [t("NVIDIA graphics"), p.nv_gpu ? t("yes") : t("no")],
     [t("Platform"), p.amd ? "AMD" : "Intel"], [t("Power adapter"), `${p.adapter_watt} ${t("W")}`],
-    [t("Liquid cooling (EC)"), lc.ec_support ? (lc.ec_table ? t("supported, EC targets") : t("supported")) : t("not declared")]]);
+    [t("Liquid cooling (EC)"), lc.ec_support ? (lc.ec_table ? t("supported, EC targets") : t("supported")) : t("not declared")],
+    ...(S.afterburner && S.afterburner.available ? [["MSI Afterburner", abLine(S.afterburner)]] : [])]);
   const d = $("#info-disks"); d.innerHTML = "";
   for (const x of i.disks.devices) d.append(h("div", { class: "row between", style: "padding:6px 0;border-bottom:1px solid var(--line)" },
     h("span", {}, `${x.name} · ${x.model || ""}`), h("span", { class: "muted" }, `${x.size_gb} ${t("GB")}${x.temp != null ? ` · ${x.temp}°C` : ""}${x.rotational ? " · HDD" : " · SSD"}`)));
@@ -1352,6 +1353,58 @@ function renderInfo() {
   if (p.support === "experimental") w.push(t("This laptop has not been tested with Open Uniwill CC yet. Modes and fans usually work the same way, but please check them carefully and send a diagnostic report (below on this page) — it helps to mark the model as supported."));
   if (p.ec_backend === "mock") w.push(t("The service runs in simulation mode (--mock): changes are not applied to hardware."));
   $("#info-warn").classList.toggle("hidden", !w.length); $("#info-warn").innerHTML = ""; for (const x of w) $("#info-warn").append(h("p", {}, "⚠ " + x));
+}
+
+
+// MSI Afterburner (Windows, experimental): every mode can switch an Afterburner profile slot (uwccd/afterburner.py)
+function abLine(a) {
+  if (!a || !a.found) return t("not found");
+  return `${a.version || ""} · ${a.running ? t("running") : t("not running")}`.replace(/^ · /, "");
+}
+function renderAfterburner() {
+  const box = $("#modes-ab"), a = S.afterburner;
+  box.replaceChildren();
+  if (!a || !a.available || !a.found) return;
+  const last = a.last, lastTxt = last ? t("Last: profile {0}", last.slot) + (last.error ? ` — ${errText(last.error)}` : "") : "";
+  const sw = (on, key) => h("label", { class: "sw" }, h("input", { type: "checkbox", ...(on ? { checked: true } : {}), onchange: e => act(() => api("setting", { key, value: e.target.checked })) }), h("span"));
+  // one row per mode; a Uniwill mode with presets (Office 1 / 2 … Custom 1-5): one row per preset
+  const P = a.profiles || {}, now = a.now || [];
+  const slotOf = (mode, pre) => pre != null && (`${mode}.${pre}` in P) ? P[`${mode}.${pre}`] : (P[String(mode)] ?? 0);
+  const rows = h("div", { class: "ab-grid" });
+  const row = (label, mode, pre, active) => {
+    const cur = slotOf(mode, pre);
+    const sel = h("select", { ...(a.enabled ? {} : { disabled: true }), onchange: e => act(() => api("afterburner", { action: "profile", mode, preset: pre,
+        slot: e.target.value === "default" ? "default" : e.target.value ? +e.target.value : null })) },
+      h("option", { value: "" }, t("do not change")),
+      h("option", { value: "default", ...(+cur === -1 ? { selected: true } : {}) }, a.default ? t("Default ({0})", a.default) : t("Default (not set)")),
+      ...[1, 2, 3, 4, 5].map(n => h("option", { value: n, ...(+cur === n ? { selected: true } : {}) }, t("Profile {0}", n))));
+    rows.append(h("span", { class: active ? "ab-on" : "" }, label), sel);
+  };
+  const pkey = { 0: "office", 1: "gaming", 2: "turbo", 3: "custom" };
+  for (const m of platModes()) {
+    const n = !S.alt && isStd() ? ((S.power.slots || {})[pkey[m.id]] || 1) : 1;
+    if (n < 2) { row(t(m.name), m.id, null, now[0] === m.id); continue; }
+    for (let i = 0; i < n; i++) {
+      const pn = `Mode${{ 1: 1, 0: 2, 2: 3, 3: 4 }[m.id]}_Profile${i + 1}`;
+      row(`${t(m.name)} · ${m.id === 3 ? slotName(S.profiles[pn], i + 1) : i + 1}`, m.id, i, now[0] === m.id && now[1] === i);
+    }
+  }
+  const defSel = h("select", { onchange: e => act(() => api("afterburner", { action: "default", slot: e.target.value ? +e.target.value : null })) },
+    h("option", { value: "" }, t("not set")), ...[1, 2, 3, 4, 5].map(n => h("option", { value: n, ...(a.default === n ? { selected: true } : {}) }, t("Profile {0}", n))));
+  const defRow = h("div", { class: "clevo-row" }, h("span", {}, tipLabel(t("Default profile (stock settings)"),
+      t("In MSI Afterburner press Reset, then Save into a slot: that slot holds the stock clocks. “Default” in the list of a mode follows this slot."))), defSel,
+    h("button", { class: "btn sm", ...(a.enabled && a.default ? {} : { disabled: true }), onclick: () => act(() => api("afterburner", { action: "apply_default" }), t("Afterburner: default profile")) }, t("Default")));
+  const nowBox = h("div", { class: "row wrap ab-now" }, h("span", { class: "muted" }, t("Apply now:")),
+    ...[1, 2, 3, 4, 5].map(n => h("button", { class: "btn ghost sm" + (last && last.slot === n && !last.error ? " on" : ""), ...(a.enabled ? {} : { disabled: true }),
+      onclick: () => act(() => api("afterburner", { action: "apply", slot: n }), t("Afterburner: profile {0}", n)) }, String(n))));
+  box.append(h("div", { class: "card" }, h("h3", {}, "MSI Afterburner", h("span", { class: "clevo-exp" }, t("experimental"))),
+    h("p", { class: "muted" }, t("The overclock or undervolt stays in MSI Afterburner, saved in its profiles 1–5; here every mode and every preset of a mode can switch one of them. Nothing is changed for “do not change”.")),
+    h("div", { class: "clevo-row" }, h("span", {}, t("Switch Afterburner profiles with the mode")), sw(a.enabled, "afterburner")),
+    defRow,
+    rows,
+    h("div", { class: "clevo-row" }, h("span", {}, t("Start Afterburner if it is not running")), sw(a.launch, "afterburner_launch")),
+    nowBox,
+    h("p", { class: "muted tiny" }, `MSI Afterburner ${abLine(a)}` + (lastTxt ? ` · ${lastTxt}` : ""))));
 }
 
 
@@ -3366,6 +3419,7 @@ const HELP_PAGES = [
   { id: "lighting", name: "BetterRGB keyboard effects", en: "LIGHTING.md", ru: "LIGHTING.ru.md" },
   { id: "clevo", name: "Control Center 3.0 / Clevo (experimental)", en: "CLEVO.md", ru: "CLEVO.ru.md" },
   { id: "leishen", name: "Leishen / Thunderobot (experimental)", en: "LEISHEN.md", ru: "LEISHEN.ru.md" },
+  { id: "afterburner", name: "MSI Afterburner (experimental)", en: "AFTERBURNER.md", ru: "AFTERBURNER.ru.md" },
   { id: "cli", name: "Command line (uwccctl)", en: "CLI.md", ru: "CLI.ru.md" },
 ];
 var helpCur = null;                     // var: setLang() may run before this line
