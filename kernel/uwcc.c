@@ -132,8 +132,10 @@ static int uwcc_smrw(struct uwcc_smrw *r)
 	mutex_lock(&ec_lock);
 	st = acpi_evaluate_object(inou_handle, "SMRW", &args, &out);
 	mutex_unlock(&ec_lock);
-	if (ACPI_FAILURE(st))
+	if (ACPI_FAILURE(st)) {			/* the method itself failed: EIO */
+		pr_info_ratelimited("SMRW key 0x%02x: %s\n", r->in[1], acpi_format_exception(st));
 		return -EIO;
+	}
 	obj = out.pointer;
 	memset(r->out, 0, sizeof(r->out));
 	if (obj && obj->type == ACPI_TYPE_BUFFER) {
@@ -144,6 +146,10 @@ static int uwcc_smrw(struct uwcc_smrw *r)
 
 		memcpy(r->out, &v, sizeof(r->out));
 		ret = 0;
+	} else {				/* no reply, or a package / string: EPROTO, not EIO */
+		pr_info_ratelimited("SMRW key 0x%02x: reply type %d%s\n", r->in[1],
+				    obj ? (int)obj->type : -1, obj ? "" : " (no value)");
+		ret = -EPROTO;
 	}
 	kfree(out.pointer);
 	return ret;

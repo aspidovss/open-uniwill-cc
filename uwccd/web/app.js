@@ -345,6 +345,7 @@ function renderProfileEditor(force) {
   $("#pe-title").textContent = custom ? t("Custom slot: {0}", slotName(prof, +name.slice(-1))) : t("Profile settings: {0}", tableLabel(prof.FAN.TableName));
   $("#pe-note").textContent = t("The values are applied on AC power; on battery the controller's own limits are used.") +
     (L.source === "ec-defaults" ? " " + t("The firmware limit table could not be read, limits are taken from the controller defaults.") : "") +
+    ((L.missing || []).length ? " " + t("The firmware limit table did not answer for {0}: those limits come from the controller defaults or are not offered.", L.missing.join(", ")) : "") +
     (L.source === "config" ? " " + t("WMI path: limits are approximate — taken from the platform profile and the WMI settings in EC Manager.") + " " +
       t("Through WMI the extra graphics power is reached only in the stock Turbo mode; Dynamic Boost here adds power only while the processor leaves room.") : "");
   $("#pe-reset").textContent = custom ? t("Reset slot to factory") : t("Reset profile to factory");

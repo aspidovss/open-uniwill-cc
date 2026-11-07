@@ -85,17 +85,27 @@ class ECBase:
         with self.lock:
             return self._pwup(int(level) & 0x07)
 
+    SMAPC_NAMES = ("PL1", "PL2", "PL4", "TccOffset", "ConfigurableTGP", "DynamicBoost",
+                   "TargetTemperature", "DefaultTGP", "DynamicBoostCpuTdp")
+
     def smart_apc_table(self):
-        """SmartApcTableCtrl.GetTableByDriver: SMRW(Buffer{0xBB, key}) for key 0..11, first byte of each
-        reply -> SMAPCTABLE_STRUCT {PL1, PL2, PL4, TccOffset, ConfigurableTGP, DynamicBoost,
-        TargetTemperature, DefaultTGP, DynamicBoostCpuTdp}. None when the firmware has no SMRW."""
-        raw = []
+        """SmartApcTableCtrl.GetTableByDriver: SMRW(Buffer{0xBB, key}), first byte of each reply ->
+        SMAPCTABLE_STRUCT {PL1, PL2, PL4, TccOffset, ConfigurableTGP, DynamicBoost, TargetTemperature, DefaultTGP,
+        DynamicBoostCpuTdp} (keys 0..8, the ones used). A key that fails is None and the others are kept (1.7.2:
+        one failing key used to drop the whole table — MECHREVO Yaoshi 0x1A on Linux, issue #5); its error is in
+        self.smapc_errors. ECError when no key answers."""
+        out, errors = {}, {}
         with self.lock:
-            for key in range(12):
-                raw.append(self._smrw(key))
-        names = ("PL1", "PL2", "PL4", "TccOffset", "ConfigurableTGP", "DynamicBoost",
-                 "TargetTemperature", "DefaultTGP", "DynamicBoostCpuTdp")
-        return dict(zip(names, raw))
+            for key, name in enumerate(self.SMAPC_NAMES):
+                try:
+                    out[name] = self._smrw(key)
+                except ECError as e:
+                    out[name] = None
+                    errors[name] = str(e)
+        self.smapc_errors = errors
+        if errors and len(errors) == len(self.SMAPC_NAMES):
+            raise ECError(next(iter(errors.values())))
+        return out
 
     def close(self):
         pass

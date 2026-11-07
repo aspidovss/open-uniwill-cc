@@ -2259,6 +2259,53 @@ class DetectUnit2(unittest.TestCase):
         self.assertEqual(D.platform_of(Svc())["platform"], "clevo")   # Clevo only: unchanged
 
 
+class SmartApcUnit(unittest.TestCase):
+    """1.7.2 (issue #5): a key of the firmware limit table SMRW that fails no longer drops the whole table."""
+
+    def ec(self, bad):
+        from uwccd.ec import ECError, MockEC
+
+        class EC(MockEC):
+            def _smrw(self, key):
+                if key in bad:
+                    raise ECError("SMRW: [Errno 5] Input/output error")
+                return super()._smrw(key)
+        return EC(os.path.join(tempfile.mkdtemp(prefix="uwcc-sm-"), "ec.json"))
+
+    def limits(self, ec):
+        import types
+        from uwccd import fan_std
+        o = types.SimpleNamespace(ec=ec, pl_default={m: {"PL1": 45, "PL2": 90, "PL4": 120} for m in
+                                                     ("gaming", "office", "turbo")})
+        o.read_pl_defaults = lambda: None
+        o._tcc_max = lambda: 10
+        fan_std.PowerManagerStd.read_limits(o)
+        return o.limits
+
+    def test_partial_table(self):
+        ec = self.ec({4, 5, 7})                         # cTGP, Dynamic Boost, DefaultTGP do not answer
+        sm = ec.smart_apc_table()
+        self.assertIsNone(sm["ConfigurableTGP"])
+        self.assertEqual(sorted(ec.smapc_errors), ["ConfigurableTGP", "DefaultTGP", "DynamicBoost"])
+        L = self.limits(ec)
+        self.assertTrue(L["source"].startswith("firmware"))
+        self.assertIn("partial", L["source"])
+        self.assertEqual(L["pl4_max"], ec.SMAPC[2])     # the keys that answered are kept
+        self.assertEqual(L["missing"], ["ConfigurableTGP", "DefaultTGP", "DynamicBoost"])
+        self.assertFalse(L["ctgp_support"])
+
+    def test_processor_key_missing_uses_ec_default(self):
+        L = self.limits(self.ec({0}))                   # PL1 does not answer: the EC default, not 0
+        self.assertEqual(L["pl1_max"], 45)
+
+    def test_nothing_answers(self):
+        from uwccd.ec import ECError
+        ec = self.ec(set(range(9)))
+        with self.assertRaises(ECError):
+            ec.smart_apc_table()
+        self.assertEqual(self.limits(ec)["source"], "ec-defaults")
+
+
 class AfterburnerUnit(unittest.TestCase):
     """1.7.1: every mode can switch an MSI Afterburner profile slot (its command line -Profile<N>)."""
 

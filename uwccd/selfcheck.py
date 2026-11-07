@@ -303,10 +303,13 @@ class SelfCheck:
         try:
             sm = ec.smart_apc_table()
             src = getattr(ec, "smapc_source", "firmware")
-            add(_item("smrw", "registers", "Power limit table", "ok",
+            errs = getattr(ec, "smapc_errors", None) or {}
+            add(_item("smrw", "registers", "Power limit table", "warn" if errs else "ok",
                       ("SMRW (firmware): " if src == "firmware" else "from the platform profile: ") +
-                      ", ".join(f"{k} {v}" for k, v in sm.items() if k in ("PL1", "PL2", "PL4", "DefaultTGP", "DynamicBoost"))))
-            r["smapc"] = {"source": src, "values": sm}
+                      ", ".join(f"{k} {v}" for k, v in sm.items()
+                                if k in ("PL1", "PL2", "PL4", "DefaultTGP", "DynamicBoost") and v is not None) +
+                      (f"; no answer for {', '.join(errs)} ({'; '.join(sorted(set(errs.values())))})" if errs else "")))
+            r["smapc"] = {"source": src, "values": sm, "errors": errs}
         except Exception as e:  # noqa: BLE001
             add(_item("smrw", "registers", "Power limit table", "warn", str(e)))
             unk.append("no power limit table: " + str(e))

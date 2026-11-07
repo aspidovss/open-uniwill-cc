@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.7.2
+
+- **Power limit table on boards where some keys do not answer** ([issue #5](https://github.com/aspidovss/open-uniwill-cc/issues/5),
+  MECHREVO Yaoshi X6AR55xY, project 0x1A, Linux). One key of the firmware table `SMRW` that failed used to drop the
+  whole table, so the limits fell back to the controller defaults and cTGP / Dynamic Boost of the graphics card were not
+  offered. Now the keys that answer are kept, a processor limit that does not answer comes from the controller
+  defaults, the others are not offered, and the self-check, the profile editor and the log name the missing keys. Only
+  the 9 keys in use are read (12 before).
+- **Kernel module `uwcc` (DKMS 1.7.2):** `SMRW` errors are told apart — `EIO` when the ACPI method fails, `EPROTO`
+  when it returns no value or something else than a buffer or a number — and each is written to the kernel log with
+  the ACPI status or the reply type (`dmesg | grep uwcc`). Reinstall (`sudo ./install.sh`) to rebuild it.
+- **Platform window** (PR #6 by [Maximora-byte](https://github.com/Maximora-byte)): a Uniwill board that also answers
+  the Clevo interface (MECHREVO Yaoshi X6AR55xY) is shown as Uniwill, without the "allow Clevo commands" offer — the
+  same rule the service uses.
+
 ## 1.7.1
 
 - **MSI Afterburner profiles with the mode** (Windows, experimental). Every mode — and on Uniwill every preset of a mode

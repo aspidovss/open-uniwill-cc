@@ -183,20 +183,31 @@ class PowerManagerStd(PowerManager):
         self.tcc_default = {"gaming": g, "office": o, "turbo": t}
         for k, v in self.tcc_default.items():
             self.pl_default[k]["TCC"] = v
+        tb = self.pl_default["turbo"]
+        fallback = {"PL1": max(tb["PL1"], self.pl_default["gaming"]["PL1"]),
+                    "PL2": max(tb["PL2"], self.pl_default["gaming"]["PL2"]),
+                    "PL4": max(tb["PL4"], tb["PL2"]), "TccOffset": max(15, *self.tcc_default.values()),
+                    "ConfigurableTGP": 0, "DynamicBoost": 0, "TargetTemperature": 87, "DefaultTGP": 0,
+                    "DynamicBoostCpuTdp": 0}
+        self.smapc_missing = []
         try:
             sm = self.ec.smart_apc_table()
-            if sm.get("PL4", 0) == 0 or all(v == 0xFF for v in sm.values()):   # CheckIvalidSmartAPCTable
+            got = {k: v for k, v in sm.items() if v is not None}
+            if got.get("PL4", 0) == 0 or all(v == 0xFF for v in got.values()):   # CheckIvalidSmartAPCTable
                 raise ValueError(f"invalid table {sm}")
-            sm = {k: (0 if v == 0xFF else v) for k, v in sm.items()}            # CheckInvalidSmartApcTable
+            # a key that did not answer: the processor limits from the EC defaults, the rest 0 (= not offered)
+            self.smapc_missing = sorted(k for k, v in sm.items() if v is None)
+            sm = {k: fallback[k] if v is None else (0 if v == 0xFF else v)          # CheckInvalidSmartApcTable
+                  for k, v in {**fallback, **sm}.items()}
             src = getattr(self.ec, "smapc_source", "firmware")   # WMI: limits from ec_wmi.json
+            if self.smapc_missing:
+                log.warning("Smart APC table: keys %s did not answer (%s) — EC defaults / not offered for them",
+                            ", ".join(self.smapc_missing), "; ".join(sorted(set(
+                                (getattr(self.ec, "smapc_errors", {}) or {}).values()))) or "?")
+                src += " (partial)"
         except Exception as e:  # noqa: BLE001
             log.warning("Smart APC table unavailable (%s) — limits taken from the EC PL defaults", e)
-            tb = self.pl_default["turbo"]
-            sm = {"PL1": max(tb["PL1"], self.pl_default["gaming"]["PL1"]),
-                  "PL2": max(tb["PL2"], self.pl_default["gaming"]["PL2"]),
-                  "PL4": max(tb["PL4"], tb["PL2"]), "TccOffset": max(15, *self.tcc_default.values()),
-                  "ConfigurableTGP": 0, "DynamicBoost": 0, "TargetTemperature": 87, "DefaultTGP": 0,
-                  "DynamicBoostCpuTdp": 0}
+            sm = dict(fallback)
             src = "ec-defaults"
         self.smapc = sm
         self.limits = {
@@ -206,7 +217,7 @@ class PowerManagerStd(PowerManager):
             "tcc_fw_max": sm["TccOffset"], "tcc_max": 0, "tjmax": tjmax(),
             "tgp_default": sm["DefaultTGP"], "tgp_max": sm["DefaultTGP"] + sm["ConfigurableTGP"],
             "ctgp_support": sm["ConfigurableTGP"] > 0, "db_max": sm["DynamicBoost"],
-            "db_support": sm["DynamicBoost"] > 0,
+            "db_support": sm["DynamicBoost"] > 0, "missing": list(self.smapc_missing),
         }
         self.limits["tcc_max"] = self._tcc_max()
         log.info("custom-mode limits (%s): %s", src, self.limits)

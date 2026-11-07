@@ -1056,3 +1056,9 @@ Object.assign(RU, {
     "В MSI Afterburner нажмите Reset, затем Save в один из слотов: в нём будут заводские частоты. «По умолчанию» в списке режима следует за этим слотом.",
   "Afterburner: default profile": "Afterburner: стандартный профиль",
 });
+
+// 1.7.2
+Object.assign(RU, {
+  "The firmware limit table did not answer for {0}: those limits come from the controller defaults or are not offered.":
+    "Таблица пределов прошивки не ответила для {0}: эти пределы взяты из значений контроллера по умолчанию или не предлагаются.",
+});
