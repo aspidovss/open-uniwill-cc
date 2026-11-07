@@ -2228,6 +2228,36 @@ class DetectUnit2(unittest.TestCase):
         self.assertTrue(re.search(rx["Leishen ControlCenter"], r"c:\program files (x86)\leishen\controlcenter\controlcenter.exe"))
         self.assertTrue(re.search(D.OWN_RE, r"c:\program files\uwcc control center\controlcenter.exe"))
 
+    def test_uniwill_ec_wins_over_clevo_interface(self):
+        """A Uniwill board that also answers the Clevo WMI GUID (MECHREVO Yaoshi X6AR55xY, project 0x1A)."""
+        from uwccd import detect as D
+
+        class Clevo:
+            present = True
+
+            class dchu:
+                name = "uwcc-module"
+
+            def writes_allowed(self):
+                return False
+
+        class Pf:
+            project_raw, project_name, display_name, support = 0x1A, "0x1A", "MECHREVO (project 0x1A)", "experimental"
+
+        class Kb:
+            def status(self):
+                return {"kind": "rgb"}
+
+        class Svc:
+            ec_info = {"active": "uwcc-module"}
+            clevo, leishen, pf, fan_control, keyboard = Clevo(), None, Pf(), True, Kb()
+        r = D.platform_of(Svc())
+        self.assertEqual(r["platform"], "uniwill")
+        self.assertNotIn("allow_key", r)                              # no "allow Clevo writes" offer
+        Svc.ec_info = {"active": "none"}
+        Svc.pf = None
+        self.assertEqual(D.platform_of(Svc())["platform"], "clevo")   # Clevo only: unchanged
+
 
 class AfterburnerUnit(unittest.TestCase):
     """1.7.1: every mode can switch an MSI Afterburner profile slot (its command line -Profile<N>)."""
