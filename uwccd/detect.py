@@ -102,7 +102,12 @@ def platform_of(svc):
     ec_info = getattr(svc, "ec_info", None) or {}
     ec_active = ec_info.get("active")
     clevo, leishen = getattr(svc, "clevo", None), getattr(svc, "leishen", None)
-    if clevo is not None and clevo.present:
+    pf = getattr(svc, "pf", None)
+    # A Uniwill EC that answers comes first: some Uniwill boards (e.g. MECHREVO Yaoshi X6AR55xY, project 0x1A)
+    # also expose the Clevo WMI GUID ABBC0F6D, so the Clevo interface is "present" there too. Same rule as
+    # altplat.alt_platform(): Clevo / Leishen only when there is no Uniwill EC.
+    uniwill_ec = ec_active not in (None, "none") and pf is not None and bool(pf.project_raw)
+    if not uniwill_ec and clevo is not None and clevo.present:
         signals.append(f"Control Center 3.0 / Clevo interface ({clevo.dchu.name})")
         w = clevo.writes_allowed()
         st, why = ("try", None) if w else ("no", "writes_off")
@@ -111,7 +116,7 @@ def platform_of(svc):
                  _f("Keyboard backlight", st, why, *act)]
         return {"platform": "clevo", "level": "experimental", "name": "Control Center 3.0 / Clevo",
                 "signals": signals, "features": feats, "page": "modes", "allow_key": "clevo_writes"}
-    if leishen is not None and leishen.present:
+    if not uniwill_ec and leishen is not None and leishen.present:
         info = leishen.info or {}
         signals.append(f"Leishen / Thunderobot WMI block RW_GMWMI ({leishen.wmi.name})")
         signals.append(f"firmware answers: {'RGB' if info.get('kb_rgb') else 'single-colour'} keyboard, "
@@ -125,8 +130,7 @@ def platform_of(svc):
                  _f("Mode key", "ok", None) if IS_WIN else _f("Mode key", "no", "not_found")]
         return {"platform": "leishen", "level": "experimental", "name": "Leishen / Thunderobot",
                 "signals": signals, "features": feats, "page": "modes", "allow_key": "leishen_writes"}
-    pf = getattr(svc, "pf", None)
-    if ec_active not in (None, "none") and pf is not None and pf.project_raw:
+    if uniwill_ec:
         signals.append(f"Uniwill embedded controller via {ec_active}, project {pf.project_name} (0x{pf.project_raw:X})")
         level = pf.support
         no_profile = False
