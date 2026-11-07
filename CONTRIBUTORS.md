@@ -11,6 +11,7 @@ Every contribution below is published under the [license](LICENSE) of the part o
 | Who | What | Version |
 |---|---|---|
 | [noteMASTER11](https://github.com/noteMASTER11) | per-key RGB picture is sent again once a second, so Windows does not suspend the USB keyboard ([PR #4](https://github.com/aspidovss/open-uniwill-cc/pull/4)) | 1.7.0 |
+| [Maximora-byte](https://github.com/Maximora-byte) | the platform window prefers the Uniwill EC over a Clevo interface on boards that expose both (MECHREVO Yaoshi X6AR55xY, project 0x1A) ([PR #6](https://github.com/aspidovss/open-uniwill-cc/pull/6)) | 1.7.2 |
 
 Everyone whose commits are in the repository: [GitHub contributors](https://github.com/aspidovss/open-uniwill-cc/graphs/contributors).
 
@@ -43,6 +44,7 @@ The projects whose ideas or protocol descriptions helped, and their licenses, ar
 | Кто | Что | Версия |
 |---|---|---|
 | [noteMASTER11](https://github.com/noteMASTER11) | картинка RGB-клавиатуры с подсветкой каждой клавиши повторяется раз в секунду, чтобы Windows не усыпляла USB-клавиатуру ([PR #4](https://github.com/aspidovss/open-uniwill-cc/pull/4)) | 1.7.0 |
+| [Maximora-byte](https://github.com/Maximora-byte) | окно платформы отдаёт приоритет EC Uniwill перед интерфейсом Clevo на платах, где есть оба (MECHREVO Yaoshi X6AR55xY, проект 0x1A) ([PR #6](https://github.com/aspidovss/open-uniwill-cc/pull/6)) | 1.7.2 |
 
 Все, чьи коммиты есть в репозитории: [участники на GitHub](https://github.com/aspidovss/open-uniwill-cc/graphs/contributors).
 
