@@ -4,7 +4,7 @@
 #                                [--accept-agreement]   (non-interactive: you accept uwccd/web/eula.*.txt)
 set -euo pipefail
 
-VERSION=1.7.2   # DKMS module version (1.5.0: PWUP ioctl; 1.7.2: SMRW errors told apart and logged)
+VERSION=1.7.3   # DKMS module version (1.5.0: PWUP ioctl; 1.7.2: SMRW errors logged; 1.7.3: SMRW argument length found at the first read)
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PREFIX=/opt/uwcc
 CC_DIR=""

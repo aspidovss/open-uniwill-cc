@@ -80,6 +80,10 @@ class ECBase:
     def _pwup(self, level):
         raise ECError("PWUP not supported by this backend")
 
+    def smrw_arg_len(self):
+        """Length in bytes of the SMRW argument that worked (Linux), None when not known / not used."""
+        return getattr(self, "smrw_len", None)
+
     def pwup(self, level):
         """Firmware method INOU.PWUP(level): OC power level for liquid cooling (LiquidHWOC.SetOCLevel)."""
         with self.lock:
@@ -134,6 +138,13 @@ class KernelModuleEC(ECBase):
 
     def _write(self, addr, val):
         fcntl.ioctl(self.fd, self.IOC_WRITE, struct.pack("<HH", addr, val))
+
+    def smrw_arg_len(self):
+        try:                                          # found by the module at the first read (1.7.3)
+            with open("/sys/module/uwcc/parameters/smrw_len") as f:
+                return int(f.read().strip()) or None
+        except (OSError, ValueError):
+            return None
 
     def _smrw(self, key):
         buf = bytearray([0xBB, key, 0, 0, 0, 0, 0, 0])
@@ -197,8 +208,23 @@ class AcpiCallEC(ECBase):
     def _write(self, addr, val):
         self._call(f"{self.path}.ECRW 0x{addr:x} 0x{val:x}")
 
+    SMRW_LENS = (16, 32, 64, 4)     # as the kernel module: the next length only after AE_AML_BUFFER_LIMIT
+
     def _smrw(self, key):
-        out = self._call(f"{self.path}.SMRW bBB{key:02X}0000")
+        # zero-padded: SMRW creates a 13-byte field in Arg0 even for a read on some boards (issue #5); the length is
+        # found at the first read and kept for this run of the service
+        lens = (self.smrw_len,) if getattr(self, "smrw_len", None) else self.SMRW_LENS
+        for n in lens:
+            try:
+                out = self._call(f"{self.path}.SMRW bBB{key:02X}" + "00" * (n - 2))
+            except ECError as e:
+                if "AE_AML_BUFFER_LIMIT" in str(e) and n != lens[-1]:
+                    continue
+                raise
+            if not getattr(self, "smrw_len", None):
+                self.smrw_len = n
+                log.info("SMRW: argument %d bytes", n)
+            break
         nums = [int(x, 0) for x in out.strip("{} ").replace(" ", "").split(",") if x]
         if not nums:
             raise ECError(f"SMRW: unexpected reply {out!r}")

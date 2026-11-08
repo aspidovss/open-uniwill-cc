@@ -6,7 +6,7 @@
  *   ioctl UWCC_IOC_READ / UWCC_IOC_WRITE : evaluates the firmware methods
  *       \_SB.INOU.ECRR(addr) / ECRW(addr, data) of ACPI device INOU0000, i.e. the same
  *       methods the Windows UWACPIDriver.sys calls for GCUService.
- *   ioctl UWCC_IOC_SMRW : evaluates \_SB.INOU.SMRW(Buffer{0xBB, key, 0, 0}) — the "Smart APC"
+ *   ioctl UWCC_IOC_SMRW : evaluates \_SB.INOU.SMRW(Buffer(N){0xBB, key, 0, ...}) — the "Smart APC"
  *       limit table (PL1/PL2/PL4/TCC/cTGP/Dynamic Boost), UWACPIDriver IOCTL 0x9C40A500.
  *   ioctl UWCC_IOC_PWUP : evaluates \_SB.INOU.PWUP(level) — the OC power level for liquid cooling
  *       (GCUService LiquidHWOC.SetOCLevel, UWACPIDriver IOCTL 0x9C40A504 with the name "PUWP").
@@ -116,24 +116,70 @@ static int uwcc_ec_write(u16 addr, u8 val)
 	return ACPI_FAILURE(st) ? -EIO : 0;
 }
 
+/*
+ * SMRW creates its write field WRBF (bits 8..103) for every call, a read (0xBB) too, so on some boards Arg0 must hold
+ * at least 13 bytes: with a 4-byte buffer ACPICA aborts with AE_AML_BUFFER_LIMIT before the method runs (MECHREVO
+ * Yaoshi X6AR55xY, issue #5). The ioctl stays {in[4], out[4]}; the ACPI argument is in[] zero-padded. Its length is
+ * found at the first read after the module loads: 16, 32, 64, then 4 (a firmware that wants exactly 4), the next one
+ * only after AE_AML_BUFFER_LIMIT. Only a read (0xBB) is used to find it; it is kept until the module is unloaded and
+ * shown in /sys/module/uwcc/parameters/smrw_len (0 = not found yet).
+ */
+static const u8 smrw_lens[] = { 16, 32, 64, 4 };
+static int smrw_len;
+module_param(smrw_len, int, 0444);
+MODULE_PARM_DESC(smrw_len, "length of the SMRW argument in bytes, found at the first read (0 = not yet)");
+
+static acpi_status uwcc_smrw_eval(const u8 *in, int len, struct acpi_buffer *out)
+{
+	union acpi_object arg;
+	struct acpi_object_list args = { .count = 1, .pointer = &arg };
+	u8 inbuf[64] = { 0 };
+	acpi_status st;
+
+	memcpy(inbuf, in, 4);
+	arg.type = ACPI_TYPE_BUFFER;
+	arg.buffer.length = len;
+	arg.buffer.pointer = inbuf;
+	out->length = ACPI_ALLOCATE_BUFFER;
+	out->pointer = NULL;
+	mutex_lock(&ec_lock);
+	st = acpi_evaluate_object(inou_handle, "SMRW", &args, out);
+	mutex_unlock(&ec_lock);
+	return st;
+}
+
 static int uwcc_smrw(struct uwcc_smrw *r)
 {
-	union acpi_object arg, *obj;
-	struct acpi_object_list args = { .count = 1, .pointer = &arg };
+	union acpi_object *obj;
 	struct acpi_buffer out = { ACPI_ALLOCATE_BUFFER, NULL };
-	acpi_status st;
-	int ret = -EIO;
+	acpi_status st = AE_ERROR;
+	int ret = -EIO, i;
 
 	if (!inou_handle || !acpi_has_method(inou_handle, "SMRW"))
 		return -ENODEV;
-	arg.type = ACPI_TYPE_BUFFER;
-	arg.buffer.length = sizeof(r->in);
-	arg.buffer.pointer = r->in;
-	mutex_lock(&ec_lock);
-	st = acpi_evaluate_object(inou_handle, "SMRW", &args, &out);
-	mutex_unlock(&ec_lock);
+	if (smrw_len && (smrw_len < 4 || smrw_len > 64))	/* a bad value given at load: find it again */
+		smrw_len = 0;
+	if (smrw_len) {
+		st = uwcc_smrw_eval(r->in, smrw_len, &out);
+	} else if (r->in[0] != 0xBB) {		/* never probe with a write: 16 until a read found the length */
+		st = uwcc_smrw_eval(r->in, 16, &out);
+	} else {
+		for (i = 0; i < ARRAY_SIZE(smrw_lens); i++) {
+			st = uwcc_smrw_eval(r->in, smrw_lens[i], &out);
+			if (st != AE_AML_BUFFER_LIMIT) {
+				if (ACPI_SUCCESS(st)) {
+					smrw_len = smrw_lens[i];
+					pr_info("SMRW: argument %d bytes\n", smrw_len);
+				}
+				break;
+			}
+			kfree(out.pointer);
+			out.pointer = NULL;
+		}
+	}
 	if (ACPI_FAILURE(st)) {			/* the method itself failed: EIO */
 		pr_info_ratelimited("SMRW key 0x%02x: %s\n", r->in[1], acpi_format_exception(st));
+		kfree(out.pointer);
 		return -EIO;
 	}
 	obj = out.pointer;

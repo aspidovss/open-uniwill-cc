@@ -2,7 +2,7 @@
 # Remove Control Center for Linux and give fan control back to the embedded controller.
 set -uo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "Run with sudo: sudo bash uninstall.sh"; exit 1; }
-VERSION=1.7.2
+VERSION=1.7.3
 
 systemctl disable --now uwccd.service 2>/dev/null
 /usr/local/bin/uwccctl release 2>/dev/null || true

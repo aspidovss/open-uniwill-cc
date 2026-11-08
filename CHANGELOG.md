@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.7.3
+
+- **Linux: the firmware power limit table `SMRW` is read on MECHREVO Yaoshi X6AR55xY (project 0x1A) and other boards
+  whose method needs a longer argument** ([issue #5](https://github.com/aspidovss/open-uniwill-cc/issues/5), found by
+  [Maximora-byte](https://github.com/Maximora-byte)). Their `SMRW` creates a 13-byte write field in its argument even
+  for a read, and the kernel module passed 4 bytes, so ACPICA stopped the method with `AE_AML_BUFFER_LIMIT` for every
+  key and the limits fell back to the controller defaults (no Dynamic Boost, processor maxima from the EC). The module
+  `uwcc` (DKMS 1.7.3) and the `acpi_call` path now pass the request zero-padded, and find the length at the first
+  read: 16 bytes first, then 32, 64 and 4, the next one only after `AE_AML_BUFFER_LIMIT`. Only a read is used for
+  this, never a write. The length found is kept, written to the kernel log (`uwcc: SMRW: argument 16 bytes`), shown by
+  the module parameter `/sys/module/uwcc/parameters/smrw_len` and in the self-check. The ioctl is unchanged.
+  Reinstall (`sudo ./install.sh`) to rebuild the module. Windows (OEM driver) was not affected.
+
 ## 1.7.2
 
 - **Power limit table on boards where some keys do not answer** ([issue #5](https://github.com/aspidovss/open-uniwill-cc/issues/5),

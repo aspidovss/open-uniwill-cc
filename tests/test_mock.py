@@ -2298,6 +2298,58 @@ class SmartApcUnit(unittest.TestCase):
         L = self.limits(self.ec({0}))                   # PL1 does not answer: the EC default, not 0
         self.assertEqual(L["pl1_max"], 45)
 
+    def _acpi(self, limit_below=None):
+        from uwccd.ec import AcpiCallEC, ECError
+        ec = AcpiCallEC.__new__(AcpiCallEC)
+        ec.path = r"\_SB.INOU"
+        sent = []
+
+        def call(cmd):
+            sent.append(cmd)
+            n = len(cmd.split()[1][1:]) // 2
+            if limit_below and n < limit_below:
+                raise ECError("Error: AE_AML_BUFFER_LIMIT")
+            return "0x78"
+        ec._call = call
+        return ec, sent
+
+    def test_acpi_call_argument_is_16_bytes(self):
+        """Issue #5: SMRW creates a 13-byte field in Arg0, so the argument is zero-padded (16 bytes first)."""
+        ec, sent = self._acpi()
+        self.assertEqual(ec._smrw(2), 0x78)
+        arg = sent[0].split()[1]
+        self.assertTrue(arg.startswith("bBB02"))
+        self.assertEqual(len(arg[1:]) // 2, 16)
+        self.assertEqual(ec.smrw_arg_len(), 16)
+        src = open(os.path.join(ROOT, "kernel", "uwcc.c")).read()
+        self.assertIn("smrw_lens[] = { 16, 32, 64, 4 }", src)   # the kernel module tries the same lengths
+
+    def test_acpi_call_probes_longer_argument(self):
+        """A board that needs more than 16 bytes: 16 fails with AE_AML_BUFFER_LIMIT, 32 works and is kept."""
+        ec, sent = self._acpi(limit_below=20)
+        self.assertEqual(ec._smrw(0), 0x78)
+        self.assertEqual([len(c.split()[1][1:]) // 2 for c in sent], [16, 32])
+        sent.clear()
+        ec._smrw(1)
+        self.assertEqual([len(c.split()[1][1:]) // 2 for c in sent], [32])   # found once, then reused
+
+    def test_acpi_call_other_error_is_not_probed(self):
+        from uwccd.ec import ECError
+        ec, sent = self._acpi()
+        def call(cmd):
+            sent.append(cmd)
+            raise ECError("Error: AE_NOT_FOUND")
+        ec._call = call
+        with self.assertRaises(ECError):
+            ec._smrw(0)
+        self.assertEqual(len(sent), 1)
+        self.assertIsNone(ec.smrw_arg_len())
+
+    def test_kernel_never_probes_with_a_write(self):
+        src = open(os.path.join(ROOT, "kernel", "uwcc.c")).read()
+        self.assertIn("r->in[0] != 0xBB", src)
+        self.assertIn("AE_AML_BUFFER_LIMIT", src)
+
     def test_nothing_answers(self):
         from uwccd.ec import ECError
         ec = self.ec(set(range(9)))
