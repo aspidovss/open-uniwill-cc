@@ -2224,6 +2224,7 @@ function renderAbout() {
   for (const [k, v] of rows) dl.append(h("dt", {}, k), h("dd", {}, v));
   let txt;
   if (u.error) txt = t("Update check failed: {0}", u.error);
+  else if (u.newer && u.optional) txt = t("Optional update {0}: only settings for particular laptops, you can skip it.", u.latest);
   else if (u.newer) txt = t("Version {0} is available.", u.latest);
   else if (u.checked) txt = t("You have the latest version (checked {0}).", new Date(u.checked * 1000).toLocaleString());
   else txt = u.enabled ? t("Updates are checked automatically once a day.") : t("Automatic update check is off (Settings → Switches).");
@@ -2253,7 +2254,8 @@ function renderAbout() {
 $("#upd-check").addEventListener("click", () => act(async () => { S.update = await api("update/check", {}); renderAbout(); },
   null));
 $("#upd-install").addEventListener("click", () => act(async () => {
-  if (!confirm(t("Download version {0} to your Downloads folder, check its checksum and start the installer?", S.update.latest))) return;
+  if (!confirm((S.update.optional ? t("This update is optional: it only changes settings for particular laptops.") + "\n\n" : "") +
+    t("Download version {0} to your Downloads folder, check its checksum and start the installer?", S.update.latest))) return;
   const r = await api("update/download", {});
   if (!r.tray) {                                     // the tray app downloads; without it open the release page
     toast(t("The Control Center tray app is not running — opening the release page."));

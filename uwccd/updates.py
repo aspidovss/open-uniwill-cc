@@ -3,6 +3,14 @@
 Only https://api.github.com/repos/<REPO>/releases/latest is requested (no identifiers besides the usual
 User-Agent). On Windows the tray application (running as the user) downloads the setup.exe of the release to the user's
 Downloads folder, checks it against the SHA256SUMS.txt of the same release and starts it (UAC prompt).
+
+Version numbers (1.7.5.0): MAJOR.FEATURE.FIX.PLATFORM —
+  1st  major change of how the program works;
+  2nd  new or changed functions;
+  3rd  fixes;
+  4th  settings / data for particular laptops only (platform profiles, tables): an *optional* update. It is shown
+       (window, tray, one notification) but marked as not required. 1.7.5 is the same as 1.7.5.0; the 4th number
+       goes back to 0 when one of the first three changes. Builds up to 1.7.4 compare only the first three numbers.
 """
 import hashlib
 import json
@@ -26,7 +34,20 @@ DAY = 24 * 3600
 
 
 def vtuple(v):
-    return tuple(int(x) for x in re.findall(r"\d+", str(v))[:3]) or (0,)
+    """'v1.7.5.3' -> (1, 7, 5, 3); missing numbers are 0 ('1.7.5' == '1.7.5.0')."""
+    n = [int(x) for x in re.findall(r"\d+", str(v))[:4]]
+    return tuple(n + [0] * (4 - len(n)))
+
+
+def update_level(current, latest):
+    """-> None (not newer) | "major" | "feature" | "fix" | "platform" (only the 4th number: optional)"""
+    c, n = vtuple(current), vtuple(latest)
+    if n <= c:
+        return None
+    for i, name in enumerate(("major", "feature", "fix")):
+        if n[i] != c[i]:
+            return name
+    return "platform"
 
 
 def _get(url, timeout=15):
@@ -65,7 +86,8 @@ class Updater(threading.Thread):
             assets = {a["name"]: a["browser_download_url"] for a in rel.get("assets", [])}
             res.update(latest=tag.lstrip("v"), url=rel.get("html_url") or f"{REPO_URL}/releases",
                        notes=(rel.get("body") or "")[:4000], published=rel.get("published_at"),
-                       newer=vtuple(tag) > vtuple(__version__), error=None,
+                       newer=update_level(__version__, tag) is not None, level=update_level(__version__, tag),
+                       optional=update_level(__version__, tag) == "platform", error=None,
                        setup=_setup_asset(assets),
                        linux=next((u for n, u in assets.items() if n.endswith(".tar.gz") and "linux" in n), None),
                        sums=assets.get("SHA256SUMS.txt"))
@@ -77,11 +99,12 @@ class Updater(threading.Thread):
             self.result = res
         self.svc.settings_store.set("update_last_check", res["checked"])
         if res.get("newer"):
-            log.info("update available: %s", res["latest"])
+            log.info("update available: %s (%s)", res["latest"], "optional" if res.get("optional") else res.get("level"))
             if self.notified != res["latest"]:
                 self.notified = res["latest"]
                 self.svc.settings_store.set("update_notified", res["latest"])
-                self.svc.emit("update", {"version": res["latest"], "url": res.get("url")})
+                self.svc.emit("update", {"version": res["latest"], "url": res.get("url"),
+                                         "optional": bool(res.get("optional"))})
         self.svc.emit("status", {})
         return res
 

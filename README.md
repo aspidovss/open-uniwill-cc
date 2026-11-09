@@ -179,6 +179,18 @@ From [Releases](https://github.com/aspidovss/open-uniwill-cc/releases):
 | `open-uniwill-cc-linux-<ver>.tar.gz` | Ubuntu / Debian-based Linux (installer uses apt; developed on Ubuntu 24.04) |
 | `SHA256SUMS.txt` | checksums |
 
+**Version numbers** (since 1.7.5.0) have four parts, e.g. `1.7.5.3`:
+
+| Part | Changes when |
+|---|---|
+| 1st | the way the program works changes fundamentally |
+| 2nd | functions are added or changed |
+| 3rd | functions are fixed |
+| 4th | only settings for particular laptops change (platform profiles, tables) — an **optional** update |
+
+An update that changes only the 4th number is shown in the window and the tray as *optional*: install it if the
+release notes name your laptop, or skip it. `1.7.5` is the same as `1.7.5.0`.
+
 ## Installation
 
 ### Windows

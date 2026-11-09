@@ -1200,6 +1200,50 @@ class CustomModeService(MockService):
 
 
 class UpdateAndBuildUnit(unittest.TestCase):
+    def test_version_levels(self):
+        """1.7.5.0: MAJOR.FEATURE.FIX.PLATFORM; a change of the 4th number only is an optional update."""
+        from uwccd import updates
+        self.assertEqual(updates.vtuple("v1.7.5"), (1, 7, 5, 0))
+        self.assertEqual(updates.vtuple("1.7.5.0"), updates.vtuple("1.7.5"))
+        lv = updates.update_level
+        self.assertIsNone(lv("1.7.5.0", "v1.7.5"))
+        self.assertIsNone(lv("1.7.5.3", "v1.7.5.2"))
+        self.assertEqual(lv("1.7.5.0", "v1.7.5.3"), "platform")
+        self.assertEqual(lv("1.7.4", "v1.7.5.3"), "fix")             # contains the fix: not optional
+        self.assertEqual(lv("1.7.5.3", "v1.7.6"), "fix")
+        self.assertEqual(lv("1.7.5.3", "v1.8.0.0"), "feature")
+        self.assertEqual(lv("1.9.9.9", "v2.0"), "major")
+
+    def test_optional_update_status_and_notification(self):
+        from uwccd import updates
+        events = []
+
+        class St(dict):
+            def set(self, k, v):
+                self[k] = v
+
+        class Svc:
+            settings_store = St()
+            tray_clients = 0
+
+            def emit(self, t, d):
+                events.append((t, d))
+        u = updates.Updater(Svc())
+        orig, cur = updates._get, updates.__version__
+        updates.__version__ = "1.7.5.0"
+        updates._get = lambda url, timeout=15: json.dumps({"tag_name": "v1.7.5.1", "assets": []}).encode()
+        try:
+            r = u.check()
+            self.assertTrue(r["newer"] and r["optional"])
+            self.assertEqual(r["level"], "platform")
+            self.assertIn(("update", {"version": "1.7.5.1", "url": updates.REPO_URL + "/releases", "optional": True}), events)
+            updates._get = lambda url, timeout=15: json.dumps({"tag_name": "v1.7.6", "assets": []}).encode()
+            r = u.check()
+            self.assertTrue(r["newer"])
+            self.assertFalse(r["optional"])
+        finally:
+            updates._get, updates.__version__ = orig, cur
+
     def test_download_verified(self):
         import hashlib
         import http.server

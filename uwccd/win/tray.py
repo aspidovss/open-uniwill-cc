@@ -263,7 +263,8 @@ class Tray:
                 I("Русский", lambda *_: self.act("setting", {"key": "lang", "value": "ru"}), checked=lambda *_: self.lang == "ru", radio=True))))
         upd = (st or {}).get("update") or {}
         if upd.get("newer") and upd.get("setup"):
-            items.append(I(T("upd_install", upd.get("latest")), lambda *_: self.act("update/download", {})))
+            items.append(I(T("upd_install_opt" if upd.get("optional") else "upd_install", upd.get("latest")),
+                           lambda *_: self.act("update/download", {})))
         items.append(I(T("upd_check"), self.check_updates))
         items.append(I(T("github"), lambda *_: os.startfile(updates.REPO_URL)))
         items.append(I(T("autostart"), self.toggle_autostart, checked=self.autostart_enabled))

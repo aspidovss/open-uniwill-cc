@@ -396,6 +396,8 @@ const RU = {
   "GitHub issues": "Issues на GitHub",
   "Update check failed: {0}": "Не удалось проверить обновления: {0}",
   "Version {0} is available.": "Доступна версия {0}.",
+  "Optional update {0}: only settings for particular laptops, you can skip it.": "Необязательное обновление {0}: только настройки для отдельных ноутбуков, его можно не устанавливать.",
+  "This update is optional: it only changes settings for particular laptops.": "Это обновление необязательное: оно меняет только настройки для отдельных ноутбуков.",
   "You have the latest version (checked {0}).": "У вас последняя версия (проверено {0}).",
   "Updates are checked automatically once a day.": "Обновления проверяются автоматически раз в день.",
   "Automatic update check is off (Settings → Switches).": "Автоматическая проверка обновлений выключена (Настройки → Переключатели).",

@@ -15,3 +15,7 @@ kernel/modules.order
 .vscode/
 .idea/
 uwccd/_build.py
+# archives made next to the sources by hand (1.7.4: a .rar was committed by mistake)
+*.rar
+*.zip
+*.7z

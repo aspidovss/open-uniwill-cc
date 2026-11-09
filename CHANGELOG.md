@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.7.5.0
+
+- **Version numbers have four parts** — `MAJOR.FEATURE.FIX.PLATFORM`, e.g. `1.7.5.3`: the 1st number for a
+  fundamental change of how the program works, the 2nd for new or changed functions, the 3rd for fixes, the 4th for
+  settings of particular laptops only (platform profiles, tables). `1.7.5` is the same as `1.7.5.0`; the 4th number
+  goes back to 0 when one of the first three changes. Tags are `v1.7.5.0`.
+- **Optional updates.** The update check compares all four numbers. A release that changes only the 4th number is
+  still shown — on *Information*, in the tray menu and in one notification — but marked as **optional** ("only
+  settings for particular laptops, you can skip it"), and the install prompt says so. A release that changes one of
+  the first three numbers is announced as before. Versions up to 1.7.4 compare only the first three numbers, so they
+  do not announce a 4th-number release at all.
+- `.gitignore`: archives (`*.rar`, `*.zip`, `*.7z`) next to the sources are ignored.
+
 ## 1.7.4
 
 - **MECHREVO Yaoshi X6AR55xY (project `0x1A`) is supported on Linux** — confirmed by a user report after 1.7.3
