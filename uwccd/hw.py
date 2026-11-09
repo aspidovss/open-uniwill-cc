@@ -21,9 +21,10 @@ DISPLAY_NAMES = {0x10: "MAIBENBEN Tsunami", 0x1A: "MECHREVO (project 0x1A)"}
 DMI_NAME_IDS = {0x1A}
 # Support level shown in the window: "tested" — checked on real hardware with this program; "known" — in the
 # platform tables of the original service this program was ported from; anything else is "experimental".
-TESTED_IDS = {0x10}
+# 0x1A from user reports: Windows (OEM driver) on MECHREVO Yaoshi / Aurora X / XMG NEO 16 E25, Linux on Yaoshi (1.7.3).
+TESTED_IDS = {0x10, 0x1A}
 # Platforms of the newer official service 1.2 (its code is protected, so nothing could be taken over from it):
-# they report RamFan 1.5 like the others and run with the same port, but are untested.
+# they report RamFan 1.5 like the others and run with the same port (0x1A has been tested since, see TESTED_IDS).
 SERVICE_1_2_IDS = {0x1A}
 # Single-colour keyboard backlight through EC 0x78C (MyControlCenter.SingleColorKeyboard): projects 0x12..0x14 in
 # GCUService 1.0.2.70; 0x1A (MECHREVO Kuangshi / Jiguang B2, Aurora X) from the log of its Control Center 5.56

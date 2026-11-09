@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "id": "uniwill-0x1a",
+  "name": "MECHREVO Yaoshi X6AR55xY / MECHREVO Aurora X (Kuangshi / Jiguang B2) / XMG NEO 16 (E25)",
+  "vendor": "Uniwill",
+  "status": "community",
+  "match": {"project": ["0x1A"]},
+  "tested": {"ec": ["1.25", "2.6", "1.31", "2.11"], "bios": ["N.1.18MRO24", "N.1.13MRO16", "N.1.25MRO33", "N.1.33A27"],
+             "date": "2026-11", "by": "user reports (issue #5)"},
+  "access": {
+    "oem": {"driver": "UWACPIDriver", "device": "\\\\.\\ACPIDriver", "smrw": true, "pwup": true},
+    "wmi": {"namespace": "root\\WMI", "class": "AcpiTest_MULong", "method": "GetSetULong", "instance": "1_1",
+            "encoding": {"read_flag_bit": 40, "value_shift": 16, "read_mask": 255},
+            "firmware": ["WMBC", "OEMG", "RKBC", "WKBC"], "smrw": false, "pwup": false}
+  },
+  "wmi": {
+    "poll": {"cache_ms": 4000, "monitor_s": 5, "status_s": 15},
+    "always_write": ["0x767", "0xF5D-0xF5F", "0x7C7"],
+    "no_cache": ["0xF5D-0xF5F"],
+    "features": {"modes": "off", "fan_boost": "off", "power_limits": "off", "gpu_power": "off", "super_performance": "off",
+                 "fan_tables": "off", "fan_monitor": "slow", "battery": "off", "switches": "off", "lightbar_ec": "off",
+                 "lc_ec": "on", "power_boost_lc": "off"}
+  },
+  "limits": null,
+  "notes": {
+    "en": ["Linux (kernel module uwcc) and Windows with the OEM driver: all functions. The power limits come from the firmware table SMRW, which differs between models and graphics cards of this project, so the profile holds no limits of its own. On Linux the table needs open-uniwill-cc 1.7.3 or later (issue #5).",
+           "WMI path (free Windows build): only reading is confirmed (34 registers equal through the OEM driver and WMI); other functions stay off until the self-check confirms them."],
+    "ru": ["Linux (модуль ядра uwcc) и Windows с OEM-драйвером: все функции. Пределы мощности берутся из таблицы прошивки SMRW, она разная у моделей и видеокарт этого проекта, поэтому своих пределов в профиле нет. На Linux таблица читается с open-uniwill-cc 1.7.3 (issue #5).",
+           "Путь WMI (свободная сборка Windows): подтверждено только чтение (34 регистра совпадают через OEM-драйвер и WMI); остальные функции выключены, пока их не подтвердит самопроверка."]
+  }
+}

@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.7.4
+
+- **MECHREVO Yaoshi X6AR55xY (project `0x1A`) is supported on Linux** — confirmed by a user report after 1.7.3
+  ([issue #5](https://github.com/aspidovss/open-uniwill-cc/issues/5)): modes, Fan Boost, fan tables, power limits from
+  the firmware table `SMRW`, cTGP / Dynamic Boost, battery, switches, liquid cooler, keyboard and light bar.
+- **Project `0x1A` is shown as *tested*** (was *experimental*): MECHREVO Yaoshi, MECHREVO Aurora X (Kuangshi /
+  Jiguang B2) and XMG NEO 16 (E25) work by user reports.
+- **Built-in platform profile `uniwill-0x1a`** (status *community*): the self-check no longer makes a draft for this
+  project. It holds no power limits of its own — they differ between the models and graphics cards of `0x1A` and are
+  read from the firmware table `SMRW` (kernel module or OEM driver). On the WMI path (free Windows build) only reading
+  is confirmed, so writing functions stay off there until the self-check confirms them.
+- README: the supported-models tables are updated.
+
 ## 1.7.3
 
 - **Linux: the firmware power limit table `SMRW` is read on MECHREVO Yaoshi X6AR55xY (project 0x1A) and other boards

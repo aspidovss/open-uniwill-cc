@@ -1539,7 +1539,7 @@ class PlatformSupportUnit(unittest.TestCase):
         p = self._pf(0x10)
         self.assertEqual((p.support, p.project_name, p.display_name), ("tested", "0x10", "MAIBENBEN Tsunami"))
         p = self._pf(0x1A)
-        self.assertEqual((p.support, p.project_name), ("experimental", "0x1A"))
+        self.assertEqual((p.support, p.project_name), ("tested", "0x1A"))           # 1.7.4: user reports, Linux too
         from uwccd import hw
         orig = hw.dmi
         hw.dmi = lambda f: {"sys_vendor": "MECHREVO", "product_name": "YAOSHI Series"}.get(f, "")
@@ -2356,6 +2356,21 @@ class SmartApcUnit(unittest.TestCase):
         with self.assertRaises(ECError):
             ec.smart_apc_table()
         self.assertEqual(self.limits(ec)["source"], "ec-defaults")
+
+
+class Platform0x1AUnit(unittest.TestCase):
+    """1.7.4: built-in profile for project 0x1A (MECHREVO Yaoshi X6AR55xY and others)."""
+
+    def test_builtin_profile(self):
+        from uwccd import platformdb
+        m = platformdb.match(0x1A)
+        self.assertEqual((m["source"], m["profile"]["id"], m["profile"]["status"]), ("builtin", "uniwill-0x1a", "community"))
+        self.assertIsNone(m["profile"]["limits"])           # limits differ by model: always from SMRW
+        p = platformdb.validate(m["profile"])
+        self.assertEqual(p["match"]["project"], ["0x1A"])
+        f = m["profile"]["wmi"]["features"]
+        self.assertEqual(f["modes"], "off")                  # WMI writes not confirmed on this project
+        self.assertEqual(platformdb.match(0x10)["profile"]["id"], "uniwill-0x10")
 
 
 class AfterburnerUnit(unittest.TestCase):
