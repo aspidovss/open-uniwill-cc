@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.7.7.1
+
+- **Windows: the Control Center window did not open in 1.7.7.0.** The tray now starts Edge so that its own sandbox
+  works inside the tray's job object (breakaway allowed), and it no longer ends the window when the first Edge process
+  exits — Edge may hand its work over to another of its processes. Whether the window is open is taken from the
+  processes of the job. If the window cannot be tracked, it is started as in 1.7.6 (Edge without a job), so it always
+  opens; the reason is written to `%LOCALAPPDATA%\UWCC\tray.log`.
+
 ## 1.7.7.0
 
 - **The window uses memory only while it is open.** ✕ closes it completely; the service and the tray keep working,

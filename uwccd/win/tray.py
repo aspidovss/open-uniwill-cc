@@ -31,7 +31,7 @@ from PIL import Image, ImageDraw
 
 from .. import agentcore, updates
 from . import winapi, winplat
-from .appwindow import AppWindow
+from .appwindow import AppWindow, plain_start
 from .winplat import data_root
 
 PORT = int(os.environ.get("UWCC_PORT", "47321"))
@@ -110,7 +110,11 @@ class Tray:
         self.lang = "en"
         self.offline_since = None
         self.offline_notified = False
-        self.window = AppWindow(on_change=self._window_changed)
+        try:
+            self.window = AppWindow(on_change=self._window_changed)
+        except Exception:  # noqa: BLE001
+            log.exception("window: tracking unavailable")
+            self.window = None
         self.icon = pystray.Icon("uwcc", make_icon(offline=True), "Control Center", menu=pystray.Menu(self.menu_items))
         self.show_at_start = show
         self.idle_sent = None
@@ -171,11 +175,17 @@ class Tray:
         except OSError:
             self.icon.notify(self.T("svc_down_body"), self.T("svc_down"))
             return
-        if not self.window.open(url):       # 1.7.7.0: one window, owned by the tray (appwindow.py)
+        try:
+            ok = self.window.open(url) if self.window else plain_start(url)  # 1.7.7.0: owned by the tray
+        except Exception:  # noqa: BLE001
+            log.exception("window: open")
+            ok = plain_start(url)
+        if not ok:
             os.startfile(url)       # noqa: S606   no Edge: the default browser
 
     def close_window(self, *_):
-        threading.Thread(target=self.window.close, daemon=True).start()
+        if self.window:
+            threading.Thread(target=self.window.close, daemon=True).start()
 
     def _window_changed(self):
         try:
@@ -219,7 +229,7 @@ class Tray:
     def menu_items(self):
         st, T, I = self.state, self.T, pystray.MenuItem
         items = [I(T("open"), self.open_window, default=True),
-                 I(T("close_window"), self.close_window, visible=lambda *_: self.window.alive()),
+                 I(T("close_window"), self.close_window, visible=lambda *_: bool(self.window) and self.window.alive()),
                  pystray.Menu.SEPARATOR]
         if not st:
             items.append(I(self.offline_text(), None, enabled=False))

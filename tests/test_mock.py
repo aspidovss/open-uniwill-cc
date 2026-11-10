@@ -2454,13 +2454,74 @@ class AppWindowUnit(unittest.TestCase):
 
     def test_windows_edge_window(self):
         src = self.read("uwccd", "win", "appwindow.py")
-        for flag in ("--disable-background-mode", "--disable-extensions", "--renderer-process-limit=1"):
+        for flag in ("--disable-background-mode", "--disable-extensions", "--no-first-run"):
             self.assertIn(flag, src)
         self.assertIn("JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE", src)
         tray = self.read("uwccd", "win", "tray.py")
-        self.assertIn('I(T("close_window"), self.close_window, visible=lambda *_: self.window.alive())', tray)
+        self.assertIn('I(T("close_window"), self.close_window, visible=lambda *_: bool(self.window) and self.window.alive())', tray)
         from uwccd import agentcore
         self.assertIn("close_window", agentcore.TRAY["ru"])
+
+    def test_windows_window_logic(self):
+        """1.7.7.1: the window is never ended just because the first Edge process exited; failures fall back."""
+        import ctypes
+        from unittest import mock
+        from uwccd.win import appwindow as aw
+
+        class Fn:
+            def __init__(self, impl=lambda *a: 1):
+                self.impl, self.argtypes, self.restype = impl, None, None
+
+            def __call__(self, *a):
+                return self.impl(*a)
+
+        st = {"active": 0, "terminated": 0}
+
+        def query(job, cls, buf, size, ret):
+            if cls == aw.JobObjectBasicAccountingInformation:
+                buf._obj.ActiveProcesses = st["active"]           # ctypes.byref(_ACCT())
+            return 1
+
+        class Lib:
+            def __init__(self, **impl):
+                self.impl = impl
+
+            def __getattr__(self, n):
+                f = Fn(self.impl.get(n, lambda *a: 1))
+                setattr(self, n, f)
+                return f
+        k32 = Lib(CreateJobObjectW=lambda *a: 77, QueryInformationJobObject=query,
+                  TerminateJobObject=lambda *a: st.__setitem__("terminated", st["terminated"] + 1) or 1)
+        u32 = Lib(EnumWindows=lambda *a: 1)
+
+        class P:
+            pid, _handle = 4242, 99
+        started = []
+        with mock.patch.object(ctypes, "WinDLL", side_effect=lambda n, **k: k32 if n == "kernel32" else u32, create=True), \
+             mock.patch.object(ctypes, "WINFUNCTYPE", lambda *a: (lambda f: f), create=True), \
+             mock.patch.object(ctypes, "cast", lambda f, t: 0), \
+             mock.patch.object(aw, "edge_path", lambda: r"C:\Edge\msedge.exe"), \
+             mock.patch.object(aw.subprocess, "Popen", lambda *a, **k: started.append(a[0]) or P()), \
+             mock.patch.object(aw.threading, "Thread", lambda **k: mock.Mock()):
+            w = aw.AppWindow()
+            self.assertTrue(w.open("http://127.0.0.1:47321/#token=x"))
+            self.assertEqual(len(started), 1)
+            self.assertIn("--disable-background-mode", started[0])
+            self.assertEqual(w.job, 77)
+            st["active"] = 0                      # first Edge process gone, nothing in the job: not "alive"
+            self.assertFalse(w.alive())
+            self.assertEqual(st["terminated"], 0)  # and nothing was ended by the tray
+            st["active"] = 3
+            self.assertTrue(w.alive())
+            with mock.patch.object(aw.time, "sleep", lambda s: None):
+                w.close()                         # processes do not end on WM_CLOSE: ended after 5 s
+            self.assertEqual(st["terminated"], 1)
+        with mock.patch.object(aw, "edge_path", lambda: r"C:\Edge\msedge.exe"), \
+             mock.patch.object(aw.subprocess, "Popen", lambda *a, **k: started.append(a[0]) or P()):
+            w2 = aw.AppWindow.__new__(aw.AppWindow)          # broken tracking (no WinDLL): plain start
+            w2.lock = aw.threading.Lock()
+            self.assertTrue(w2.open("http://x/"))
+            self.assertEqual(len(started), 2)
 
     def test_linux_tray_and_single_window(self):
         uwcc, agent = self.read("bin", "uwcc"), self.read("bin", "uwcc-agent")
