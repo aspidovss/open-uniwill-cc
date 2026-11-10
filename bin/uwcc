@@ -7,6 +7,7 @@ import sys
 
 PORT = int(os.environ.get("UWCC_PORT", "47321"))
 TOKEN_FILE = os.environ.get("UWCC_TOKEN_FILE", "/run/uwcc/token")
+APP_ID = "io.github.aspidovss.uwcc"            # D-Bus name of the window (uwcc-agent's tray uses it too)
 
 
 MSG = {
@@ -74,10 +75,34 @@ def webkit_window(url):
             gi.require_version("WebKit2", "4.1")
         except ValueError:
             gi.require_version("WebKit2", "4.0")
-        from gi.repository import GLib, Gtk, WebKit2
+        from gi.repository import Gio, GLib, Gtk, WebKit2
     except (ImportError, ValueError):
         return False
-    win = Gtk.Window(title="Control Center")
+    # 1.7.7.0: one window. A second "uwcc" only brings this one to the front (GApplication over D-Bus); the tray of
+    # uwcc-agent closes it with the action "quit". ✕ ends the process, so the window uses no memory when closed.
+    app = Gtk.Application(application_id=APP_ID, flags=Gio.ApplicationFlags.FLAGS_NONE)
+    quit_action = Gio.SimpleAction.new("quit", None)
+    quit_action.connect("activate", lambda *_: app.quit())
+    app.add_action(quit_action)
+    state = {}
+
+    def activate(a):
+        if state.get("win"):
+            state["win"].present()
+            return
+        state["win"] = build(a)
+
+    app.connect("activate", activate)
+
+    def build(a):
+        return _build_window(a, url, Gtk, GLib, WebKit2)
+
+    app.run([sys.argv[0]])
+    return True
+
+
+def _build_window(app, url, Gtk, GLib, WebKit2):
+    win = Gtk.ApplicationWindow(application=app, title="Control Center")
     win.set_default_size(1280, 820)
     icon = "/opt/uwcc/uwccd/web/icon.svg"
     if os.path.exists(icon):
@@ -98,10 +123,8 @@ def webkit_window(url):
         return False
     view.connect("decide-policy", policy)
     win.add(view)
-    win.connect("destroy", Gtk.main_quit)
     win.show_all()
-    Gtk.main()
-    return True
+    return win
 
 
 def main():

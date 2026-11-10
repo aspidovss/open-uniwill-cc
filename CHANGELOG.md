@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.7.7.0
+
+- **The window uses memory only while it is open.** ✕ closes it completely; the service and the tray keep working,
+  and *Open* starts it again in about a second.
+  - **Windows:** the tray owns the window (`uwccd/win/appwindow.py`). Edge in app mode starts without background
+    mode, extensions or sync and with one page process, so nothing of it stays after ✕. Its processes run in a job
+    object of the tray: they end with the tray too. There is only one window — *Open* (also `ControlCenter.exe
+    --open`) brings it to the front. New tray item **Close the window (free memory)**, shown while the window is open.
+  - **Linux:** the window (`uwcc`, WebKitGTK) is a single-instance GApplication `io.github.aspidovss.uwcc`: a second
+    `uwcc` brings it to the front. The desktop file is installed as `io.github.aspidovss.uwcc.desktop`, so Wayland
+    docks match the window to it.
+- **Linux tray** in `uwcc-agent` (AppIndicator): **Show the configuration window** and **Close the window (free
+  memory)**; a middle click on the icon opens the window. The installer adds `gir1.2-ayatanaappindicator3-0.1`;
+  without it the agent works as before, only without the icon.
+
 ## 1.7.6.0
 
 - **Switch "Check intermediate updates"** on *Information → About* (on by default). Intermediate updates are releases

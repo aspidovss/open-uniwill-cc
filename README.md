@@ -288,6 +288,11 @@ The installer builds the `uwcc` kernel module with DKMS (falls back to `acpi_cal
 
 - **Window** — all settings; the language switch (EN / RU) is at the bottom of the side bar.
 - **Tray (Windows)** — right click: mode, Fan Boost, keyboard backlight, liquid cooler, language, updates, *Start with Windows*.
+- **Tray (Linux)** — *Show the configuration window* and *Close the window (free memory)*; needs
+  `gir1.2-ayatanaappindicator3-0.1` (the installer adds it) and a desktop that shows AppIndicator icons (Ubuntu does).
+- **The window uses memory only while it is open.** ✕ closes it completely (about 150–200 MB on Windows — Edge in app
+  mode — and less on Linux); the service and the tray keep working, and *Open* starts it again in about a second. There
+  is only one window: *Open* brings it to the front. *Close the window* in the tray does the same as ✕.
 - **Console** (`uwccctl` on Linux, `uwccctl.exe` on Windows):
 
 ```text

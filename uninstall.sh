@@ -15,7 +15,7 @@ done
 rm -f /etc/modules-load.d/uwcc.conf
 rm -f /usr/local/bin/uwcc /usr/local/bin/uwccctl /usr/local/bin/uwcc-agent
 rm -f /usr/local/share/man/man1/uwccctl.1 /usr/local/share/man/ru/man1/uwccctl.1 /usr/share/bash-completion/completions/uwccctl
-rm -f /usr/share/applications/uwcc.desktop /etc/xdg/autostart/uwcc-agent.desktop /usr/share/icons/hicolor/scalable/apps/uwcc.svg
+rm -f /usr/share/applications/uwcc.desktop /usr/share/applications/io.github.aspidovss.uwcc.desktop /etc/xdg/autostart/uwcc-agent.desktop /usr/share/icons/hicolor/scalable/apps/uwcc.svg
 rm -rf /opt/uwcc
 if [ "${1:-}" = "--purge" ]; then rm -rf /var/lib/uwcc; groupdel uwcc 2>/dev/null; fi
 echo "Removed. Settings are kept in /var/lib/uwcc (remove them with: sudo bash uninstall.sh --purge)."

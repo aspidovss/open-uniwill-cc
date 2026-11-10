@@ -1,7 +1,8 @@
 """ControlCenter.exe — the user-session part on Windows.
 
 Lives in the notification area (hidden by default), starts with Windows, and:
-  * opens the Control Center window (Microsoft Edge in app mode on the local web UI);
+  * opens the Control Center window (Microsoft Edge in app mode on the local web UI) and closes it again: ✕ ends the
+    window completely and only the tray stays (appwindow.py, 1.7.7.0);
   * quick menu: mode, Fan Boost, keyboard backlight, liquid cooler, language, autostart;
   * shows notifications for service events (mode key, overheating, coolant flow, ...);
   * reports user idle time for the keyboard-backlight auto-off (a service cannot see input);
@@ -30,6 +31,7 @@ from PIL import Image, ImageDraw
 
 from .. import agentcore, updates
 from . import winapi, winplat
+from .appwindow import AppWindow
 from .winplat import data_root
 
 PORT = int(os.environ.get("UWCC_PORT", "47321"))
@@ -39,8 +41,6 @@ APPROVED_KEY = r"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupAppro
 RUN_NAME = "UWCC Control Center"
 MUTEX = "Local\\UWCC-ControlCenter-Tray"
 OPEN_EVENT = "Local\\UWCC-ControlCenter-Open"
-EDGE = [os.path.expandvars(r"%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe"),
-        os.path.expandvars(r"%ProgramFiles%\Microsoft\Edge\Application\msedge.exe")]
 
 log = logging.getLogger("uwcc.tray")
 
@@ -110,6 +110,7 @@ class Tray:
         self.lang = "en"
         self.offline_since = None
         self.offline_notified = False
+        self.window = AppWindow(on_change=self._window_changed)
         self.icon = pystray.Icon("uwcc", make_icon(offline=True), "Control Center", menu=pystray.Menu(self.menu_items))
         self.show_at_start = show
         self.idle_sent = None
@@ -170,13 +171,17 @@ class Tray:
         except OSError:
             self.icon.notify(self.T("svc_down_body"), self.T("svc_down"))
             return
-        edge = next((p for p in EDGE if os.path.exists(p)), None)
-        if edge:
-            prof = os.path.join(os.environ.get("LOCALAPPDATA", os.path.expanduser("~")), "UWCC", "window")
-            subprocess.Popen([edge, f"--app={url}", f"--user-data-dir={prof}", "--window-size=1280,820",
-                              "--no-first-run", "--disable-features=Translate"], close_fds=True)
-        else:
-            os.startfile(url)       # noqa: S606
+        if not self.window.open(url):       # 1.7.7.0: one window, owned by the tray (appwindow.py)
+            os.startfile(url)       # noqa: S606   no Edge: the default browser
+
+    def close_window(self, *_):
+        threading.Thread(target=self.window.close, daemon=True).start()
+
+    def _window_changed(self):
+        try:
+            self.icon.update_menu()
+        except Exception:  # noqa: BLE001
+            pass
 
     # -- autostart (HKLM Run from the installer, per-user on/off like Task Manager) -------------------
     def autostart_enabled(self, *_):
@@ -213,7 +218,9 @@ class Tray:
     # -- menu ----------------------------------------------------------------------------------
     def menu_items(self):
         st, T, I = self.state, self.T, pystray.MenuItem
-        items = [I(T("open"), self.open_window, default=True), pystray.Menu.SEPARATOR]
+        items = [I(T("open"), self.open_window, default=True),
+                 I(T("close_window"), self.close_window, visible=lambda *_: self.window.alive()),
+                 pystray.Menu.SEPARATOR]
         if not st:
             items.append(I(self.offline_text(), None, enabled=False))
             if self.offline_since and time.time() - self.offline_since >= 60:

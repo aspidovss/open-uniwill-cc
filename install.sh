@@ -51,6 +51,9 @@ PKGS="python3 libnotify-bin rfkill"
 apt-get install -y -qq $PKGS
 apt-get install -y -qq acpi-call-dkms >/dev/null 2>&1 || warn "acpi-call-dkms is not available (only needed as a fallback)"
 apt-get install -y -qq gir1.2-webkit2-4.1 python3-gi >/dev/null 2>&1 || true
+# tray icon of uwcc-agent (1.7.7.0); without it the agent works as before, only without the tray
+apt-get install -y -qq gir1.2-ayatanaappindicator3-0.1 >/dev/null 2>&1 \
+  || warn "gir1.2-ayatanaappindicator3-0.1 is not available: no tray icon"
 if [ "$WITH_BT" = 1 ]; then
   # liquid cooler (XMG Oasis / LCT21001 / LCT22002) over Bluetooth LE
   if apt-get install -y -qq bluez python3-bleak >/dev/null 2>&1; then
@@ -114,7 +117,9 @@ install -Dm644 "$HERE/man/uwccctl.1" /usr/local/share/man/man1/uwccctl.1
 install -Dm644 "$HERE/man/ru/uwccctl.1" /usr/local/share/man/ru/man1/uwccctl.1
 mandb -q 2>/dev/null || true
 install -Dm644 "$HERE/packaging/uwccctl.bash-completion" /usr/share/bash-completion/completions/uwccctl
-install -Dm644 "$HERE/packaging/uwcc.desktop" /usr/share/applications/uwcc.desktop
+# 1.7.7.0: named after the window's application ID, so Wayland docks match the window to it (StartupWMClass: X11)
+rm -f /usr/share/applications/uwcc.desktop
+install -Dm644 "$HERE/packaging/uwcc.desktop" /usr/share/applications/io.github.aspidovss.uwcc.desktop
 install -Dm644 "$HERE/packaging/uwcc-agent.desktop" /etc/xdg/autostart/uwcc-agent.desktop
 # group uwcc may restart the service without a password (the agent's "Restart the service" button)
 [ -d /etc/polkit-1 ] && install -Dm644 "$HERE/packaging/50-uwcc.rules" /etc/polkit-1/rules.d/50-uwcc.rules

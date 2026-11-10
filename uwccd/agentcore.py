@@ -57,7 +57,7 @@ TEXT = {
 }
 
 TRAY = {
-    "en": {"open": "Open Control Center", "mode": "Mode", "boost": "Fan Boost", "kb": "Keyboard backlight",
+    "en": {"open": "Open Control Center", "close_window": "Close the window (free memory)", "mode": "Mode", "boost": "Fan Boost", "kb": "Keyboard backlight",
            "ab": "MSI Afterburner", "ab_profile": "Profile {}", "ab_default": "Default (profile {})",
            "lc": "Liquid cooler", "lc_auto": "Automatic", "lc_laptop": "Follow the laptop", "lc_low": "Low",
            "lc_medium": "Medium", "lc_high": "High", "lc_off": "Off", "lc_connect": "Connect", "lc_disconnect": "Disconnect",
@@ -73,7 +73,7 @@ TRAY = {
            "upd_latest": "You have the latest version ({})", "upd_failed": "Update check failed",
            "admin_declined": "Administrator rights were not granted — EC Manager stays locked",
            "admin_fail": "uwccctl.exe not found"},
-    "ru": {"open": "Открыть Control Center", "mode": "Режим", "boost": "Турбовентиляция", "kb": "Подсветка клавиатуры",
+    "ru": {"open": "Открыть Control Center", "close_window": "Закрыть окно (освободить память)", "mode": "Режим", "boost": "Турбовентиляция", "kb": "Подсветка клавиатуры",
            "ab": "MSI Afterburner", "ab_profile": "Профиль {}", "ab_default": "По умолчанию (профиль {})",
            "lc": "Система охлаждения", "lc_auto": "Автоматический", "lc_laptop": "Как у ноутбука", "lc_low": "Низкий",
            "lc_medium": "Средний", "lc_high": "Высокий", "lc_off": "Выкл", "lc_connect": "Подключить",

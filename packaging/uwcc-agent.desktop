@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
 Name=Control Center agent
-Comment=On-screen notifications and touchpad switching for Control Center
+Comment=Tray icon, on-screen notifications and touchpad switching for Control Center
 Exec=uwcc-agent
 Icon=uwcc
 Terminal=false

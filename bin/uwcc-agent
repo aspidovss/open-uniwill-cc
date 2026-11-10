@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""User-session agent: OSD notifications, touchpad on/off, Fn launch key, input for the BetterRGB effects.
+"""User-session agent: tray icon, OSD notifications, touchpad on/off, Fn launch key, input for the BetterRGB effects.
+
+Tray (1.7.7.0, needs gir1.2-ayatanaappindicator3-0.1): "Show the configuration window" starts / brings up the
+Control Center window (uwcc), "Close the window" ends it to free its memory. Without AppIndicator there is no tray
+and everything else works as before.
 
 Runs from ~/.config/autostart. Listens to the service event stream (SSE).
 BetterRGB effects: while the running effect needs it, the agent sends a small picture of the screen (X11 only) and
@@ -36,7 +40,8 @@ TEXT = {
            "lc_flow_body": "The pump is running but the flow sensor reports no circulation. "
                            "Check the tubes and the coolant level, or run the filling cycle.",
            "lc_fan_boost": "Cooler fan boost {}", "lc_pump_boost": "Cooler pump boost {}", "on": "on", "off": "off",
-           "lc_primed": "Liquid cooler: filling cycle finished"},
+           "lc_primed": "Liquid cooler: filling cycle finished",
+           "tray_show": "Show the configuration window", "tray_close": "Close the window (free memory)"},
     "ru": {"svc_down": "Служба Control Center не отвечает", "svc_down_body": "Она не отвечает уже минуту.",
            "svc_restart": "Перезапустить службу", "svc_restarted": "Служба Control Center снова работает",
            "svc_fail": "Служба не запустилась", "svc_fail_body": "Журнал: journalctl -u uwccd -b",
@@ -58,7 +63,8 @@ TEXT = {
            "lc_flow_body": "Помпа работает, но датчик потока не видит циркуляции. "
                            "Проверьте трубки и уровень жидкости или запустите цикл заполнения.",
            "lc_fan_boost": "Усиление вентилятора СО: {}", "lc_pump_boost": "Усиление помпы СО: {}",
-           "on": "вкл", "off": "выкл", "lc_primed": "Система охлаждения: цикл заполнения завершён"},
+           "on": "вкл", "off": "выкл", "lc_primed": "Система охлаждения: цикл заполнения завершён",
+           "tray_show": "Отобразить окно для конфигурации", "tray_close": "Закрыть окно (освободить память)"},
 }
 LANG = {"v": "en"}
 
@@ -299,7 +305,86 @@ def offer_restart():
     notify(T("svc_fail"), T("svc_fail_body"), icon="dialog-error", critical=True)
 
 
+APP_ID = "io.github.aspidovss.uwcc"            # the window (bin/uwcc) is a GApplication with this ID
+
+
+def tray():
+    """AppIndicator tray icon. Returns the function that runs its main loop, or None without AppIndicator."""
+    try:
+        import gi
+        gi.require_version("Gtk", "3.0")
+        try:
+            gi.require_version("AyatanaAppIndicator3", "0.1")
+            from gi.repository import AyatanaAppIndicator3 as AI
+        except (ValueError, ImportError):
+            gi.require_version("AppIndicator3", "0.1")
+            from gi.repository import AppIndicator3 as AI
+        from gi.repository import Gio, GLib, Gtk
+    except (ImportError, ValueError) as e:
+        print("uwcc-agent: no tray icon (install gir1.2-ayatanaappindicator3-0.1):", e, file=sys.stderr)
+        return None
+    try:
+        bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+    except Exception:  # noqa: BLE001
+        bus = None
+
+    def window_open():
+        if not bus:
+            return False
+        try:
+            return bus.call_sync("org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus", "NameHasOwner",
+                                 GLib.Variant("(s)", (APP_ID,)), None, Gio.DBusCallFlags.NONE, 2000, None).unpack()[0]
+        except Exception:  # noqa: BLE001
+            return False
+
+    def show(*_):
+        subprocess.Popen(["uwcc"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    def close(*_):
+        try:
+            Gio.DBusActionGroup.get(bus, APP_ID, "/" + APP_ID.replace(".", "/")).activate_action("quit", None)
+        except Exception as e:  # noqa: BLE001
+            print("uwcc-agent: close window:", e, file=sys.stderr)
+        GLib.timeout_add(700, update)
+
+    ind = AI.Indicator.new("uwcc", "uwcc", AI.IndicatorCategory.APPLICATION_STATUS)
+    ind.set_status(AI.IndicatorStatus.ACTIVE)
+    ind.set_title("Control Center")
+    menu = Gtk.Menu()
+    it_show, it_close = Gtk.MenuItem(label=T("tray_show")), Gtk.MenuItem(label=T("tray_close"))
+    it_show.connect("activate", show)
+    it_close.connect("activate", close)
+    menu.append(it_show)
+    menu.append(it_close)
+    menu.show_all()
+    ind.set_menu(menu)
+    ind.set_secondary_activate_target(it_show)          # middle click on the icon
+
+    def update():
+        it_show.set_label(T("tray_show"))
+        it_close.set_label(T("tray_close"))
+        it_close.set_visible(window_open())
+        return False
+
+    def tick():
+        update()
+        return True
+    update()
+    GLib.timeout_add_seconds(2, tick)
+    return Gtk.main
+
+
 def main():
+    import threading
+    run_tray = tray()
+    if run_tray:                                    # GTK needs the main thread: the event loop goes to a thread
+        threading.Thread(target=events_main, daemon=True, name="events").start()
+        run_tray()
+    else:
+        events_main()
+
+
+def events_main():
     import threading
     threading.Thread(target=fx_loop, daemon=True, name="fx").start()
     osd_enabled = True

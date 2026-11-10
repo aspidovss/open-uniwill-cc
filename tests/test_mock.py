@@ -2446,6 +2446,32 @@ class CoolerErrorHintUnit(unittest.TestCase):
         self.assertNotIn("pythoncom.CoInitialize()", src)      # STA in the liquid thread broke bleak
 
 
+class AppWindowUnit(unittest.TestCase):
+    """1.7.7.0: the window is owned by the tray; ✕ ends it, the tray stays (Windows: Edge app, Linux: WebKitGTK)."""
+
+    def read(self, *p):
+        return open(os.path.join(ROOT, *p), encoding="utf-8").read()
+
+    def test_windows_edge_window(self):
+        src = self.read("uwccd", "win", "appwindow.py")
+        for flag in ("--disable-background-mode", "--disable-extensions", "--renderer-process-limit=1"):
+            self.assertIn(flag, src)
+        self.assertIn("JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE", src)
+        tray = self.read("uwccd", "win", "tray.py")
+        self.assertIn('I(T("close_window"), self.close_window, visible=lambda *_: self.window.alive())', tray)
+        from uwccd import agentcore
+        self.assertIn("close_window", agentcore.TRAY["ru"])
+
+    def test_linux_tray_and_single_window(self):
+        uwcc, agent = self.read("bin", "uwcc"), self.read("bin", "uwcc-agent")
+        self.assertIn('APP_ID = "io.github.aspidovss.uwcc"', uwcc)
+        self.assertIn('APP_ID = "io.github.aspidovss.uwcc"', agent)
+        self.assertIn('"tray_show": "Отобразить окно для конфигурации"', agent)
+        self.assertIn('activate_action("quit", None)', agent)
+        self.assertIn("/usr/share/applications/io.github.aspidovss.uwcc.desktop", self.read("install.sh"))
+        self.assertIn("gir1.2-ayatanaappindicator3-0.1", self.read("install.sh"))
+
+
 class AfterburnerUnit(unittest.TestCase):
     """1.7.1: every mode can switch an MSI Afterburner profile slot (its command line -Profile<N>)."""
 
