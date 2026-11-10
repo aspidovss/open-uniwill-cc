@@ -217,3 +217,74 @@ python ec_tool.py watch 0x464 0x465 0x75B --interval 1 --count 60 --csv fans.csv
 python ec_tool.py bit 0x74E 4 on --restore 5
 python ec_tool.py --backend wmi compare --with driver
 ```
+
+## 10. More registers from other research (not used yet)
+
+Source: the research notes of [MechControl-RE](https://github.com/Liddo-kun/MechControl-RE) (MECHREVO Yaoshi /
+IDY_7Y, board **X6AR55xY**, project `0x1A`, Intel), retold here as facts with our own descriptions. **Not checked on
+the Tsunami and not used by open-uniwill-cc.** Before any of them is used, it has to be confirmed with `ec_tool.py`
+on real hardware; registers marked ⚠ change protection behaviour and are documented only as a warning.
+
+### 10.1 Sensors and identification (read)
+
+| Register | Meaning (X6AR55xY) |
+|---|---|
+| `0x43E` / `0x44F` | CPU / GPU temperature as the EC sees it, °C |
+| `0x454`, `0x47D` | EC firmware version, EC sub-version |
+| `0x45B` | silent mode active (non-zero) |
+| `0x463` | applied CPU temperature limit: `105 − (value & 0x7F)` °C (read-back of `0x786`) |
+| `0x46C` / `0x46D` | GPU fan rpm = `0x46C << 8 \| 0x46D` — **differs from section 2.2** (`0x46B` as the low byte), see 10.6 |
+| `0x490` bit0 | mains adapter connected |
+| `0x402`–`0x403` | battery design capacity, mAh (16-bit, low byte first) |
+| `0x404`–`0x405` | last full charge capacity, mAh → battery health = `0x404 / 0x402 × 100 %` |
+| `0x436`–`0x437`, `0x438`–`0x439` | remaining capacity, mAh; voltage, mV |
+| `0x4A2`–`0x4A3` | battery temperature, 0.1 K → `value / 10 − 273.15` °C |
+| `0x4AB` | battery charge, % |
+| `0x7D1` | SSD temperature, °C |
+| `0x600`–`0x60F` | raw ADC channels 0..7 (16-bit, low byte first); `0x60C` — adapter current (raw, not watts) |
+| `0x6E6` | EC run state (`1` = normal operation) |
+
+### 10.2 Fans
+
+| Register | Meaning |
+|---|---|
+| `0x759` / `0x75A` | **fixed duty** for fan 1 (CPU) / fan 2 (GPU): bit7 on, bits0..6 = % (≥ 100 → 100 %). `0x00` hands the fan back to the curve. ⚠ While on, the EC skips its curve, Fan Boost and all temperature protection for that fan |
+| `0x787` | fan switch speed: bit7 on, bits0..6 = **time × 100 ms** (section 2.3 says rpm / 100 — to check) |
+| `0x768` bit2 | Fan Boost active |
+| `0xF00–0xFEF` (RamFan 2) | three-fan layout: per fan CPU up/down, duty, GPU up/down, 16 points each |
+| `0x7B0`–`0x7B2` | three fan profiles of the "CCI" scheme (index in `0x7AB`) |
+
+### 10.3 Power
+
+| Register | Meaning |
+|---|---|
+| `0x726` bit7 + `0x727` bit6 | the EC enforces the custom PL1/PL2/PL4 only with both bits set (power-management loop; `0x727` bit6 is `CUME` in the DSDT). Matches our Custom mode (section 2.1) |
+| `0x786` bit7 | without it the EC stores the temperature limit but does not apply it |
+| `0x753` / `0x754` | CPU VRM current limit / maximum current limit |
+| `0x780` = `0xA2`, `0x781` | ⚠ EC power-limit bypass: the EC publishes the custom PL values without its own adaptive caps, turns the fans to full and changes thermal protection. Cleared by the EC outside normal operation (`0x6E6 ≠ 1`). Not for general use |
+
+### 10.4 Logo and lighting
+
+| Register | Meaning |
+|---|---|
+| `0x7AB` | logo brightness: `0x01` off, `0x21` low, `0x41` medium, `0x81` high (bit0 = logo present) |
+| `0x769`–`0x76B` | logo colour R / G / B, 0..50 (`EC = round(HID × 50 / 255)`) |
+| `0x78C` = `0x10` | apply the logo settings |
+| `0x7C5` bit5 | logo flag |
+
+On X6AR55xY the logo is zone 3 of the ITE controller: the EC values only remember the state, the light itself
+changes through the HID commands of the keyboard controller.
+
+### 10.5 Mini-LED local dimming (WMI, not EC)
+
+Through the same WMI method as the EC access (`AcpiTest_MULong.GetSetULong`, `Data = 0x0000_0500_0000_00XX`):
+`0x0E` — local dimming on, `0x0D` — off (a GPIO line to the panel). `0x02` / `0x01` only update the EC flag
+`0x72B` bit1 and the NVIDIA power parameters and do not change the panel. Only on laptops with a mini-LED panel.
+
+### 10.6 Differences from this document — to check on hardware
+
+| What | Here | MechControl-RE | Note |
+|---|---|---|---|
+| GPU fan rpm low byte | `0x46B` | `0x46D` | Yaoshi report (1.6.6): `0x46B = 0x55`, `0x46C = 0x0D`, `0x46D = 0x09` → 3413 or 3337 rpm, both plausible. MechControl-RE saw `0x46B` stay at `0xC3` with the fan stopped and at full speed |
+| `0x787` units | rpm / 100 | time × 100 ms | |
+| Project ID in `0x740` | the value itself (`0x10`, `0x1A`) | on newer boards `value >> 1` is the ProjectID enum (`0x1A >> 1 = 13` = IDY_7Y) | the AMD board X6FR5 also reports `0x1A`: the CPU vendor has to be checked as well |

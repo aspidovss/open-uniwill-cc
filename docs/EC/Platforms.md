@@ -152,3 +152,64 @@ On the WMI path a mode switch writes the mode, power limits and Fan Boost first 
 with *Applying…*), then the fan curve in the background (~15 s, *Fan curve: writing N %* in the side bar; the mode
 cards and the fan page wait). A curve that is the same as the one in the EC is not written again. Mode changes sent
 while a mode is being applied are refused with `409 busy`.
+
+
+## Uniwill project numbers
+
+The full list of the Uniwill **ProjectID** numbers with the internal model names, as given in the research notes of
+[MechControl-RE](https://github.com/Liddo-kun/MechControl-RE) (44 models, built from the OEM Control Center data; only
+IDY_7Y tested there). The names are the manufacturer's board/series codes, not shop names. `0x17xx` / `0x18xx` are
+sub-models that the service works out from `0x740 = 0x17` / `0x18` and further ID registers (`uwccd/hw.py`).
+
+How the number is stored in `0x740` is not the same everywhere: the projects `0x12`–`0x18` of the original service
+are stored as they are, while on newer boards `0x740` holds the number × 2 (MECHREVO Yaoshi X6AR55xY: `0x1A` = 26 =
+13 × 2 = **IDY_7Y**). open-uniwill-cc keeps using the raw value of `0x740` as the project (`0x10`, `0x1A`), so saved
+fan curves and profiles stay where they are. The AMD board X6FR5 reports `0x1A` too — a different laptop with the
+same number.
+
+| ProjectID | Hex | Name | In open-uniwill-cc |
+|---|---|---|---|
+| 1 | `0x1` | GI |  |
+| 2 | `0x2` | GJ |  |
+| 3 | `0x3` | GK |  |
+| 4 | `0x4` | GICN |  |
+| 5 | `0x5` | GJCN |  |
+| 6 | `0x6` | GK5CN_X |  |
+| 7 | `0x7` | GK7CN_S |  |
+| 8 | `0x8` | GK7CPCS_GK5CQ7Z |  |
+| 9 | `0x9` | PF |  |
+| 10 | `0xA` | GK5CP_4X_5X_6X |  |
+| 11 | `0xB` | IDP |  |
+| 12 | `0xC` | IDY_6Y |  |
+| 13 | `0xD` | IDY_7Y | yes — reads as `0x1A` (see above) |
+| 14 | `0xE` | PF4MU_PF4MN_PF5MU |  |
+| 15 | `0xF` | CML_Gaming |  |
+| 16 | `0x10` | GK7NXXR | project `0x10` (Tsunami) — which of 16 and 8 × 2 it is, is not known |
+| 17 | `0x11` | GM5MU1Y |  |
+| 18 | `0x12` | PH4TRX1 | yes |
+| 19 | `0x13` | PH4TUX1 | yes |
+| 20 | `0x14` | PH4TQx1 | yes |
+| 21 | `0x15` | PH6TRX1 | yes |
+| 22 | `0x16` | PH6TQxx | yes |
+| 23 | `0x17` | PHxAxxx | yes |
+| 24 | `0x18` | PHxPxxx | yes |
+| 5889 | `0x1701` | PH4ARxx | yes |
+| 5890 | `0x1702` | PH4AUxx | yes |
+| 5891 | `0x1703` | PH4AXxx | yes |
+| 5892 | `0x1704` | PH6AQxx | yes |
+| 5893 | `0x1705` | PH6ARxx | yes |
+| 5894 | `0x1706` | PH6AGxx | yes |
+| 5895 | `0x1707` | PH4AUxf | yes |
+| 6145 | `0x1801` | PH4PRxx | yes |
+| 6146 | `0x1802` | PH4PUxx | yes |
+| 6147 | `0x1803` | PH4PGx1 | yes |
+| 6148 | `0x1804` | PH4PGx2 | yes |
+| 6149 | `0x1805` | PH6PRxx | yes |
+| 6150 | `0x1806` | PH6PGEx | yes |
+| 6151 | `0x1807` | PH6PG0x | yes |
+| 6152 | `0x1808` | PH6PG3x | yes |
+| 6153 | `0x1809` | PH6PG7x | yes |
+| 6154 | `0x180A` | PH4AQE3 | yes |
+| 6155 | `0x180B` | PH6PG0x150W | yes |
+| 6156 | `0x180C` | PH6PG3x150W | yes |
+| 6157 | `0x180D` | PH6PG7x150W | yes |
