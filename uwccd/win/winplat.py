@@ -107,13 +107,28 @@ def set_webcam(on):
 _wmi_local = threading.local()
 
 
+def com_mta(pythoncom=None):
+    """COM for this thread as multi-threaded (MTA), never single-threaded (STA).
+
+    1.7.6.0: the WMI temperature reading of the liquid-cooling thread used to call CoInitialize() (STA) there; bleak
+    (Bluetooth, WinRT) then refused to work in that thread: "Thread is configured for Windows GUI but callbacks are not
+    working. Suspect unwanted side effects from importing 'pythoncom'". A thread that is already initialized keeps
+    its apartment (RPC_E_CHANGED_MODE is ignored)."""
+    if pythoncom is None:
+        import pythoncom
+    try:
+        pythoncom.CoInitializeEx(pythoncom.COINIT_MULTITHREADED)
+    except Exception:  # noqa: BLE001   pywintypes.com_error: already initialized in another apartment
+        pass
+
+
 def wmi(namespace=r"root\cimv2"):
     """Per-thread WMI connection (COM objects are apartment-bound)."""
     import pythoncom
     import win32com.client
     cache = getattr(_wmi_local, "c", None)
     if cache is None:
-        pythoncom.CoInitialize()
+        com_mta(pythoncom)
         cache = _wmi_local.c = {}
     if namespace not in cache:
         cache[namespace] = win32com.client.GetObject(f"winmgmts:{{impersonationLevel=impersonate}}!\\\\.\\{namespace}")

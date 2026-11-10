@@ -162,6 +162,11 @@ class Afterburner:
         self.stop_ev = threading.Event()
 
     # settings
+    def last_slot(self):
+        """The last profile applied without an error (kept across restarts), None if none yet."""
+        v = self.store.get("afterburner_last")
+        return v if v in SLOTS else None
+
     def enabled(self):
         return self.store.get("afterburner", True) is not False
 
@@ -268,6 +273,11 @@ class Afterburner:
                 log.warning("Afterburner profile %s: %s", slot, e)
         with self.lock:
             self.last = res
+        if not res["error"]:
+            try:                            # 1.7.6.0: the tray marks the last profile, also after a restart
+                self.store.set("afterburner_last", slot)
+            except Exception:  # noqa: BLE001
+                pass
         self.emit("afterburner", {"slot": slot, "error": res["error"]})
         return res
 
@@ -338,4 +348,5 @@ class Afterburner:
                 "profiles": self.profiles(), "default": self.default_slot(),
                 "now": list(self.seen_mode) if self.seen_mode else None,
                 "last": last or None,
+                "last_slot": self.last_slot(),
                 "experimental": True}

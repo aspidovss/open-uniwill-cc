@@ -72,6 +72,11 @@ def make_icon(mode=None, offline=False):
     return img
 
 
+
+# A radio mark only on the checked item: on some Windows menus every MFT_RADIOCHECK item showed a dot (1.7.6.0).
+def RADIO(item):
+    return bool(item.checked)
+
 class Api:
     def __init__(self):
         self.token = None
@@ -220,13 +225,13 @@ class Tray:
                 items.append(I(T("mode"), pystray.Menu(*[
                     I(self.mode_name(m["index"]), (lambda m: lambda *_: self.act("mode", {"mode": m}))(m["index"]),
                       checked=(lambda m: lambda *_: ((self.state or {}).get("alt") or {}).get("mode") == m)(m["index"]),
-                      radio=True)
+                      radio=RADIO)
                     for m in alt.get("modes") or []])))
             elif st["platform"].get("fan_control"):
                 modes = [0, 1] + ([2] if p.get("turbo_support") else []) + ([3] if p.get("custom_support") else [])
                 items.append(I(T("mode"), pystray.Menu(*[
                     I(self.mode_name(m), (lambda m: lambda *_: self.act("mode", {"mode": m}))(m),
-                      checked=(lambda m: lambda *_: (self.state or {}).get("power", {}).get("mode") == m)(m), radio=True)
+                      checked=(lambda m: lambda *_: (self.state or {}).get("power", {}).get("mode") == m)(m), radio=RADIO)
                     for m in modes])))
                 items.append(I(T("boost"), lambda *_: self.act("fanboost", {"on": not self.state["power"]["fan_boost"]}),
                                checked=lambda *_: bool((self.state or {}).get("power", {}).get("fan_boost"))))
@@ -238,8 +243,8 @@ class Tray:
             if ab.get("found") and ab.get("enabled"):     # MSI Afterburner: apply a profile slot by hand
                 items.append(I(T("ab"), pystray.Menu(*[
                     I(T("ab_profile").format(n), (lambda n: lambda *_: self.act("afterburner", {"action": "apply", "slot": n}))(n),
-                      checked=(lambda n: lambda *_: (((self.state or {}).get("afterburner") or {}).get("last") or {}).get("slot") == n),
-                      radio=True)
+                      checked=(lambda n: lambda *_: ((self.state or {}).get("afterburner") or {}).get("last_slot") == n),
+                      radio=RADIO)
                     for n in (1, 2, 3, 4, 5)] + ([pystray.Menu.SEPARATOR,
                     I(T("ab_default").format(ab["default"]), lambda *_: self.act("afterburner", {"action": "apply_default"}))]
                     if ab.get("default") else []))))
@@ -250,7 +255,7 @@ class Tray:
                                                          else T("not_connected")), None, enabled=False)]
                 for m in ("auto", "laptop", "low", "medium", "high", "off"):
                     sub.append(I(T("lc_" + m), (lambda m: lambda *_: self.act("lc/config", {"mode": m}))(m),
-                                 checked=(lambda m: lambda *_: cur == m)(m), radio=True))
+                                 checked=(lambda m: lambda *_: cur == m)(m), radio=RADIO))
                 sub.append(pystray.Menu.SEPARATOR)
                 if lc.get("connected"):
                     sub.append(I(T("lc_disconnect"), lambda *_: self.act("lc/disconnect", {})))
@@ -259,8 +264,8 @@ class Tray:
                 items.append(I(T("lc"), pystray.Menu(*sub)))
             items.append(pystray.Menu.SEPARATOR)
             items.append(I(T("lang"), pystray.Menu(
-                I("English", lambda *_: self.act("setting", {"key": "lang", "value": "en"}), checked=lambda *_: self.lang == "en", radio=True),
-                I("Русский", lambda *_: self.act("setting", {"key": "lang", "value": "ru"}), checked=lambda *_: self.lang == "ru", radio=True))))
+                I("English", lambda *_: self.act("setting", {"key": "lang", "value": "en"}), checked=lambda *_: self.lang == "en", radio=RADIO),
+                I("Русский", lambda *_: self.act("setting", {"key": "lang", "value": "ru"}), checked=lambda *_: self.lang == "ru", radio=RADIO))))
         upd = (st or {}).get("update") or {}
         if upd.get("newer") and upd.get("setup"):
             items.append(I(T("upd_install_opt" if upd.get("optional") else "upd_install", upd.get("latest")),

@@ -1462,6 +1462,7 @@ function renderLiquid() {
   $("#lc-forget").classList.toggle("hidden", !c.address);
   $("#lc-scan").textContent = L.connected ? t("Search") : (c.address && !c.enabled ? t("Search") : t("Search"));
   $("#lc-hint").classList.toggle("hidden", L.connected || !!(L.scan || []).length);
+  $("#lc-cycle").classList.toggle("hidden", L.connected || L.error_hint !== "power_cycle");
   // scan results
   const f = $("#lc-found"); f.innerHTML = "";
   for (const d of L.scan || []) {
@@ -1879,7 +1880,9 @@ function drawCalm(L) {
 $("#lc-scan").addEventListener("click", async () => {
   lcScanning = true; renderLiquid();
   try { const r = await api("lc/scan", {}); if (!r.devices.length) toast(t("No cooler found. Is it powered on and is Bluetooth enabled?"), true); }
-  catch (e) { toast(t("Error: {0}", errText(e.message)), true); }
+  catch (e) { lcScanning = false; await refresh();
+    const cyc = S.liquid && S.liquid.error_hint === "power_cycle";
+    toast(t("Error: {0}", errText(e.message)) + (cyc ? " " + t("Switch the cooler off and on again, wait until its light blinks, then press Search and connect it again.") : ""), true); }
   lcScanning = false; await refresh();
 });
 $("#lc-disc").addEventListener("click", () => lcPost("disconnect", {}, t("Cooler disconnected")));
@@ -2224,7 +2227,9 @@ function renderAbout() {
   for (const [k, v] of rows) dl.append(h("dt", {}, k), h("dd", {}, v));
   let txt;
   if (u.error) txt = t("Update check failed: {0}", u.error);
-  else if (u.newer && u.optional) txt = t("Optional update {0}: only settings for particular laptops, you can skip it.", u.latest);
+  else if (u.newer && u.optional) txt = t("Intermediate update {0}: only settings for particular laptops, you can skip it.", u.latest);
+  else if (u.skipped && u.checked) txt = t("You have the latest version (checked {0}).", new Date(u.checked * 1000).toLocaleString()) + " " +
+    t("Intermediate update {0} is not offered.", u.skipped);
   else if (u.newer) txt = t("Version {0} is available.", u.latest);
   else if (u.checked) txt = t("You have the latest version (checked {0}).", new Date(u.checked * 1000).toLocaleString());
   else txt = u.enabled ? t("Updates are checked automatically once a day.") : t("Automatic update check is off (Settings → Switches).");
@@ -2247,14 +2252,22 @@ function renderAbout() {
     }[dlst.state];
     if (msg) $("#upd-text").append(h("br"), h("span", { class: dlst.state === "error" ? "warn-text" : "" }, msg));
   }
+  $("#upd-minor").checked = u.minor !== false;
   const ib = $("#upd-install");
   ib.classList.toggle("hidden", !(u.newer && u.can_install && u.setup));
   ib.disabled = busy;
 }
+$("#upd-minor").addEventListener("change", e => act(async () => {
+  const on = e.target.checked;
+  await api("setting", { key: "update_minor", value: on });
+  const u = S.update = { ...(S.update || {}), minor: on };      // the same rule as Updater._view in updates.py
+  if (u.level) { u.newer = u.level !== "platform" || on; u.skipped = u.level === "platform" && !on ? u.latest : null; }
+  renderAbout();
+}));
 $("#upd-check").addEventListener("click", () => act(async () => { S.update = await api("update/check", {}); renderAbout(); },
   null));
 $("#upd-install").addEventListener("click", () => act(async () => {
-  if (!confirm((S.update.optional ? t("This update is optional: it only changes settings for particular laptops.") + "\n\n" : "") +
+  if (!confirm((S.update.optional ? t("This is an intermediate update: it only changes settings for particular laptops, you can skip it.") + "\n\n" : "") +
     t("Download version {0} to your Downloads folder, check its checksum and start the installer?", S.update.latest))) return;
   const r = await api("update/download", {});
   if (!r.tray) {                                     // the tray app downloads; without it open the release page

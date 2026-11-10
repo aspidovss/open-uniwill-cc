@@ -1241,6 +1241,17 @@ class UpdateAndBuildUnit(unittest.TestCase):
             r = u.check()
             self.assertTrue(r["newer"])
             self.assertFalse(r["optional"])
+            # 1.7.6.0: switch "Check intermediate updates" off -> a 4th-number release is not offered
+            Svc.settings_store.set("update_minor", False)
+            events.clear()
+            updates._get = lambda url, timeout=15: json.dumps({"tag_name": "v1.7.5.2", "assets": []}).encode()
+            r = u.check()
+            self.assertFalse(r["newer"])
+            self.assertEqual(r["skipped"], "1.7.5.2")
+            self.assertFalse([e for e in events if e[0] == "update"])
+            self.assertFalse(u.status()["newer"])
+            Svc.settings_store.set("update_minor", True)       # turned on again: offered at once, no new check
+            self.assertTrue(u.status()["newer"] and u.status()["optional"])
         finally:
             updates._get, updates.__version__ = orig, cur
 
@@ -2417,6 +2428,24 @@ class Platform0x1AUnit(unittest.TestCase):
         self.assertEqual(platformdb.match(0x10)["profile"]["id"], "uniwill-0x10")
 
 
+class CoolerErrorHintUnit(unittest.TestCase):
+    """1.7.6.0: Bluetooth errors after which the cooler should be switched off and on and connected again."""
+
+    def test_hint(self):
+        from uwccd.watercooler import error_hint
+        self.assertEqual(error_hint("Thread is configured for Windows GUI but callbacks are not working. "
+                                    "Suspect unwanted side effects from importing 'pythoncom'."), "power_cycle")
+        self.assertEqual(error_hint("Device with address AA:BB:CC:DD:EE:FF was not found."), "power_cycle")
+        self.assertEqual(error_hint("TimeoutError"), "power_cycle")
+        self.assertIsNone(error_hint(None))
+        self.assertIsNone(error_hint("bad Bluetooth address"))
+
+    def test_wmi_uses_mta(self):
+        src = open(os.path.join(ROOT, "uwccd", "win", "winplat.py"), encoding="utf-8").read()
+        self.assertIn("COINIT_MULTITHREADED", src)
+        self.assertNotIn("pythoncom.CoInitialize()", src)      # STA in the liquid thread broke bleak
+
+
 class AfterburnerUnit(unittest.TestCase):
     """1.7.1: every mode can switch an MSI Afterburner profile slot (its command line -Profile<N>)."""
 
@@ -2435,6 +2464,19 @@ class AfterburnerUnit(unittest.TestCase):
                            is_running=lambda: self.run)
         ab.install = ab.finder()
         return ab, store
+
+    def test_last_slot_kept_for_the_tray(self):
+        """1.7.6.0: the tray marks the last profile applied; it is kept in the settings across restarts."""
+        ab, store = self.make()
+        self.assertIsNone(ab.status()["last_slot"])
+        ab.apply(3)
+        self.assertEqual((store["afterburner_last"], ab.status()["last_slot"]), (3, 3))
+        self.run = False
+        store["afterburner_launch"] = False
+        ab.apply(5)                                          # failed (not running, start off): mark stays on 3
+        self.assertEqual(ab.status()["last_slot"], 3)
+        src = open(os.path.join(ROOT, "uwccd", "win", "tray.py"), encoding="utf-8").read()
+        self.assertNotIn("radio=True", src)                  # a dot only on the checked item
 
     def test_default_changes_nothing(self):
         ab, store = self.make()

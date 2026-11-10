@@ -15,6 +15,7 @@ import collections
 import copy
 import logging
 import re
+import sys
 import threading
 import time
 
@@ -81,6 +82,17 @@ DEFAULTS = {
     "pump_custom": False,          # own pump voltage limits (after the risk warning)
     "pump_running": [7, 8, 11],    # running voltages allowed with own limits (of 7 / 8 / 11 / 12)
 }
+
+
+# Errors of the Bluetooth stack after which the cooler should be switched off and on and connected again (1.7.6.0)
+POWER_CYCLE_ERRORS = ("callbacks are not working", "pythoncom", "could not get gatt", "unreachable", "was not found",
+                      "not found", "timeout", "timed out", "disconnected", "device is not ready", "operation aborted")
+
+
+def error_hint(err):
+    """-> "power_cycle" when the error usually goes away after the cooler is switched off and on, else None."""
+    e = str(err or "").lower()
+    return "power_cycle" if e and any(x in e for x in POWER_CYCLE_ERRORS) else None
 
 
 def model_of(name):
@@ -267,9 +279,18 @@ class LiquidCooler:
     def start(self):
         if not self.available or self.thread:
             return
-        self.thread = threading.Thread(target=lambda: asyncio.run(self._main()), daemon=True, name="liquid")
+        self.thread = threading.Thread(target=self._thread_main, daemon=True, name="liquid")
         self.thread.start()
         self._ready.wait(5)
+
+    def _thread_main(self):
+        if sys.platform == "win32" and not self.mock:
+            try:                                  # bleak (WinRT) needs MTA: see winplat.com_mta
+                from .win.winplat import com_mta
+                com_mta()
+            except Exception as e:  # noqa: BLE001
+                log.info("cooler: COM init: %s", e)
+        asyncio.run(self._main())
 
     def stop(self):
         if not self.loop:
@@ -783,6 +804,9 @@ class LiquidCooler:
             self._changed()
             try:
                 self.scan_result = await self.factory().scan()
+            except Exception as e:  # noqa: BLE001     shown on the card with the hint to power-cycle the cooler
+                self.error = str(e) or type(e).__name__
+                raise
             finally:
                 if self.status_ == "scanning":
                     self.status_ = "idle"
@@ -1004,7 +1028,7 @@ class LiquidCooler:
             "available": self.available, "reason": self.reason,
             "status": "connected" if self.link is not None else self.status_,
             "connected": self.link is not None,
-            "error": self.error,
+            "error": self.error, "error_hint": error_hint(self.error),
             "name": self.name or c.get("name"), "model": self.model, "generation": MODELS.get(self.model),
             "fw": self.fw, "fw_raw": self.fw_raw,
             "fan": self.cur[0], "pump": self.cur[1], "flow": self.flow, "priming": self.priming,

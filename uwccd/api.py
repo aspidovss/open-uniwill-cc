@@ -702,6 +702,8 @@ class Handler(BaseHTTPRequestHandler):
             s.settings_store.set("profile_autoapply", bool(value))
         elif key == "update_check":
             s.settings_store.set("update_check", bool(value))
+        elif key == "update_minor":                  # 1.7.6.0: "Check intermediate updates" (4th number)
+            s.settings_store.set("update_minor", bool(value))
         elif key == "kb_fx_screen":                  # Linux: allow BetterRGB Screen ambient (off by default)
             s.keyboard.set_screen_fx(bool(value))
         elif key in ("clevo_writes", "clevo_restore"):     # Control Center 3.0 / Clevo (experimental)

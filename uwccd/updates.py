@@ -11,6 +11,8 @@ Version numbers (1.7.5.0): MAJOR.FEATURE.FIX.PLATFORM —
   4th  settings / data for particular laptops only (platform profiles, tables): an *optional* update. It is shown
        (window, tray, one notification) but marked as not required. 1.7.5 is the same as 1.7.5.0; the 4th number
        goes back to 0 when one of the first three changes. Builds up to 1.7.4 compare only the first three numbers.
+       1.7.6.0: switch "Check intermediate updates" (setting update_minor, on by default); when it is off, a release
+       that changes only the 4th number is not offered at all.
 """
 import hashlib
 import json
@@ -69,6 +71,17 @@ class Updater(threading.Thread):
     def enabled(self):
         return bool(self.svc.settings_store.get("update_check", True))
 
+    def minor_enabled(self):
+        return bool(self.svc.settings_store.get("update_minor", True))
+
+    def _view(self, res):
+        """newer / optional / skipped from the stored level and the switch "Check intermediate updates"."""
+        lv = res.get("level")
+        minor = self.minor_enabled()
+        return {**res, "minor": minor, "optional": lv == "platform",
+                "newer": bool(lv) and (lv != "platform" or minor),
+                "skipped": res.get("latest") if lv == "platform" and not minor else None}
+
     def run(self):
         if self.stop.wait(90):
             return
@@ -86,8 +99,7 @@ class Updater(threading.Thread):
             assets = {a["name"]: a["browser_download_url"] for a in rel.get("assets", [])}
             res.update(latest=tag.lstrip("v"), url=rel.get("html_url") or f"{REPO_URL}/releases",
                        notes=(rel.get("body") or "")[:4000], published=rel.get("published_at"),
-                       newer=update_level(__version__, tag) is not None, level=update_level(__version__, tag),
-                       optional=update_level(__version__, tag) == "platform", error=None,
+                       level=update_level(__version__, tag), error=None,
                        setup=_setup_asset(assets),
                        linux=next((u for n, u in assets.items() if n.endswith(".tar.gz") and "linux" in n), None),
                        sums=assets.get("SHA256SUMS.txt"))
@@ -98,6 +110,9 @@ class Updater(threading.Thread):
         with self.lock:
             self.result = res
         self.svc.settings_store.set("update_last_check", res["checked"])
+        res = self._view(res)
+        if res.get("skipped"):
+            log.info("intermediate update %s not offered (switch off)", res["skipped"])
         if res.get("newer"):
             log.info("update available: %s (%s)", res["latest"], "optional" if res.get("optional") else res.get("level"))
             if self.notified != res["latest"]:
@@ -112,7 +127,7 @@ class Updater(threading.Thread):
     def request_install(self):
         if sys.platform != "win32":
             raise NotImplementedError("on Linux install the release archive with install.sh")
-        res = self.result
+        res = self._view(self.result)
         if not res.get("newer") or not res.get("setup") or not res.get("sums"):
             raise ValueError("no newer release with a Windows installer")
         if not self.svc.tray_clients:
@@ -135,7 +150,7 @@ class Updater(threading.Thread):
 
     def status(self):
         with self.lock:
-            return {**self.result, "enabled": self.enabled(), "can_install": sys.platform == "win32",
+            return {**self._view(self.result), "enabled": self.enabled(), "can_install": sys.platform == "win32",
                     "build": build_info(), "version_full": version_string(), "contact": CONTACT,
                     "tray": bool(getattr(self.svc, "tray_clients", 0))}
 

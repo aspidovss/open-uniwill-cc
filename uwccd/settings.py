@@ -246,6 +246,7 @@ class SettingsManager:
             "debug": bool(self.st.get("debug", False)),
             "tcc_extended": bool(self.st.get("tcc_extended", False)),
             "update_check": bool(self.st.get("update_check", True)),
+            "update_minor": bool(self.st.get("update_minor", True)),        # 1.7.6.0: offer 4th-number releases
             "history_record": bool(self.st.get("history_record", True)),
             "profile_autoapply": bool(self.st.get("profile_autoapply", True)),     # Mode selection: write at once
             "lc_hwoc": bool(self.st.get("lc_hwoc", False)),

@@ -188,8 +188,9 @@ From [Releases](https://github.com/aspidovss/open-uniwill-cc/releases):
 | 3rd | functions are fixed |
 | 4th | only settings for particular laptops change (platform profiles, tables) — an **optional** update |
 
-An update that changes only the 4th number is shown in the window and the tray as *optional*: install it if the
-release notes name your laptop, or skip it. `1.7.5` is the same as `1.7.5.0`.
+An update that changes only the 4th number is an *intermediate* update: it is shown in the window and the tray as
+optional — install it if the release notes name your laptop, or skip it. The switch **Check intermediate updates**
+(*Information → About*, on by default) turns them off completely. `1.7.5` is the same as `1.7.5.0`.
 
 ## Installation
 

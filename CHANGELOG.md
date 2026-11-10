@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.7.6.0
+
+- **Switch "Check intermediate updates"** on *Information → About* (on by default). Intermediate updates are releases
+  that change only the 4th number of the version (settings for particular laptops). When the switch is on they are
+  shown as before, marked as optional; when it is off they are not offered at all — no notification, no tray item, and
+  the card says "Intermediate update X is not offered". The switch takes effect at once, without a new check.
+- The optional 4th-number updates are now called *intermediate* in the window, the tray and the notifications.
+- **Liquid cooling (Windows): "Thread is configured for Windows GUI but callbacks are not working. Suspect unwanted side
+  effects from importing 'pythoncom'".** The temperature reading of the cooler thread went through WMI, which set
+  up COM in that thread as single-threaded (STA); the Bluetooth library (bleak, WinRT) then refused to search or
+  connect. WMI now uses the multi-threaded apartment (MTA), and the cooler thread sets it up before anything else.
+- **Liquid cooling: hint to power-cycle the cooler.** After a Bluetooth error that usually goes away this way (the
+  error above, device not found, time-out, lost link…) the card and the error message say: switch the cooler off and
+  on again, wait until its light blinks, then press Search and connect it again.
+- **Tray, MSI Afterburner:** only the last profile applied has a dot (before, on some Windows menus every profile had
+  one). The last profile is kept in the settings, so the mark is there after a restart too. The other radio lists of
+  the tray (modes, presets, cooler mode, language) show the dot the same way.
+
 ## 1.7.5.0
 
 - **Version numbers have four parts** — `MAJOR.FEATURE.FIX.PLATFORM`, e.g. `1.7.5.3`: the 1st number for a

@@ -444,3 +444,7 @@ svg.lc-curve text.draglbl{font-size:16px}
 .detect-why{padding:10px 12px;border:1px solid var(--line,#2a333b);border-radius:10px;background:rgba(255,255,255,.02)}
 .detect-why p{margin:0 0 8px;font-size:13px}
 .detect-ok{margin-top:12px;color:var(--acc)}
+
+/* 1.7.6.0: About card — switch "Check intermediate updates" */
+.upd-minor{gap:12px;align-items:flex-start;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+.upd-minor b{font-size:13px;font-weight:600}.upd-minor p{margin:2px 0 0}
