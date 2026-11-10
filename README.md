@@ -109,7 +109,8 @@ Super / XMG NEO 16 (E23); on other models every function stays off until the sel
 - **English and Russian** interface; tray app with notifications on Windows; desktop notifications on Linux
 - **Backup and transfer**: export / import of fan curves (one or all), full backup, import from the original Control Center
 - **Update check** against the GitHub releases (once a day, can be switched off); on Windows download, checksum check and
-  install from the window or the tray
+  install from the window or the tray; optional *intermediate* updates for particular laptops —
+  [Versions and updates](#versions-and-updates)
 - **Diagnostic report** for bug reports and new laptops (privacy options, send via GitHub or e-mail)
 - **`uwccctl`** command line tool on both systems
 - **Built-in help**: this documentation inside the program, offline, English and Russian (*Help*)
@@ -179,18 +180,49 @@ From [Releases](https://github.com/aspidovss/open-uniwill-cc/releases):
 | `open-uniwill-cc-linux-<ver>.tar.gz` | Ubuntu / Debian-based Linux (installer uses apt; developed on Ubuntu 24.04) |
 | `SHA256SUMS.txt` | checksums |
 
-**Version numbers** (since 1.7.5.0) have four parts, e.g. `1.7.5.3`:
+## Versions and updates
 
-| Part | Changes when |
+### Version numbers
+
+Since 1.7.5.0 a version has four numbers — `MAJOR.FEATURE.FIX.PLATFORM`, for example `1.7.6.2`:
+
+| Number | Changes when | Example | Should you install it? |
+|---|---|---|---|
+| 1st — major | the way the program works changes fundamentally | `1.9.3.0` → `2.0.0.0` | yes, read the release notes first |
+| 2nd — feature | functions are added or changed | `1.7.6.0` → `1.8.0.0` | yes |
+| 3rd — fix | functions are fixed | `1.7.6.0` → `1.7.7.0` | yes |
+| 4th — platform | only settings for particular laptops change: platform profiles, tables, limits | `1.7.6.0` → `1.7.6.1` | only if the release notes name your laptop |
+
+- When a number goes up, the numbers after it go back to 0: `1.7.6.3` → `1.7.7.0`.
+- A missing 4th number is 0: `1.7.5` is the same as `1.7.5.0`.
+- Tags and release titles are the version: tag `v1.7.6.0`, release *1.7.6.0*.
+- Each release is complete. You can install any newer version over the one you have; nothing has to be installed in
+  between (`1.7.6.0` → `1.7.7.0` skips `1.7.6.1`, `1.7.6.2`, … and still contains them).
+- The kernel module `uwcc` on Linux has its own DKMS version (for example 1.7.3). It changes only when the module
+  changes, so a program update does not always rebuild it.
+
+### Update check
+
+Once a day (and on *Information → About → Check for updates*) the service asks GitHub for the latest release. Only
+`https://api.github.com/repos/aspidovss/open-uniwill-cc/releases/latest` is requested, with the usual User-Agent and
+nothing else. *Check for updates automatically* (*Switches*) turns the daily check off.
+
+| The latest release changes | What you see |
 |---|---|
-| 1st | the way the program works changes fundamentally |
-| 2nd | functions are added or changed |
-| 3rd | functions are fixed |
-| 4th | only settings for particular laptops change (platform profiles, tables) — an **optional** update |
+| the 1st, 2nd or 3rd number | **Update**: a notification once, *Version X is available* on *Information*, *Install update X* in the tray |
+| only the 4th number | **Intermediate update**, marked as optional: *Intermediate update X: only settings for particular laptops, you can skip it* |
+| nothing newer | *You have the latest version* |
 
-An update that changes only the 4th number is an *intermediate* update: it is shown in the window and the tray as
-optional — install it if the release notes name your laptop, or skip it. The switch **Check intermediate updates**
-(*Information → About*, on by default) turns them off completely. `1.7.5` is the same as `1.7.5.0`.
+**Check intermediate updates** (*Information → About*, on by default): turn it off and intermediate updates are not
+offered at all — no notification, no tray item; the card only says *Intermediate update X is not offered*. Updates
+that change one of the first three numbers are always shown. The switch works at once, without a new check.
+
+**Installing.** On Windows, *Download and install* (window or tray) downloads the installer of the release to your
+Downloads folder, checks it against `SHA256SUMS.txt` of the same release and starts it. On Linux, download the archive
+from the release page and run `sudo bash install.sh` in it (see [Installation](#installation)).
+
+> Versions up to 1.7.4 compare only the first three numbers, so they do not show intermediate updates at all; the
+> next fix or feature release reaches them as usual.
 
 ## Installation
 
