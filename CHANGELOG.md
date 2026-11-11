@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.8.0.0
+
+The service is reorganized around four explicit contracts; nothing changes on the laptop by itself.
+
+- **API as a contract** ([docs/API.md](docs/API.md)): `/api/state` now carries `api.version` (1), and the documented
+  endpoints, fields and events only change with that version. First "outside plugin" example:
+  [examples/zabbix_exporter.py](examples/zabbix_exporter.py) — sensors for Zabbix or any monitoring agent in ~40
+  lines, no dependencies.
+- **Event bus** (`uwccd/bus.py`): every event of the service goes through one typed bus with the contract list
+  `bus.EVENTS`; parts of the service subscribe to events instead of calling each other, and the same events go to
+  the clients as `/api/events`. Commands to the hardware stay ordinary calls (they need order, locks and results).
+- **Capability registry** (`uwccd/capabilities.py`): one explicit list of what this laptop has and where the answer
+  comes from (EC bits / platform profile / access path / OS). Shown on *Information → Functions on this laptop*,
+  by `uwccctl caps`, and read by the tray; part of `/api/state`.
+- **Service modules** (`uwccd/modules.py`): the switchable parts of the service — liquid cooling, MSI Afterburner,
+  automation, lighting, Clevo, Leishen — under one interface (name / start / stop / running / enabled). New switches
+  on *Switches → Service modules* and `uwccctl modules [NAME on|off]`; liquid, Afterburner and automation switch
+  live, the rest at the next service start. The choice is kept in the settings.
+- **Translatable interface** ([docs/TRANSLATING.md](docs/TRANSLATING.md)): any language beyond the built-in English
+  and Russian is one JSON file — window texts, notifications and the tray menu, with English as the key-by-key
+  fallback. `tools/make_lang_template.py` makes the blank; the file goes to `uwccd/web/lang/<code>.json` (pull
+  requests welcome) or `<data dir>/langs/<code>.json` to try locally. The language switch and `GET /api/langs` list
+  every language found; `GET /api/lang/<code>` serves one.
+- The liquid-cooling thread is restartable (the "liquid" module can be switched off and on without a service
+  restart); the automation rules check their module before acting.
+
 ## 1.7.7.1
 
 - **Windows: the Control Center window did not open in 1.7.7.0.** The tray now starts Edge so that its own sandbox

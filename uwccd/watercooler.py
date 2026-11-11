@@ -277,8 +277,9 @@ class LiquidCooler:
 
     # -- thread / loop plumbing -------------------------------------------------------------------
     def start(self):
-        if not self.available or self.thread:
+        if not self.available or self.thread_running():
             return
+        self._stop = False                       # restartable: the "liquid" module can switch it off and on (1.8.0.0)
         self.thread = threading.Thread(target=self._thread_main, daemon=True, name="liquid")
         self.thread.start()
         self._ready.wait(5)
@@ -290,7 +291,11 @@ class LiquidCooler:
                 com_mta()
             except Exception as e:  # noqa: BLE001
                 log.info("cooler: COM init: %s", e)
-        asyncio.run(self._main())
+        try:
+            asyncio.run(self._main())
+        finally:
+            self.loop = None
+            self.thread = None
 
     def stop(self):
         if not self.loop:
@@ -301,6 +306,11 @@ class LiquidCooler:
             pass
         self._stop = True
         self._wake_up()
+
+    def thread_running(self):
+        """The cooler thread is alive (the "liquid" module: on/off without a service restart, 1.8.0.0)."""
+        t = self.thread
+        return bool(t and t.is_alive())
 
     def call(self, coro, timeout=30):
         if not self.loop:

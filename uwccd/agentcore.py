@@ -93,8 +93,14 @@ TRAY = {
 
 
 def T(lang, key, *a):
-    s = TEXT.get(lang, TEXT["en"]).get(key) or TEXT["en"].get(key) or TRAY.get(lang, TRAY["en"]).get(key) \
-        or TRAY["en"].get(key, key)
+    """Notification / tray text. en and ru are built in; any other language comes from its JSON file
+    (uwccd/i18n.py, sections "service" and "tray") and falls back to English key by key."""
+    extra_svc = extra_tray = {}
+    if lang not in TEXT:
+        from . import i18n
+        extra_svc, extra_tray = i18n.texts(lang, "service"), i18n.texts(lang, "tray")
+    s = extra_svc.get(key) or extra_tray.get(key) or TEXT.get(lang, TEXT["en"]).get(key) or TEXT["en"].get(key) \
+        or TRAY.get(lang, TRAY["en"]).get(key) or TRAY["en"].get(key, key)
     return s.format(*a) if a else s
 
 

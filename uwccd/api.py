@@ -32,6 +32,14 @@ for _ext, _type in ((".js", "text/javascript"), (".css", "text/css"), (".svg", "
     mimetypes.add_type(_type, _ext)      # the Windows registry may map .js to text/plain
 
 WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
+# The API contract: version, stability promise — docs/API.md. "1" changes only when something breaks.
+API = {"version": 1, "program": None}      # program version is filled at import below
+
+def _fill_api():
+    from . import __version__
+    API["program"] = __version__
+
+_fill_api()
 
 
 def _docs_dir():
@@ -151,7 +159,14 @@ class Handler(BaseHTTPRequestHandler):
         s = self.svc
         try:
             if u.path == "/api/state":
-                return self._json(200, s.state())
+                return self._json(200, {"api": API, **s.state()})
+            if u.path == "/api/langs":
+                from . import i18n
+                return self._json(200, {"languages": i18n.available()})
+            if u.path.startswith("/api/lang/"):
+                from . import i18n
+                lang = i18n.load(u.path.rsplit("/", 1)[1])
+                return self._json(200 if lang else 404, lang or {"error": "no such language"})
             if u.path == "/api/monitor":
                 return self._json(200, s.sampler.snapshot())
             if u.path == "/api/history":
@@ -517,6 +532,10 @@ class Handler(BaseHTTPRequestHandler):
                 rules = [{"process": str(r["process"])[:64], "mode": int(r["mode"]),
                           "enabled": bool(r.get("enabled", True))} for r in b.get("rules", [])]
                 s.settings_store.set("app_binding", rules)
+            elif path == "/api/module":                   # {name, enabled}: Switches -> Service modules
+                s.modules.set_enabled(str(b.get("name")), bool(b.get("enabled")))
+                s.emit("status", {})
+                return self._json(200, {"modules": s.modules.status()})
             elif path == "/api/idle":
                 kb_timeout = int(s.settings_store.get("kb_timeout", 0) or 0)
                 s.keyboard.idle(bool(b.get("idle")) and kb_timeout > 0)
@@ -799,9 +818,10 @@ class Handler(BaseHTTPRequestHandler):
             log.info("monitoring setting %s = %s -> %s", key, bool(value), s.monitor_level())
             s.sampler.wake()
         elif key == "lang":
-            if value not in ("en", "ru"):
-                raise ValueError("lang: en | ru")
-            s.settings_store.set("lang", value)
+            from . import i18n
+            if not i18n.valid(str(value).lower()):
+                raise ValueError("lang: " + " | ".join(l["code"] for l in i18n.available()))
+            s.settings_store.set("lang", str(value).lower())
         else:
             raise KeyError(key)
 

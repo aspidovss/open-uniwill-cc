@@ -108,6 +108,11 @@ Super / XMG NEO 16 (E23); on other models every function stays off until the sel
   TUXEDO Aquaris: fan and pump curves (common and per laptop mode), cooler profiles, lighting, coolant flow guard, filling cycle
 - **English and Russian** interface; tray app with notifications on Windows; desktop notifications on Linux
 - **Backup and transfer**: export / import of fan curves (one or all), full backup, import from the original Control Center
+- **API for scripts and integrations**: plain HTTP + JSON on 127.0.0.1 with a stable contract
+  ([docs/API.md](docs/API.md)) — events stream, capability registry, switchable service modules; a Zabbix /
+  monitoring exporter is ~40 lines ([examples/zabbix_exporter.py](examples/zabbix_exporter.py))
+- **Translatable interface**: English and Russian built in, any other language is one JSON file —
+  [docs/TRANSLATING.md](docs/TRANSLATING.md)
 - **Update check** against the GitHub releases (once a day, can be switched off); on Windows download, checksum check and
   install from the window or the tray; optional *intermediate* updates for particular laptops —
   [Versions and updates](#versions-and-updates)

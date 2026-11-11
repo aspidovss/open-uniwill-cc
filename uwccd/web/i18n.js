@@ -603,6 +603,47 @@ const RU = {
   "The service is restarting…": "Служба перезапускается…",
 };
 const DICTS = { ru: RU };
+// 1.8.0.0: extra languages are one JSON file each (docs/TRANSLATING.md); the window fetches /api/lang/<code>
+// once and registers it here. LANG_NAMES feeds the language pickers.
+const LANG_NAMES = { en: "English", ru: "Русский" };
+
+// 1.8.0.0 — service modules, capability registry, languages
+Object.assign(RU, {
+  "Service modules": "Модули службы",
+  "Takes effect at the next service start": "Вступит в силу при следующем запуске службы",
+  "(takes effect at the next service start)": "(вступает в силу при следующем запуске службы)",
+  "Liquid cooling": "Жидкостное охлаждение",
+  "Keyboard and light bar": "Клавиатура и световая полоса",
+  "Control Center 3.0 / Clevo": "Control Center 3.0 / Clevo",
+  "Leishen / Thunderobot": "Leishen / Thunderobot",
+  "Bluetooth liquid coolers (XMG Oasis / LCT21001 / LCT22002): search, connection, curves, guard.":
+    "Системы жидкостного охлаждения Bluetooth (XMG Oasis / LCT21001 / LCT22002): поиск, подключение, кривые, защита.",
+  "MSI Afterburner profile follows the mode; the card on Mode selection and the tray menu.":
+    "Профиль MSI Afterburner следует за режимом; карточка на «Выборе режима» и меню в трее.",
+  "App binding, the AC/battery rules and the load rules. Off: nothing switches modes by itself.":
+    "Привязка приложений, правила «сеть/батарея» и правила по нагрузке. Выкл.: ничто не переключает режимы само.",
+  "Keyboard backlight and light bar control. Off: the keyboard keeps its firmware lighting.":
+    "Управление подсветкой клавиатуры и световой полосой. Выкл.: клавиатура остаётся с подсветкой прошивки.",
+  "Control Center 3.0 / Clevo platform support.": "Поддержка платформы Control Center 3.0 / Clevo.",
+  "Leishen / Thunderobot platform support.": "Поддержка платформы Leishen / Thunderobot.",
+  "Functions on this laptop": "Функции на этом ноутбуке",
+  "What the service found on this laptop and where the answer comes from. The window, the tray and uwccctl read this one list.":
+    "Что служба нашла на этом ноутбуке и откуда взят ответ. Окно, трей и uwccctl читают этот единый список.",
+  "Modes": "Режимы", "Graphics power (cTGP / Dynamic Boost)": "Мощность видеокарты (cTGP / Dynamic Boost)",
+  "Liquid overclocking (PWUP)": "Жидкостный разгон (PWUP)",
+  "Battery charge limits": "Пределы заряда батареи", "Battery protection modes": "Режимы защиты батареи",
+  "RGB keyboard": "RGB-клавиатура", "Liquid cooler (Bluetooth)": "Система жидкостного охлаждения (Bluetooth)",
+  "Clevo interface": "Интерфейс Clevo", "Leishen interface": "Интерфейс Leishen",
+  "Hotkey events": "События горячих клавиш",
+  "no RamFan 1.5 (0x78E bit6)": "нет RamFan 1.5 (0x78E бит6)",
+  "slow on the WMI path": "медленно на пути WMI",
+  "from the firmware table SMRW": "из таблицы прошивки SMRW",
+  "from the platform profile": "из профиля платформы",
+  "not installed": "не установлен", "Windows only": "только Windows",
+  "events": "события", "polling": "опрос",
+});
+
+function registerLang(code, name, dict) { DICTS[code] = dict || {}; if (name) LANG_NAMES[code] = name; }
 
 Object.assign(RU, {
   "CPU / GPU temperature": "Температура CPU / GPU",

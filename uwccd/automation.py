@@ -388,6 +388,8 @@ class PowerSourceRules:
 
     def on_ac_change(self, online):
         svc, st = self.svc, self.svc.settings_store
+        if not getattr(svc, "automation_enabled", lambda: True)():      # module "automation" is off (1.8.0.0)
+            return
         binding_active = any(getattr(t, "active", None) for t in svc.threads if t.name == "appbind")
         rule_active = getattr(getattr(svc, "load_rules", None), "active", None) is not None   # load rules come first
         alt = getattr(svc, "alt", None)
@@ -819,6 +821,8 @@ class LoadRules:
         self.active, self.saved, self.did = None, None, {}
 
     def tick(self, m, now=None):
+        if not getattr(self.svc, "automation_enabled", lambda: True)():  # module "automation" is off (1.8.0.0)
+            return
         if not self.svc.fan_control or not m or m.get("monitoring", "full") != "full":
             return
         sp = getattr(self.svc, "sysprof", None)

@@ -36,6 +36,8 @@ Overview
   driver-verify DIR              check an OEM driver package (no service needed)
   ec config export|import FILE|reset  /  ec test  /  ec monitor oem|wmi|all on|off
   ec platform [export FILE|import FILE|reset|apply-draft]  /  ec selfcheck [1|2] [--export FILE]
+  caps                           what this laptop has (the capability registry)
+  modules [NAME on|off]          switchable parts of the service
   lighting  /  nvram  /  ec read ADDR  /  resume
   ec-direct read ADDR [N] | dump BASE    (root, without the service)
   release                        give fan control back to the EC (root, used by uninstall)
@@ -313,6 +315,10 @@ HELP = {
         "uwccctl lc rgb off\n"
         "uwccctl lc prime [stop]                  coolant filling cycle (~68 s)\n"
         "uwccctl lc suspend                       put the cooler to sleep (system-sleep hook)"),
+    "caps": "uwccctl caps [--json]\n  What this laptop has, one line per function: available, source (ec / profile /\n"
+            "  driver / os / none) and a detail. The same list as Information -> Functions on this laptop.",
+    "modules": "uwccctl modules [NAME on|off]\n  Switchable parts of the service (liquid, afterburner, automation, lighting, ...).\n"
+               "  Modules marked (next service start) change at the next start of the service.",
     "history": "uwccctl history [csv|csv-excel|json] [1m|5m|15m|1h|24h] [FILE]\n  Sensor history (default csv, 1h) to stdout or FILE.",
     "export": "uwccctl export fans|all [FILE]\n  Fan tables or a full backup (profiles, settings, liquid cooler).",
     "import": "uwccctl import FILE [fans,profiles,settings] [--force]\n  Default sections: fans,profiles; --force accepts a backup of another project.",
@@ -1387,6 +1393,27 @@ def all_settings(s):
     return d
 
 
+def cmd_caps():
+    """Capability registry (1.8.0.0): one list of what this laptop has (window: Information)."""
+    caps = call("state").get("capabilities") or {}
+    out(caps, lambda d: [f"{k:20} {'yes' if v.get('available') else 'no ':3} {v.get('source',''):7} {v.get('detail','')}"
+                         for k, v in d.items()])
+
+
+def cmd_modules(a):
+    """uwccctl modules [NAME on|off] — switchable parts of the service (uwccd/modules.py)."""
+    if a:
+        if len(a) != 2:
+            usage("modules")
+        r = call("module", {"name": a[0], "enabled": onoff(a[1], "modules")})
+        mods = r.get("modules") or []
+    else:
+        mods = call("state").get("modules") or []
+    out(mods, lambda ms: [f"{m['name']:12} {'on ' if m['enabled'] else 'off'} "
+                          f"{'running' if m['running'] else '-':8} "
+                          f"{'' if m['live'] else '(next service start)'}" for m in ms if m["available"]])
+
+
 def cmd_get(a):
     d = all_settings(call("state"))
     if a:
@@ -1778,6 +1805,8 @@ def main(a):
         "afterburner": lambda: cmd_afterburner(rest),
         "detect": lambda: cmd_detect(rest),
         "rules": lambda: cmd_rules(rest),
+        "caps": lambda: cmd_caps(),
+        "modules": lambda: cmd_modules(rest),
         "get": lambda: cmd_get(rest),
         "set": lambda: cmd_set(rest),
         "apps": lambda: cmd_apps(rest),

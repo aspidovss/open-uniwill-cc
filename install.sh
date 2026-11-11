@@ -78,6 +78,8 @@ systemctl stop uwccd.service 2>/dev/null || true
 rm -rf "$PREFIX"
 mkdir -p "$PREFIX"
 cp -r "$HERE/uwccd" "$HERE/bin" "$PREFIX/"
+[ -d "$HERE/examples" ] && cp -r "$HERE/examples" "$PREFIX/"      # API examples (docs/API.md), e.g. the Zabbix exporter
+[ -d "$HERE/tools" ] && { mkdir -p "$PREFIX/tools"; cp "$HERE/tools/make_lang_template.py" "$PREFIX/tools/"; }
 mkdir -p "$PREFIX/docs/EC"                                   # built-in help (Markdown only)
 cp "$HERE"/docs/*.md "$PREFIX/docs/" && cp "$HERE"/docs/EC/*.md "$PREFIX/docs/EC/"
 for f in LICENSE NOTICE.md CONTRIBUTORS.md THIRD_PARTY_LICENSES.txt; do [ -f "$HERE/$f" ] && cp "$HERE/$f" "$PREFIX/"; done   # notices

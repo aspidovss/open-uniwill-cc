@@ -48,6 +48,39 @@ class MockService(unittest.TestCase):
         cls.proc.terminate()
         cls.proc.wait(5)
 
+    def test_api_contract_fields(self):
+        """1.8.0.0: /api/state carries the API version, the capability registry and the module list."""
+        st = self.get("state")
+        self.assertEqual(st["api"]["version"], 1)
+        caps = st["capabilities"]
+        for k in ("modes", "power_limits", "battery_limits", "liquid_cooler", "ec_write"):
+            self.assertIn("available", caps[k])
+            self.assertIn("source", caps[k])
+        self.assertTrue(caps["modes"]["available"])
+        names = [m["name"] for m in st["modules"]]
+        self.assertEqual(names[:3], ["liquid", "afterburner", "automation"])
+        self.assertEqual(self.get("langs")["languages"][0]["code"], "en")
+
+    def test_module_toggle_over_api(self):
+        code, r = self.post("module", {"name": "liquid", "enabled": False})
+        self.assertEqual(code, 200)
+        row = [m for m in r["modules"] if m["name"] == "liquid"][0]
+        self.assertFalse(row["enabled"])
+        for _ in range(40):                            # the cooler thread stops within a couple of seconds
+            row = [m for m in self.get("state")["modules"] if m["name"] == "liquid"][0]
+            if not row["running"]:
+                break
+            time.sleep(0.25)
+        self.assertFalse(row["running"])
+        code, r = self.post("module", {"name": "liquid", "enabled": True})
+        self.assertEqual(code, 200)
+        for _ in range(40):
+            row = [m for m in self.get("state")["modules"] if m["name"] == "liquid"][0]
+            if row["running"]:
+                break
+            time.sleep(0.25)
+        self.assertTrue(row["running"] and row["enabled"])
+
     def test_clevo_absent(self):                       # Control Center 3.0 / Clevo module without the interface
         self.assertFalse(self.get("state")["clevo"]["present"])
         self.assertFalse(self.get("clevo")["present"])
@@ -2531,6 +2564,93 @@ class AppWindowUnit(unittest.TestCase):
         self.assertIn('activate_action("quit", None)', agent)
         self.assertIn("/usr/share/applications/io.github.aspidovss.uwcc.desktop", self.read("install.sh"))
         self.assertIn("gir1.2-ayatanaappindicator3-0.1", self.read("install.sh"))
+
+
+class BusAndModulesUnit(unittest.TestCase):
+    """1.8.0.0: the event bus, the module registry and the language files."""
+
+    def test_bus_subscribe_and_sse(self):
+        from uwccd.bus import EVENTS, EventBus
+        bus = EventBus()
+        got = []
+        off = bus.subscribe("mode", lambda k, d: got.append((k, d)))
+        bus.subscribe("*", lambda k, d: got.append(("*", k)))
+        q = bus.listen()
+        bus.emit("mode", {"mode": 2})
+        self.assertEqual(got, [("mode", {"mode": 2}), ("*", "mode")])
+        self.assertEqual(json.loads(q.get_nowait())["type"], "mode")
+        off()
+        bus.emit("mode", {"mode": 0})
+        self.assertEqual([g for g in got if g[0] == "mode"], [("mode", {"mode": 2})])
+        self.assertIn("status", EVENTS)
+
+    def test_bus_subscriber_error_does_not_break_emit(self):
+        from uwccd.bus import EventBus
+        bus = EventBus()
+        bus.subscribe("status", lambda k, d: 1 / 0)
+        q = bus.listen()
+        bus.emit("status", {})                        # must not raise
+        self.assertTrue(q.get_nowait())
+
+    def test_modules_registry(self):
+        from uwccd.modules import Modules
+
+        class Store(dict):
+            def set(self, k, v):
+                self[k] = v
+        st, events, running = Store(), [], {"on": False}
+        m = Modules(st, lambda k, d: events.append((k, d)))
+        m.register("thing", "A thing", start=lambda: running.update(on=True),
+                   stop=lambda: running.update(on=False), running=lambda: running["on"])
+        m.register("later", "Needs restart", live=False, running=lambda: True)
+        m.register("gone", "No hardware", available=False)
+        self.assertTrue(m.enabled("thing"))
+        m.start_enabled()
+        self.assertTrue(running["on"])
+        m.set_enabled("thing", False)                  # live: stops at once, persists
+        self.assertFalse(running["on"])
+        self.assertEqual(st["modules"], {"thing": False})
+        self.assertEqual(events[-1][0], "modules")
+        m.set_enabled("later", False)                  # not live: only persisted
+        row = [r for r in m.status() if r["name"] == "later"][0]
+        self.assertEqual((row["enabled"], row["running"], row["live"]), (False, True, False))
+        self.assertFalse([r for r in m.status() if r["name"] == "gone"][0]["available"])
+        m.set_enabled("thing", True)
+        self.assertTrue(running["on"])
+
+    def test_language_files(self):
+        import importlib
+
+        from uwccd import i18n, store
+        tmp = tempfile.mkdtemp(prefix="uwcc-lang-")
+        old = store.DATA_DIR
+        store.DATA_DIR = tmp
+        try:
+            importlib.reload(i18n)
+            os.makedirs(os.path.join(tmp, "langs"))
+            with open(os.path.join(tmp, "langs", "de.json"), "w", encoding="utf-8") as f:
+                json.dump({"name": "Deutsch", "web": {"Settings": "Einstellungen"},
+                           "service": {"boost_on": "Boost ein"}, "tray": {"open": "Öffnen"}}, f)
+            self.assertEqual([x["code"] for x in i18n.available()][:2], ["en", "ru"])
+            self.assertIn("de", [x["code"] for x in i18n.available()])
+            self.assertTrue(i18n.valid("de"))
+            self.assertFalse(i18n.valid("xx"))
+            self.assertEqual(i18n.load("de")["web"]["Settings"], "Einstellungen")
+            from uwccd.agentcore import T
+            self.assertEqual(T("de", "boost_on"), "Boost ein")
+            self.assertEqual(T("de", "open"), "Öffnen")
+            self.assertEqual(T("de", "boost_off"), "Fan Boost off")      # missing key: English
+        finally:
+            store.DATA_DIR = old
+            importlib.reload(i18n)
+
+    def test_lang_template_tool(self):
+        r = subprocess.run([sys.executable, os.path.join(ROOT, "tools", "make_lang_template.py")],
+                           capture_output=True, text=True, check=True)
+        d = json.loads(r.stdout)
+        self.assertGreater(len(d["web"]), 500)
+        self.assertIn("boost_on", d["service"])
+        self.assertIn("open", d["tray"])
 
 
 class AfterburnerUnit(unittest.TestCase):

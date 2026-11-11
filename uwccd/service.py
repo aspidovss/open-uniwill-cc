@@ -1,8 +1,6 @@
 """Service core — the Linux counterpart of GCUService (MyControlCenter.App)."""
-import json
 import os
 import logging
-import queue
 import sys
 import threading
 import time
@@ -44,8 +42,8 @@ class Service:
     def __init__(self, backend=None, mock=False):
         self.mock = mock
         self.settings_store = store.Settings()
-        self.listeners = []
-        self.llock = threading.Lock()
+        from .bus import EventBus
+        self.bus = EventBus()                    # every event goes through here (bus.EVENTS, docs/API.md)
         self.busy = Busy(self.emit)              # long operations the window waits for (WMI: mode switches)
         from .clevo import ClevoManager
         self.clevo = ClevoManager(self.settings_store, self.emit, mock=mock)     # Control Center 3.0 / Clevo
@@ -123,8 +121,39 @@ class Service:
         from .sysprofile import SystemProfile
         self.sysprof = SystemProfile(self)              # Windows power mode / power-profiles-daemon (Automation)
         self.load_rules = LoadRules(self)              # mode by power / temperature / load (Automation)
+        self.bus.subscribe("mode", lambda _k, d: threading.Thread(
+            target=self.rules.sync_ppd, args=(d.get("mode"),), daemon=True).start())
+        self.bus.subscribe("lc", lambda _k, d: (d.get("event") != "hwoc" and getattr(self, "hwoc", None)
+                                                and self.hwoc.wake.set()))
+        from .modules import Modules
+        self.modules = Modules(self.settings_store, self.emit)
+        self._register_modules()
         self.threads = []
         self.fan_control = False
+
+    def _register_modules(self):
+        """The switchable parts of the service, one interface each: docs/API.md ("Modules")."""
+        m, ab, lq = self.modules, self.afterburner, self.liquid
+        m.register("liquid", "Liquid cooling", start=lq.start, stop=lq.stop,
+                   running=lq.thread_running, available=lq.available,
+                   note="XMG Oasis and compatible Bluetooth coolers")
+        m.register("afterburner", "MSI Afterburner",
+                   start=lambda: (ab.stop_ev.clear(), ab.start()), stop=ab.stop,
+                   running=lambda: not ab.stop_ev.is_set(), available=ab.available,
+                   note="profile follows the mode; the card on Mode selection")
+        m.register("automation", "Automation", available=True, live=True, start=None, stop=None,
+                   running=lambda: self.modules.enabled("automation"),
+                   note="App binding, power-source rules and load rules")
+        m.register("lighting", "Keyboard and light bar", available=True, live=False,
+                   running=lambda: self.keyboard.kind not in (None, "none"),
+                   note="backlight, RGB effects; off: the keyboard keeps its firmware lighting")
+        m.register("clevo", "Control Center 3.0 / Clevo", available=self.clevo.present, live=False,
+                   running=lambda: self.clevo.present)
+        m.register("leishen", "Leishen / Thunderobot", available=self.leishen.present, live=False,
+                   running=lambda: self.leishen.present)
+
+    def automation_enabled(self):
+        return self.modules.enabled("automation")
 
     def monitor_level(self):
         """EC Manager monitoring switches: "full" | "light" (temperatures only, every LIGHT_S) | "off"."""
@@ -169,28 +198,13 @@ class Service:
 
     # -- event fan-out to UI / agent (SSE) ------------------------------------------------
     def subscribe(self):
-        q = queue.Queue(maxsize=200)
-        with self.llock:
-            self.listeners.append(q)
-        return q
+        return self.bus.listen()
 
     def unsubscribe(self, q):
-        with self.llock:
-            if q in self.listeners:
-                self.listeners.remove(q)
+        self.bus.unlisten(q)
 
     def emit(self, kind, data):
-        if kind == "mode":
-            threading.Thread(target=self.rules.sync_ppd, args=(data.get("mode"),), daemon=True).start()
-        if kind == "lc" and data.get("event") != "hwoc" and getattr(self, "hwoc", None):
-            self.hwoc.wake.set()                 # cooler connected / flow changed
-        msg = json.dumps({"type": kind, "data": data, "t": time.time()})
-        with self.llock:
-            for q in list(self.listeners):
-                try:
-                    q.put_nowait(msg)
-                except queue.Full:
-                    pass
+        self.bus.emit(kind, data)
 
     # -- lifecycle -----------------------------------------------------------------------------
     def _gpu_temp_probe(self):
@@ -216,7 +230,10 @@ class Service:
                         "on such machines — modes/fan tables are disabled (monitoring, lighting, switches work).")
         self.settings.start()
         self.battery.start()
-        self.keyboard.start()
+        if self.modules.enabled("lighting"):
+            self.keyboard.start()
+        else:
+            log.info("module lighting is off: the keyboard keeps its firmware lighting")
         if getattr(self.power, "gputemp", None):
             threading.Thread(target=self._gpu_temp_probe, daemon=True, name="gpu-temp-probe").start()
         if IS_WIN and not self.mock:
@@ -230,7 +247,7 @@ class Service:
         if not IS_WIN:      # on Windows the tray app reports user idle time (a service cannot see input)
             self.threads.append(IdleTimer(lambda: int(self.settings_store.get("kb_timeout", 0) or 0), self.keyboard.idle))
         def binding_mode(mode):                       # load rules come first: no App binding change while one is active
-            if self.load_rules.active is None:
+            if self.load_rules.active is None and self.automation_enabled():
                 self.power.user_set_mode(mode)
         self.threads.append(AppBinding(lambda: self.settings_store.get("app_binding", []),
                                        binding_mode, lambda: self.power.option["OperatingMode"]))
@@ -251,11 +268,13 @@ class Service:
             self.threads.append(self.updater)
         for t in self.threads:
             t.start()
-        self.liquid.start()
+        if self.modules.enabled("liquid"):
+            self.liquid.start()
         from .detect import Detector
         self.detect = Detector(self)             # which platform: shown once, at the first start
         self.detect.start()
-        self.afterburner.start()                  # MSI Afterburner profile of every mode (Windows)
+        if self.modules.enabled("afterburner"):
+            self.afterburner.start()              # MSI Afterburner profile of every mode (Windows)
         from . import version_string
         log.info("service started: open-uniwill-cc %s (hotkeys: %s)", version_string(),
                  "kernel module" if hk.available else "polling")
@@ -428,7 +447,17 @@ class Service:
             "afterburner": self.afterburner.status(),
             "busy": self.busy.state(),
             "monitoring": self.monitor_level(),
+            "modules": self.modules.status(),
+            "capabilities": self.capabilities(),
         }
+
+    def capabilities(self):
+        from .capabilities import capabilities
+        try:
+            return capabilities(self)
+        except Exception:  # noqa: BLE001   never let the registry break /api/state
+            log.exception("capabilities")
+            return {}
 
     def ec_access(self):
         from .ecaccess import status

@@ -86,8 +86,15 @@ async function act(fn, ok) {
 function errText(m) { return t(m); }
 
 // ---------------------------------------------------------------- language
+let AVAILABLE_LANGS = [{ code: "en", name: "English" }, { code: "ru", name: "Русский" }];
 function setLang(l, save) {
-  LANG = l === "ru" ? "ru" : "en";
+  l = (l || "en").toLowerCase();
+  if (l !== "en" && l !== "ru" && !DICTS[l]) {        // an extra language: fetch its dictionary once (1.8.0.0)
+    api("lang/" + l).then(d => { registerLang(l, d.name, d.web || {}); setLang(l, save); })
+      .catch(() => { if (LANG !== l) setLang("en", save); });
+    return;
+  }
+  LANG = l === "en" || DICTS[l] ? l : "en";
   try { localStorage.setItem("uwcc-lang", LANG); } catch (_) {}
   document.documentElement.lang = LANG;
   i18nStatic();
@@ -98,7 +105,13 @@ function setLang(l, save) {
   paintConn();
   if (typeof helpCur !== "undefined" && helpCur && $("#page-help").classList.contains("active")) openHelp(helpCur.id);
 }
-$$("#lang-seg button").forEach(b => b.addEventListener("click", () => setLang(b.dataset.lang, true)));
+function buildLangPickers() {
+  const seg = $("#lang-seg"); seg.innerHTML = "";
+  for (const { code, name } of AVAILABLE_LANGS)
+    seg.append(h("button", { "data-lang": code, title: name, class: code === LANG ? "on" : "",
+                             onclick: () => setLang(code, true) }, code.toUpperCase()));
+}
+buildLangPickers();
 
 // ---------------------------------------------------------------- state
 let S = null;
@@ -1293,6 +1306,29 @@ function renderSwitches() {
     L.append(h("div", { class: "item" }, h("div", {}, h("h4", {}, t("Per-key keyboard pictures")),
       h("p", {}, t("Single colour, User mode, Gaming and the software effects (Neon, Stack, Impact, Alphabet) are drawn key by key, as in the original Control Center. Turn off if the keyboard ignores them: single colour then uses the firmware effect and the others are hidden."))), h("label", { class: "sw" }, c, h("span"))));
   }
+  // 3. service modules (1.8.0.0): switchable parts of the service, uwccd/modules.py
+  const mods = (S.modules || []).filter(m => m.available);
+  if (mods.length) {
+    group("Service modules");
+    const MOD_DESC = {
+      liquid: "Bluetooth liquid coolers (XMG Oasis / LCT21001 / LCT22002): search, connection, curves, guard.",
+      afterburner: "MSI Afterburner profile follows the mode; the card on Mode selection and the tray menu.",
+      automation: "App binding, the AC/battery rules and the load rules. Off: nothing switches modes by itself.",
+      lighting: "Keyboard backlight and light bar control. Off: the keyboard keeps its firmware lighting.",
+      clevo: "Control Center 3.0 / Clevo platform support.",
+      leishen: "Leishen / Thunderobot platform support.",
+    };
+    for (const m of mods) {
+      const inp = h("input", { type: "checkbox" }); inp.checked = !!m.enabled;
+      inp.addEventListener("change", () => act(async () => {
+        await api("module", { name: m.name, enabled: inp.checked });
+        if (!m.live) toast(t("Takes effect at the next service start"));
+      }));
+      L.append(h("div", { class: "item" }, h("div", {}, h("h4", {}, t(m.title)),
+        h("p", {}, t(MOD_DESC[m.name] || m.note || "") + (m.live ? "" : " " + t("(takes effect at the next service start)")))),
+        h("label", { class: "sw" }, inp, h("span"))));
+    }
+  }
   const sel = h("select", {}, ...[[0, t("Never")], [10, t("{0} seconds", 10)], [30, t("{0} seconds", 30)], [60, t("1 minute")], [300, t("{0} minutes", 5)], [600, t("{0} minutes", 10)]].map(([v, txt]) => { const o = h("option", { value: v }, txt); if (+s.kb_timeout === v) o.selected = true; return o; }));
   sel.addEventListener("change", () => act(() => api("setting", { key: "kb_timeout", value: +sel.value })));
   L.append(h("div", { class: "item" }, h("div", {}, h("h4", {}, t("Keyboard backlight auto-off")), h("p", {}, t("Turn the backlight off after inactivity and back on when a key is pressed."))), sel));
@@ -1350,6 +1386,20 @@ function renderInfo() {
   const d = $("#info-disks"); d.innerHTML = "";
   for (const x of i.disks.devices) d.append(h("div", { class: "row between", style: "padding:6px 0;border-bottom:1px solid var(--line)" },
     h("span", {}, `${x.name} · ${x.model || ""}`), h("span", { class: "muted" }, `${x.size_gb} ${t("GB")}${x.temp != null ? ` · ${x.temp}°C` : ""}${x.rotational ? " · HDD" : " · SSD"}`)));
+  const caps = $("#info-caps");
+  if (caps) {       // capability registry (1.8.0.0): one source for "what does this laptop have"
+    caps.innerHTML = "";
+    const NAMES = { modes: "Modes", fan_boost: "Fan Boost", fan_tables: "Fan curves", turbo_mode: "Turbo mode",
+      custom_mode: "Custom mode", power_limits: "Power limits", gpu_power: "Graphics power (cTGP / Dynamic Boost)",
+      liquid_overclock: "Liquid overclocking (PWUP)", battery_limits: "Battery charge limits", battery_modes: "Battery protection modes",
+      keyboard_backlight: "Keyboard backlight", keyboard_rgb: "RGB keyboard", lightbar: "Light bar",
+      liquid_cooler: "Liquid cooler (Bluetooth)", afterburner: "MSI Afterburner", clevo: "Clevo interface",
+      leishen: "Leishen interface", hotkeys: "Hotkey events", ec_write: "EC access" };
+    for (const [k, c] of Object.entries(S.capabilities || {})) {
+      caps.append(h("dt", {}, t(NAMES[k] || k)),
+        h("dd", { class: c.available ? "" : "muted" }, (c.available ? "✓" : "—") + (c.detail ? ` · ${t(c.detail)}` : "")));
+    }
+  }
   const w = []; if (!p.ramfan15) w.push(t("The controller does not report RamFan 1.5 support — fan control may not work on this model."));
   if (p.support === "experimental") w.push(t("This laptop has not been tested with Open Uniwill CC yet. Modes and fans usually work the same way, but please check them carefully and send a diagnostic report (below on this page) — it helps to mark the model as supported."));
   if (p.ec_backend === "mock") w.push(t("The service runs in simulation mode (--mock): changes are not applied to hardware."));
@@ -2591,7 +2641,7 @@ function renderRulesLog(R) {
     x.lc_mode ? t("Liquid cooler") + ": " + lcm(x.lc_mode) : "",
     x.lc_profile ? (x.what === "back" ? t("cooler curves back") : t("Liquid cooler") + " " + lcn(x.lc_profile)) : ""].filter(Boolean).join(" · ");
   const rows = (auLogAll ? L : L.slice(0, 10)).map(x => {
-    const tm = new Date(x.t * 1000).toLocaleTimeString(LANG === "ru" ? "ru-RU" : undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    const tm = new Date(x.t * 1000).toLocaleTimeString(LANG === "en" ? undefined : LANG, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
     const ex = extra(x);
     const what = x.what === "on" ? `→ ${x.mode != null ? mname(x.mode) : ""}${x.slot != null ? ", " + t("profile {0}", x.slot + 1) : ""}${ex ? (x.mode != null ? " · " : "") + ex : ""}`
       : x.what === "back" ? (x.mode != null ? t("over — back to {0}", mname(x.mode)) : t("over")) + (ex ? " · " + ex : "") : t("over");
@@ -2690,6 +2740,7 @@ function connect() {
     return;
   }
   try { await refresh(); } catch (e) { toast(t("Service unavailable: {0}", e.message), true); }
+  api("langs").then(r => { if (r.languages && r.languages.length > 1) { AVAILABLE_LANGS = r.languages; buildLangPickers(); } }).catch(() => {});
   if (S && S.settings && (S.settings.eula_accepted || 0) < (S.settings.eula_version || 1)) await showAgreement();
   await offerWmiIfNoDriver();
   if (S && S.detect && S.detect.seen !== S.detect.signature) await showDetect(true);   // first start or something changed
@@ -2800,7 +2851,8 @@ function showAgreement() {
       title.textContent = t("User agreement"); lbl.textContent = t("I have read the agreement and accept it");
       accept.textContent = t("Accept"); decline.textContent = t("Decline");
       try {
-        const r = await fetch(`eula.${LANG}.txt`, { cache: "no-cache" });
+        const file = LANG === "ru" ? "eula.ru.txt" : "eula.en.txt";     // the agreement exists in EN and RU
+        const r = await fetch(file, { cache: "no-cache" });
         text.textContent = (await r.text()).replace(/^\uFEFF/, "").replace(/\r/g, "");
       } catch (e) { text.textContent = t("Service unavailable: {0}", e.message); }
       text.scrollTop = 0;
@@ -3310,7 +3362,7 @@ async function renderSelfcheck(a) {
   s2.disabled = !sc.stage1_done || !!sc.running;
   s2.title = sc.stage1_done ? "" : t("Run stage 1 (read only) first");
   $("#dm-sc-state").textContent = sc.running ? t("Running stage {0}…", sc.running)
-    : last ? t("Last check: stage {0}, {1}", last.stage, new Date(last.time * 1000).toLocaleString(LANG === "ru" ? "ru-RU" : "en-GB")) : t("Not run yet.");
+    : last ? t("Last check: stage {0}, {1}", last.stage, new Date(last.time * 1000).toLocaleString(LANG === "en" ? "en-GB" : LANG)) : t("Not run yet.");
   const key = last ? last.time : null;
   if (!last || scLoaded === key || sc.running) { if (!last) $("#dm-sc-out").innerHTML = ""; $("#dm-sc-apply").disabled = !last; return; }
   scLoaded = key;

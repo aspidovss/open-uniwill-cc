@@ -256,8 +256,9 @@ class Tray:
             if kb.get("kind") not in (None, "none"):
                 items.append(I(T("kb"), lambda *_: self.act("keyboard/power", {"on": not self.state["keyboard"]["power"]}),
                                checked=lambda *_: bool((self.state or {}).get("keyboard", {}).get("power"))))
+            caps = st.get("capabilities") or {}           # 1.8.0.0: the capability registry decides what to show
             ab = st.get("afterburner") or {}
-            if ab.get("found") and ab.get("enabled"):     # MSI Afterburner: apply a profile slot by hand
+            if (caps.get("afterburner") or {}).get("available", ab.get("found")) and ab.get("enabled"):
                 items.append(I(T("ab"), pystray.Menu(*[
                     I(T("ab_profile").format(n), (lambda n: lambda *_: self.act("afterburner", {"action": "apply", "slot": n}))(n),
                       checked=(lambda n: lambda *_: ((self.state or {}).get("afterburner") or {}).get("last_slot") == n),
@@ -266,7 +267,8 @@ class Tray:
                     I(T("ab_default").format(ab["default"]), lambda *_: self.act("afterburner", {"action": "apply_default"}))]
                     if ab.get("default") else []))))
             lc = st.get("liquid") or {}
-            if lc.get("available") and (lc.get("connected") or (lc.get("config") or {}).get("address")):
+            if (caps.get("liquid_cooler") or {}).get("available", lc.get("available")) \
+                    and (lc.get("connected") or (lc.get("config") or {}).get("address")):
                 cur = (lc.get("config") or {}).get("mode")
                 sub = [I(f"{lc.get('name') or ''} · " + (f"{lc.get('fan')}% / {lc.get('pump')} V" if lc.get("connected")
                                                          else T("not_connected")), None, enabled=False)]
