@@ -498,6 +498,15 @@ STATE_METRICS = ("mode", "lc_profile", "rule")
 LOAD_LOG_LEN = 100                  # what the rules did: the last 100 events
 MAX_RULE_S = 86400                  # hold / return times up to 24 h
 TIME_UNITS = ("s", "min", "h")      # how the window shows a time (stored in seconds)
+AVG_WINDOW_S = 60                   # the sliding window of the averaged conditions (1.8.1.0)
+
+
+def rule_avg(rule):
+    """True: this rule compares the one-minute averages, not the instant values (1.8.1.0).
+
+    Chosen per rule ("avg", on by default) and only meaningful when its hold is set in minutes or hours: a hold in
+    seconds asks for a fast reaction, so it always uses the instant values and the window hides the choice."""
+    return rule.get("avg", True) is not False and rule.get("hold_unit", "s") != "s"
 BACK_MODES = ("never", "while", "after")    # never return / while the conditions hold / N after they stop
 LC_RULE_MODES = ("auto", "laptop", "ec", "manual", "high", "medium", "low", "off")
 MAX_LOAD_RULES = 12
@@ -612,7 +621,7 @@ def check_load_rules(rules):
             raise ValueError(f"rule {i + 1}: nothing to switch (mode, Fan Boost or the liquid cooler)")
         out.append({"enabled": bool(r.get("enabled", True)), "name": str(r.get("name") or "")[:40],
                     "conditions": cc, "join": join, "hold": hold, "mode": mode, "slot": slot if mode is not None else None,
-                    "fan_boost": fb, "lc_mode": lcm, "lc_profile": lcp,
+                    "fan_boost": fb, "lc_mode": lcm, "lc_profile": lcp, "avg": r.get("avg", True) is not False,
                     "back": back, "back_after": back_after, **units})
     return out
 
@@ -622,7 +631,9 @@ class LoadRules:
     temperature / load / power source hold past a limit.
 
     Rules are checked in their order on every monitor sample (full monitoring); the first rule whose conditions held
-    for `hold` seconds (0: at once) is applied — once, when it becomes active. While a rule is active, App binding and
+    for `hold` seconds (0: at once) is applied. A rule whose hold is set in minutes or hours compares the one-minute
+    averages instead of the instant values ("avg", on by default), so one dip or spike between samples neither resets
+    its hold nor triggers it — once, when it becomes active. While a rule is active, App binding and
     the power source rules do not change the mode ("rules come first"). Return (`back`): "never" — stay; "while" — back
     as soon as the conditions stop; "after" — back when they have been false for `back_after` seconds. Each thing is
     put back only if nobody changed it meanwhile.
@@ -630,6 +641,7 @@ class LoadRules:
 
     def __init__(self, svc):
         self.svc = svc
+        self.samples = collections.deque()   # (t, monitor sample) of the last AVG_WINDOW_S, for the averages
         self.since = {}          # rule index -> since when its conditions hold
         self.false_since = None
         self.active = None       # index of the active rule
@@ -656,8 +668,9 @@ class LoadRules:
         return self.svc.settings_store.get("load_rules", []) or []
 
     @staticmethod
-    def holds(rule, m, i=None, on=frozenset()):
-        """i: the rule's own index; on: the rules that are on (conditions held long enough, or active)."""
+    def holds(rule, m, i=None, on=frozenset(), avg=None):
+        """i: the rule's own index; on: the rules that are on (conditions held long enough, or active);
+        avg: {metric: one-minute average} — used instead of the instant values when the rule asks for it."""
         res = []
         for c in rule["conditions"]:
             op = c["op"]
@@ -667,6 +680,8 @@ class LoadRules:
                 res.append(is_on if op == "=" else not is_on)
                 continue
             v = load_metric(m, c["metric"])
+            if avg is not None and rule_avg(rule) and c["metric"] not in EQ_METRICS and c["metric"] not in STATE_METRICS:
+                v = avg.get(c["metric"], v)
             if op == "!=":
                 res.append(v is not None and v != c["value"])
             else:
@@ -832,6 +847,10 @@ class LoadRules:
         rules = self.rules()
         m = self._state(m)
         with self.lock:
+            self.samples.append((now, m))
+            while self.samples and now - self.samples[0][0] > AVG_WINDOW_S:
+                self.samples.popleft()
+            avg = self.averages()
             on = {j for j, t in self.since.items() if j < len(rules) and now - t >= rules[j].get("hold", 0)}
             if self.active is not None:
                 on.add(self.active)
@@ -840,7 +859,7 @@ class LoadRules:
                 if not r.get("enabled", True):
                     self.since.pop(i, None)
                     continue
-                if self.holds(r, m, i, on):
+                if self.holds(r, m, i, on, avg):
                     self.since.setdefault(i, now)
                     if hit is None and now - self.since[i] >= r.get("hold", 0):
                         hit = i
@@ -867,10 +886,21 @@ class LoadRules:
             except Exception:  # noqa: BLE001
                 log.exception("load rules")
 
+    def averages(self):
+        """{metric: mean over the samples of the last minute}, None where the metric was never known."""
+        out = {}
+        for k in LOAD_METRICS:
+            if k in EQ_METRICS or k in STATE_METRICS:
+                continue
+            vals = [v for _, mm in self.samples if (v := load_metric(mm, k)) is not None]
+            out[k] = round(sum(vals) / len(vals), 1) if vals else None
+        return out
+
     def status(self, now=None):
         now = time.time() if now is None else now
         with self.lock:
             return {"rules": self.rules(), "active": self.active, "metrics": {k: v[0] for k, v in LOAD_METRICS.items()},
+                    "avg": self.averages(), "avg_window": AVG_WINDOW_S,
                     "log": list(reversed(self.log)),
                     "held": {str(i): round(now - t) for i, t in self.since.items()},
                     "back_in": (round(self.rules()[self.active]["back_after"] - (now - self.false_since))

@@ -2071,6 +2071,54 @@ class LoadRulesUnit(unittest.TestCase):
         self.lr.tick(self.m(ct=90), now=12)
         self.assertEqual(self.lr.active, 0)
 
+    def test_averaged_conditions(self):
+        """1.8.1.0: a rule whose hold is in minutes compares one-minute averages; seconds stay instant."""
+        A = self.A
+        rules = A.check_load_rules([
+            {"name": "to office", "conditions": [{"metric": "gpu_load", "op": "<", "value": 50}],
+             "hold": 60, "hold_unit": "min", "mode": 0},
+        ])
+        self.assertTrue(rules[0]["avg"])
+        self.assertTrue(A.rule_avg(rules[0]))
+        self.assertFalse(A.rule_avg({**rules[0], "avg": False}))
+        self.assertFalse(A.rule_avg({**rules[0], "hold_unit": "s"}))     # seconds: always instant
+        self.svc.settings_store.set("load_rules", rules)
+        lr, m = self.lr, self.m
+
+        def gpu(load):
+            mm = m(); mm["gpu"]["usage"] = load; return mm
+        # spiky load around the threshold: instant values would reset the hold, the average stays below 50
+        t = 0
+        for load in (10, 90, 10, 90, 10) * 20:                 # mean 42, every other sample above 50
+            lr.tick(gpu(load), now=t); t += 2
+        self.assertEqual(lr.active, 0)                          # held the whole minute on averages
+        avg = lr.averages()
+        self.assertAlmostEqual(avg["gpu_load"], 42, delta=4)    # only the last 60 s are kept
+        self.assertLessEqual(len(lr.samples), 31)
+
+    def test_instant_conditions_when_avg_off(self):
+        A = self.A
+        rules = A.check_load_rules([
+            {"name": "to office", "conditions": [{"metric": "gpu_load", "op": "<", "value": 50}],
+             "hold": 60, "hold_unit": "min", "avg": False, "mode": 0},
+        ])
+        self.assertFalse(rules[0]["avg"])
+        self.svc.settings_store.set("load_rules", rules)
+        t = 0
+        for load in (10, 90) * 40:                              # every second sample breaks the hold
+            mm = self.m(); mm["gpu"]["usage"] = load
+            self.lr.tick(mm, now=t); t += 2
+        self.assertIsNone(self.lr.active)
+
+    def test_status_carries_averages(self):
+        self.svc.settings_store.set("load_rules", [])
+        mm = self.m(ct=80)
+        self.lr.tick(mm, now=0)
+        st = self.lr.status(now=1)
+        self.assertEqual(st["avg_window"], 60)
+        self.assertEqual(st["avg"]["cpu_temp"], 80)
+        self.assertNotIn("mode", st["avg"])                     # states are not averaged
+
     def test_rule_on_condition(self):
         A = self.A
         rules = A.check_load_rules([

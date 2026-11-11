@@ -2560,6 +2560,7 @@ function renderLoadRules(force) {                 // force: our own change, redr
   if (!auRules.length) { box.append(h("p", { class: "muted" }, t("No rules yet"))); return; }
   const modes = platModes();
   const change = () => { auDirty = true; };
+  const ruleAvg = r => r.avg !== false && (r.hold_unit || "s") !== "s";
   const sel = (opts, val, on) => { const e = h("select", {}, ...opts.map(([v, n]) => { const o = h("option", { value: v }, n); if (String(val) === String(v)) o.selected = true; return o; })); e.addEventListener("change", () => { on(e.value); change(); renderLoadRules(true); }); return e; };
   const num = (val, min, max, on) => { const e = h("input", { type: "number", class: "num", min, max, value: val }); e.addEventListener("change", () => { on(+e.value); change(); }); return e; };
   auRules.forEach((r, i) => {
@@ -2594,7 +2595,9 @@ function renderLoadRules(force) {                 // force: our own change, redr
           : c.metric === "rule" ? [sel([[0, t("any other rule")], ...auRules.map((x, j) => [j + 1, x.name || t("Rule {0}", j + 1)]).filter(([n]) => n !== i + 1)], c.value, v => { c.value = +v; }),
               sel([["=", t("is on")], ["!=", t("is not on")]], c.op, v => { c.op = v; })]
           : [sel([[">", ">"], ["<", "<"]], c.op, v => { c.op = v; }),
-            num(c.value, 0, 1000, v => { c.value = v; }), h("span", { class: "muted" }, t(AU_UNIT[c.metric] ?? (R.metrics || {})[c.metric] ?? ""))]),
+            num(c.value, 0, 1000, v => { c.value = v; }), h("span", { class: "muted" }, t(AU_UNIT[c.metric] ?? (R.metrics || {})[c.metric] ?? "")),
+            ruleAvg(r) && (R.avg || {})[c.metric] != null && !auDirty
+              ? h("span", { class: "muted tiny", title: t("One-minute average of this value now") }, t("avg now {0}", (R.avg || {})[c.metric])) : ""]),
         r.conditions.length > 1 ? h("button", { class: "btn ghost sm", onclick: () => { r.conditions.splice(k, 1); change(); renderLoadRules(true); } }, "✕") : ""));
     });
     if (r.conditions.length < 3) conds.append(h("button", { class: "btn ghost sm", onclick: () => { r.conditions.push({ metric: "gpu_power", op: ">", value: 50 }); change(); renderLoadRules(true); } }, t("+ condition")));
@@ -2610,6 +2613,9 @@ function renderLoadRules(force) {                 // force: our own change, redr
     };
     if (r.back === true) r.back = "after"; else if (r.back === false || r.back == null) r.back = "never";
     const act1 = h("div", { class: "row wrap au-line" }, h("span", {}, t("for")), ...timeIn("hold", "hold_unit", 0),
+      // a hold in minutes / hours: the conditions can use the one-minute averages (1.8.1.0); seconds: always instant
+      ...((r.hold_unit || "s") !== "s" ? [sel([["avg", t("of the one-minute averages")], ["abs", t("of the instant values")]],
+        r.avg === false ? "abs" : "avg", v => { r.avg = v !== "abs"; })] : []),
       h("span", { class: "muted tiny" }, r.hold ? "" : t("(at once)")), h("span", {}, t("→ switch to")),
       sel([["", t("keep the mode")], ...modes.map(m => [m.id, t(m.name)])], r.mode ?? "", v => { r.mode = v === "" ? null : +v; r.slot = null; }),
       ...(r.mode != null && !S.alt ? [sel(slotOpts, r.slot ?? "", v => { r.slot = v === "" ? null : +v; })] : []));   // Clevo / Leishen: no profiles

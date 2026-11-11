@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.8.1.0
+
+- **Automation: conditions by one-minute averages.** A load rule whose time is set in minutes or hours now compares
+  the one-minute averages of the numeric values (load, temperature, power, battery) instead of the instant ones, so a
+  single spike or dip between samples neither resets its hold nor triggers it. Next to the time a new choice picks
+  *of the one-minute averages* (default) or *of the instant values*; a time in seconds asks for a fast reaction, so it
+  always uses the instant values and shows no choice. States (power source, mode, cooler profile, another rule) are
+  compared as before. The editor shows the current average next to each numeric condition, and `/api/state`
+  (`load_rules.avg`, `avg_window`) carries them for scripts.
+- Note: averaging is itself a delay — the one-minute average crosses a limit 20–40 s after the real change. Existing
+  rules with a time in minutes switch to averages with this update; put the rule to *of the instant values* if it must
+  react to short spikes.
+
 ## 1.8.0.0
 
 The service is reorganized around four explicit contracts; nothing changes on the laptop by itself.

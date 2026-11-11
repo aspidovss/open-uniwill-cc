@@ -610,6 +610,10 @@ const LANG_NAMES = { en: "English", ru: "Русский" };
 // 1.8.0.0 — service modules, capability registry, languages
 Object.assign(RU, {
   "Service modules": "Модули службы",
+  "of the one-minute averages": "по средним за минуту",
+  "of the instant values": "по мгновенным значениям",
+  "avg now {0}": "сейчас в среднем {0}",
+  "One-minute average of this value now": "Среднее этой величины за последнюю минуту",
   "Takes effect at the next service start": "Вступит в силу при следующем запуске службы",
   "(takes effect at the next service start)": "(вступает в силу при следующем запуске службы)",
   "Liquid cooling": "Жидкостное охлаждение",
@@ -952,8 +956,8 @@ Object.assign(RU, {
   "Curves — view only (Controller: used when the EC publishes no targets)": "Кривые — только просмотр (Контроллер: используются, когда EC не публикует цели)",
   // 1.6.8 — automatic profile switching
   "Automatic profile switching": "Автоматическое переключение профилей", "Add rule": "Добавить правило",
-  "Switch the mode, the profile and the cooler profile when power, temperature, load, battery charge or the power source stays past a limit. The rules are checked from the top; the first one that held long enough is applied. While a rule is active, App binding and the power source settings do not change the mode. Needs full monitoring (EC Manager → Monitoring).":
-    "Переключать режим, профиль и профиль охладителя, когда мощность, температура, загрузка, заряд батареи или источник питания держатся за пределом. Правила проверяются сверху вниз; применяется первое, условие которого держалось достаточно долго. Пока правило активно, привязка программ и настройки источника питания режим не меняют. Нужен полный мониторинг (Менеджер EC → Мониторинг).",
+  "Switch the mode, the profile and the cooler profile when power, temperature, load, battery charge or the power source stays past a limit. The rules are checked from the top; the first one that held long enough is applied. A rule whose time is set in minutes compares the one-minute averages, so single spikes and dips between samples do not reset it; a time in seconds reacts to the instant values. While a rule is active, App binding and the power source settings do not change the mode. Needs full monitoring (EC Manager → Monitoring).":
+    "Переключать режим, профиль и профиль охладителя, когда мощность, температура, загрузка, заряд батареи или источник питания держатся за пределом. Правила проверяются сверху вниз; применяется первое, условие которого держалось достаточно долго. Правило со временем в минутах сравнивает средние за минуту, поэтому одиночные пики и провалы между отсчётами его не сбрасывают; время в секундах реагирует на мгновенные значения. Пока правило активно, привязка программ и настройки источника питания режим не меняют. Нужен полный мониторинг (Менеджер EC → Мониторинг).",
   "Monitoring is not complete — the rules are paused.": "Мониторинг неполный — правила приостановлены.",
   "CPU + GPU power": "Мощность ЦП + ГП", "Heavy load → Turbo": "Высокая нагрузка → Турбо", "Light load → Office": "Низкая нагрузка → Офисный",
   "Hot → Gaming": "Горячо → Игровой", "Empty rule": "Пустое правило", "Heavy load": "Высокая нагрузка", "Light load": "Низкая нагрузка", "Hot": "Горячо",
