@@ -467,6 +467,8 @@ class Handler(BaseHTTPRequestHandler):
                 s.keyboard.set_power(bool(b["on"]))
             elif path == "/api/keyboard/level":
                 s.keyboard.set_level(int(b["level"]))
+            elif path == "/api/keyboard/colour":            # one-zone RGB on the EC (1.8.1.1)
+                s.keyboard.set_colour(list(b["colour"]))
             elif path == "/api/keyboard/feedback":          # untested effect: does it work on this keyboard?
                 r = s.keyboard.feedback(int(b["effect"]), bool(b.get("works")))
                 s.emit("keyboard", s.keyboard.status())

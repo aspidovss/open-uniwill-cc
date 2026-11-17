@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.8.1.1
+
+Fixes from the MECHREVO Aurora X (Jiguang / Kuangshi, project `0x1A`) report on Linux.
+
+- **GPU fan speed was read from the wrong byte on every laptop.** The speed is `0x46C << 8 | 0x46D`; `0x46B`, used
+  until now as the low byte, turned out to hold one constant per board (`0x32`, `0xA0`, `0x55`, `0x2D` across 12
+  reports from 5 boards), so the shown GPU rpm could be off by up to 255 and never reached 0 when the fan stopped.
+  Documented in [docs/EC/Registers.md](docs/EC/Registers.md) §2.2 and §10.6.
+- **One-zone RGB keyboards driven by the EC** (MECHREVO Aurora X and alike: no ITE USB controller, `0x766` bit2
+  set) were treated as single-colour. The keyboard page now offers a colour (swatches and any colour) next to the
+  brightness; the colour goes to `0x769`–`0x76B` (0..50 per channel) and is applied with `0x767` bit5. The colour is
+  kept and restored at the service start. API: `POST /api/keyboard/colour {colour: [r, g, b]}`.
+- **Custom mode did not take effect on project `0x1A`** (MECHREVO Yaoshi, Aurora X, XMG NEO 16 E25): these ECs
+  enable Custom only with `0x727` bit6 (`CUME` in their DSDT), which the service never set — so in Custom the fans
+  stayed on the firmware's Gaming curve (the user's curve was written but ignored) and the custom power limits were
+  not applied. The service now sets `CUME` together with `0x726` bit7, and finds it in the laptop's own DSDT
+  (`uwccd/acpifields.py` reads the named EC fields without running any AML); boards without the field are not
+  touched. Found by the Aurora X owner; the DSDT confirms the same field on Yaoshi and NEO 16 E25.
+- Single-colour brightness is limited to levels 0..4: the EC resets the backlight to 0 for 5..7.
+
 ## 1.8.1.0
 
 - **Automation: conditions by one-minute averages.** A load rule whose time is set in minutes or hours now compares

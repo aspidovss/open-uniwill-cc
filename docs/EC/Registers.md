@@ -47,11 +47,19 @@ On the Tsunami: `0xA0` (Office). The service writes Super performance as `0x10 |
 `0x726` — bit3 "power on with AC" (when the BIOS does not keep it itself), bits4..5 protection, bit6 thermal
 protection, bit7 Custom mode. On the Tsunami `0x00`.
 
+`0x727` bit6 — **`CUME`, Custom mode enable** of the firmware on boards whose DSDT declares it (project `0x1A`:
+MECHREVO Yaoshi, Aurora X, XMG NEO 16 E25; not on the Tsunami). Without it those ECs keep the Gaming fan curve and
+their own power limits in Custom mode, whatever the RAM fan table says. The DSDT method `PMSC` reads the mode as:
+`CUME = 1` → Custom; else `TBME` (`0x751` bit4) → Turbo; else `UFME` (`0x751` bit7) → Office; else Gaming. So
+`0x751` bit7 is the Office bit (`0xA0` above), not a "use the RAM table" switch. Since 1.8.1.1 the service sets
+`CUME` together with `0x726` bit7, taking its address from the laptop's own DSDT (`uwccd/acpifields.py`). `0x727`
+bit7 is `PL4D` (PL4 disable) — left as the firmware has it.
+
 ### 2.2 Fan speed and duty (read only)
 | Register | On the Tsunami | Formula |
 |---|---|---|
 | `0x464` / `0x465` | `0x06` `0xC1` | CPU rpm = `0x464 << 8 | 0x465` → 1729 rpm |
-| `0x46B` / `0x46C` | `0x32` `0x00` | GPU rpm = `0x46C << 8 | 0x46B` |
+| `0x46C` / `0x46D` | `0x00` `0x00` | GPU rpm = `0x46C << 8 \| 0x46D` (1.8.1.1; `0x46B` is a per-board constant, not the low byte — see 10.6) |
 | `0x75B` | `0x3C` | CPU duty × 2 → 30 % |
 | `0x75C` | `0x00` | GPU duty × 2 |
 
@@ -138,8 +146,8 @@ The limit table (`TGP 150`, `DB max 25`, TCC per mode) is not in the EC but in t
 | `0x767` | `0x00` | bit0 — Win lock trigger, bit1 — light bar trigger, bit4 — USB charging in sleep — **write** |
 | `0x768` | `0x00` | bit0 — Win key locked, bit1 — light bar on |
 | `0x7A6` | `0x28` | bit3 — touchpad LED, bit6 — touchpad toggle off — **write** |
-| `0x78C` | `0x00` | single-colour backlight: bit1 off, bit4 valid, bits5..7 level (the Tsunami is RGB, unused) |
-| `0x766` | `0x90` | bit2 — RGB keyboard through the EC (not on the Tsunami, the keyboard is HID) |
+| `0x78C` | `0x00` | EC keyboard backlight: bit0 white only, bit1 off, bit4 apply, bits5..7 level 0..4 (5..7 reset it to 0); the Tsunami is HID RGB, unused |
+| `0x766` | `0x90` | bit2 — one-zone RGB keyboard through the EC: colour in `0x769`–`0x76B` (0..50 each), applied by `0x767` bit5 together with `0x78C` bit4. Set on MECHREVO Aurora X (no ITE controller); not on the Tsunami, the keyboard is HID |
 | `0x73C` / `0x73D` | `0x07` / `0x00` | ITE keyboard sub-type / LED vendor |
 
 ## 7. Liquid cooler
@@ -258,7 +266,7 @@ on real hardware; registers marked ⚠ change protection behaviour and are docum
 
 | Register | Meaning |
 |---|---|
-| `0x726` bit7 + `0x727` bit6 | the EC enforces the custom PL1/PL2/PL4 only with both bits set (power-management loop; `0x727` bit6 is `CUME` in the DSDT). Matches our Custom mode (section 2.1) |
+| `0x726` bit7 + `0x727` bit6 | the EC enforces the custom PL1/PL2/PL4 only with both bits set (power-management loop; `0x727` bit6 is `CUME` in the DSDT). The service sets `CUME` in Custom mode since 1.8.1.1 (section 2.1) |
 | `0x786` bit7 | without it the EC stores the temperature limit but does not apply it |
 | `0x753` / `0x754` | CPU VRM current limit / maximum current limit |
 | `0x780` = `0xA2`, `0x781` | ⚠ EC power-limit bypass: the EC publishes the custom PL values without its own adaptive caps, turns the fans to full and changes thermal protection. Cleared by the EC outside normal operation (`0x6E6 ≠ 1`). Not for general use |
@@ -285,6 +293,6 @@ Through the same WMI method as the EC access (`AcpiTest_MULong.GetSetULong`, `Da
 
 | What | Here | MechControl-RE | Note |
 |---|---|---|---|
-| GPU fan rpm low byte | `0x46B` | `0x46D` | Yaoshi report (1.6.6): `0x46B = 0x55`, `0x46C = 0x0D`, `0x46D = 0x09` → 3413 or 3337 rpm, both plausible. MechControl-RE saw `0x46B` stay at `0xC3` with the fan stopped and at full speed |
+| GPU fan rpm low byte | ~~`0x46B`~~ **`0x46D`** (fixed in 1.8.1.1) | `0x46D` | **Settled**: in 12 reports from 5 boards `0x46B` only ever held one constant per board (`0x32`, `0xA0`, `0x55`, `0x2D`), while `0x46D` changed with every reading. MechControl-RE was right |
 | `0x787` units | rpm / 100 | time × 100 ms | |
 | Project ID in `0x740` | the value itself (`0x10`, `0x1A`) | on newer boards `value >> 1` is the ProjectID enum (`0x1A >> 1 = 13` = IDY_7Y) | the AMD board X6FR5 also reports `0x1A`: the CPU vendor has to be checked as well |

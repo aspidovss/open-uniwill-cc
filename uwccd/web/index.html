@@ -473,6 +473,12 @@
       <div id="single-ui" class="card hidden">
         <h3 data-i>Backlight brightness</h3>
         <label class="slider"><span data-i>Level</span> <input type="range" min="0" max="4" step="1" id="kb-level"><output></output></label>
+        <div id="single-colour" class="hidden">
+          <h4 data-i>Colour</h4>
+          <div class="row wrap"><div id="single-swatches" class="row wrap"></div>
+            <label class="row"><span class="muted tiny" data-i>Any colour</span> <input type="color" id="kb-single-colour"></label></div>
+          <p class="muted tiny" data-i>One colour for the whole keyboard, set by the embedded controller (51 steps per channel).</p>
+        </div>
       </div>
       <div id="none-ui" class="card hidden"><p data-i>No controllable keyboard backlight found.</p></div>
     </section>

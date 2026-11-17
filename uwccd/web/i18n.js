@@ -610,6 +610,10 @@ const LANG_NAMES = { en: "English", ru: "Русский" };
 // 1.8.0.0 — service modules, capability registry, languages
 Object.assign(RU, {
   "Service modules": "Модули службы",
+  "One-zone RGB backlight (EC controlled)": "Однозонная RGB-подсветка (управляет EC)",
+  "Colour": "Цвет", "Any colour": "Любой цвет",
+  "One colour for the whole keyboard, set by the embedded controller (51 steps per channel).":
+    "Один цвет на всю клавиатуру, его выставляет встроенный контроллер (51 ступень на канал).",
   "of the one-minute averages": "по средним за минуту",
   "of the instant values": "по мгновенным значениям",
   "avg now {0}": "сейчас в среднем {0}",

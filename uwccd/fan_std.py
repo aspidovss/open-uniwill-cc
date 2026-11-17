@@ -6,7 +6,9 @@ reports RamFan 1.5 but the project is NOT in ProjectIdExtensions.CommercialProje
 
 Compared with the commercial (_CML) manager it has:
   * a fourth mode, Custom (OperatingMode 3), with five user slots Mode4_Profile1..5 / tables M4T1..M4T5;
-    in the EC it is the Gaming fan mode plus bit 7 of 0x726;
+    in the EC it is the Gaming fan mode plus bit 7 of 0x726 and, on boards whose DSDT names it (CUME, project 0x1A:
+    MECHREVO Yaoshi / Aurora X, XMG NEO 16 E25), bit 6 of 0x727 — without it these ECs run the Gaming fan curve and
+    their own power limits instead of the user's (1.8.1.1);
   * PL4 (0x785) and the CPU TCC offset (0x786, bit 7 = enable) in every profile;
   * limits from the firmware "Smart APC" table (ACPI method SMRW): PL1/PL2/PL4 maxima, TCC offset maximum,
     cTGP range above the default TGP, Dynamic Boost maximum;
@@ -50,6 +52,19 @@ STD_MODE_NAMES = {**MODE_NAMES, MODE_CUSTOM: "custom"}
 REG_TCC_OFFSET = 0x786          # bit7 enable, bits0-6 offset below TjMax
 REG_FAN_SWITCH_SPEED = 0x787    # bit7 enable, bits0-6 speed / 100 rpm
 REG_CUSTOM_FLAG = 0x726         # bit7: Custom mode
+CUME_FALLBACK = {0x1A: (0x727, 6)}  # Custom mode enable when the DSDT cannot be read (same in 3 DSDTs of 0x1A)
+
+
+def cume_bit(project):
+    """(addr, bit) of the firmware's Custom-mode-enable flag (DSDT field CUME), or None on boards without it."""
+    try:
+        from .acpifields import ec_field
+        f = ec_field("CUME")
+    except Exception:  # noqa: BLE001
+        f = None
+    if f and f[2] == 1:
+        return f[0], f[1]
+    return CUME_FALLBACK.get(project)
 REG_FAN_SAFETY = 0x7A5          # bit3: fan safety protection active
 REG_TCC_DEFAULT = (0x7D8, 0x7D9, 0x7DA)   # gaming, office, turbo
 REG_VRM_LIMIT = (0x753, 0x754)
@@ -326,6 +341,7 @@ class PowerManagerStd(PowerManager):
             # LoadOverClockingValue(1) -> SetFanMode(2): Turbo fan mode, Custom flag cleared
             self.ec.write(R.FAN_MODE, 0x10 | boost)
             self.ec.set_bit(REG_CUSTOM_FLAG, 7, False)
+            self._set_cume(False)
             return
         if mode == MODE_CUSTOM:
             base = 0x00
@@ -333,6 +349,18 @@ class PowerManagerStd(PowerManager):
             base = R.MODE_BYTE.get(mode, 0)
         self.ec.write(R.FAN_MODE, base | boost)
         self.ec.set_bit(REG_CUSTOM_FLAG, 7, mode == MODE_CUSTOM)
+        self._set_cume(mode == MODE_CUSTOM)
+
+    def _set_cume(self, on):
+        """Custom mode enable of the firmware (0x727 bit6 on project 0x1A) — 1.8.1.1."""
+        if not hasattr(self, "_cume"):
+            mock = type(self.ec).__name__ == "MockEC"           # simulation: the container's DSDT says nothing
+            self._cume = CUME_FALLBACK.get(getattr(self.pf, "project_raw", None)) if mock \
+                else cume_bit(getattr(self.pf, "project_raw", None))
+            if self._cume:
+                log.info("custom mode flag: 0x%03X bit%d (CUME)", *self._cume)
+        if self._cume:
+            self.ec.set_bit(self._cume[0], self._cume[1], bool(on))
 
     def set_tcc(self, value, on):
         self.ec.write(REG_TCC_OFFSET, ((int(value) & 0x7F) | 0x80) if on else 0)

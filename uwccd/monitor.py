@@ -282,7 +282,7 @@ class Monitor:
         d = {"cpu_duty": cpu_duty, "cpu_rpm": cpu_rpm}
         if self.pf.nv_gpu:
             d["gpu_duty"] = self.ec.read(R.GPU_FAN_DUTY) // 2
-            d["gpu_rpm"] = (self.ec.read(R.GPU_FAN_RPM_L + 1) << 8) | self.ec.read(R.GPU_FAN_RPM_L)
+            d["gpu_rpm"] = (self.ec.read(R.GPU_FAN_RPM_H) << 8) | self.ec.read(R.GPU_FAN_RPM_H + 1)
         return d
 
     def snapshot(self):

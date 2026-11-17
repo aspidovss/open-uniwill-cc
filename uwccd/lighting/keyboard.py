@@ -26,11 +26,28 @@ class SingleColor:
         self.ec.write(R.KB_SINGLE, (v & 0xFD) if on else (v | 0x02))
 
     def level(self):
-        return self.ec.read(R.KB_SINGLE) >> 5
+        return min(4, self.ec.read(R.KB_SINGLE) >> 5)
 
     def set_level(self, lvl):
         v = (self.ec.read(R.KB_SINGLE) | 0x10) & 0x1F
-        self.ec.write(R.KB_SINGLE, v | ((int(lvl) & 7) << 5))
+        self.ec.write(R.KB_SINGLE, v | ((max(0, min(4, int(lvl)))) << 5))   # 5..7 reset the backlight to 0
+
+    # -- one-zone RGB on the EC (1.8.1.1): 0x766 bit2 set and no ITE controller, e.g. MECHREVO Aurora X ----------
+    def has_colour(self):
+        try:
+            return bool(self.ec.read(R.EC_SUPPORT_2) & 0x04) and not (self.ec.read(R.KB_SINGLE) & 0x01)
+        except Exception:  # noqa: BLE001
+            return False
+
+    def colour(self):
+        """[r, g, b] 0..255 (the EC keeps 0..50)."""
+        return [round(self.ec.read(R.KB_RGB_R + i) * 255 / R.KB_RGB_MAX) for i in range(3)]
+
+    def set_colour(self, rgb):
+        for i, c in enumerate(rgb[:3]):
+            self.ec.write(R.KB_RGB_R + i, max(0, min(R.KB_RGB_MAX, round(int(c) * R.KB_RGB_MAX / 255))))
+        self.ec.write(R.KB_SINGLE, self.ec.read(R.KB_SINGLE) | 0x10)          # apply the level
+        self.ec.write(R.TRIGGER_767, self.ec.read(R.TRIGGER_767) | 0x20)       # apply the colour (written every time)
 
 
 class KeyboardManager:
@@ -163,12 +180,19 @@ class KeyboardManager:
                     self.rgb.set_power(False)
             except (NotImplementedError, ValueError, OSError) as e:
                 log.warning("restore keyboard effect: %s", e)
-        elif self.pf.project_id in SINGLE_COLOR_EC_IDS or self.st.get("force_single_color"):
+        elif self.pf.project_id in SINGLE_COLOR_EC_IDS or self.st.get("force_single_color") \
+                or self._ec_rgb_keyboard():
             self.single = SingleColor(self.ec)
             self.kind = "single"
             lvl = self.st.get("kb_single_level")
             if lvl is not None:
                 self.single.set_level(lvl)
+            col = self.st.get("kb_single_colour")
+            if col and self.single.has_colour():
+                try:
+                    self.single.set_colour(col)
+                except (OSError, ValueError) as e:
+                    log.warning("restore keyboard colour: %s", e)
             if self.st.get("kb_power") is False:
                 self.single.set_power(False)
         log.info("keyboard backlight: %s", self.kind)
@@ -263,6 +287,23 @@ class KeyboardManager:
                 self.single.set_power(on)
             self.st.set("kb_power", bool(on))
 
+    def _ec_rgb_keyboard(self):
+        """One-zone RGB keyboard driven by the EC itself (no ITE USB controller): 0x766 bit2 (1.8.1.1)."""
+        try:
+            return bool(self.ec.read(R.EC_SUPPORT_2) & 0x04)
+        except Exception:  # noqa: BLE001
+            return False
+
+    def set_colour(self, rgb):
+        if self.kind != "single" or not self.single.has_colour():
+            raise ValueError("this keyboard has no colour backlight on the EC")
+        rgb = [max(0, min(255, int(c))) for c in rgb[:3]]
+        if len(rgb) != 3:
+            raise ValueError("colour: [r, g, b]")
+        with self.lock:
+            self.single.set_colour(rgb)
+            self.st.set("kb_single_colour", rgb)
+
     def set_level(self, lvl):
         if self.kind == "single":
             self.single.set_level(lvl)
@@ -346,4 +387,7 @@ class KeyboardManager:
         elif self.kind == "single":
             d["level"] = self.single.level()
             d["power"] = self.single.power()
+            d["colour_support"] = self.single.has_colour()
+            if d["colour_support"]:
+                d["colour"] = self.single.colour()
         return d

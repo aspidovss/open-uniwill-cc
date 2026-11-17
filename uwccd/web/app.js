@@ -712,7 +712,21 @@ function renderLight() {
   $("#none-ui").classList.toggle("hidden", k.kind !== "none");
   $("#kb-power").checked = !!k.power; $("#kb-power").disabled = k.kind === "none";
   $("#light-sub").textContent = k.kind === "rgb" ? t("ITE controller {0}, firmware {1}", k.device.pid, k.device.fw) : k.kind === "single" ? t("Single-colour backlight (EC controlled)") : t("No backlight found");
-  if (k.kind === "single") { $("#kb-level").value = k.level; $("#kb-level").nextElementSibling.textContent = k.level; }
+  if (k.kind === "single") {
+    $("#kb-level").value = k.level; $("#kb-level").nextElementSibling.textContent = k.level;
+    $("#light-sub").textContent = k.colour_support ? t("One-zone RGB backlight (EC controlled)") : t("Single-colour backlight (EC controlled)");
+    $("#single-colour").classList.toggle("hidden", !k.colour_support);          // 1.8.1.1: Aurora X and alike
+    if (k.colour_support) {
+      const hex = "#" + (k.colour || [255, 255, 255]).map(v => v.toString(16).padStart(2, "0")).join("");
+      if (document.activeElement !== $("#kb-single-colour")) $("#kb-single-colour").value = hex;
+      const sw = $("#single-swatches"); sw.innerHTML = "";
+      for (const c of k.default_colors.concat([[255, 255, 255]])) {
+        const near = (k.colour || []).every((v, i) => Math.abs(v - c[i]) <= 8);
+        sw.append(h("div", { class: "swatch" + (near ? " on" : ""), style: `background:rgb(${c})`,
+          onclick: () => act(() => api("keyboard/colour", { colour: c })) }));
+      }
+    }
+  }
   if (k.kind !== "rgb") return;
   if (k.effect) {
     const e = k.effect;
@@ -1203,6 +1217,10 @@ for (const [id, key] of [["kb-light", "light"], ["kb-speed", "speed"]]) {
 }
 $("#kb-level").addEventListener("input", e => { e.target.nextElementSibling.textContent = e.target.value; });
 $("#kb-level").addEventListener("change", e => act(() => api("keyboard/level", { level: +e.target.value })));
+$("#kb-single-colour").addEventListener("change", e => {
+  const v = e.target.value, c = [1, 3, 5].map(i => parseInt(v.slice(i, i + 2), 16));
+  act(() => api("keyboard/colour", { colour: c }));
+});
 $("#kb-dir").addEventListener("change", e => { kbSel.direction = +e.target.value; applyKb(); });
 $("#kb-multi").addEventListener("change", e => { kbSel.circular = e.target.checked; applyKb(); });
 $("#kb-alpha").addEventListener("change", () => applyKb());

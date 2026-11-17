@@ -2701,6 +2701,107 @@ class BusAndModulesUnit(unittest.TestCase):
         self.assertIn("open", d["tray"])
 
 
+class Fix1811Unit(unittest.TestCase):
+    """1.8.1.1: GPU fan rpm bytes; one-zone RGB keyboard on the EC; Custom mode flag CUME (MECHREVO Aurora X)."""
+
+    @staticmethod
+    def _aml_field(region, fields):
+        """A minimal DSDT with one Field(): fields = [(reserved_bits_before, name, length)]."""
+        def pl(v):
+            if v < 0x40:
+                return bytes([v])
+            if v < 0x1000:
+                return bytes([0x40 | (v & 0x0F), v >> 4])
+            return bytes([0x80 | (v & 0x0F), (v >> 4) & 0xFF, v >> 12])
+        body = region.encode() + b"\x01"
+        for skip, name, n in fields:
+            if skip:
+                body += b"\x00" + pl(skip)
+            body += name.encode() + pl(n)
+        ln = len(body)
+        for extra in (1, 2, 3):                 # the package length counts its own bytes
+            if len(pl(ln + extra)) == extra:
+                ln += extra
+                break
+        return b"DSDT" + bytes(32) + b"\x5b\x81" + pl(ln) + body
+
+    def test_dsdt_field_parser(self):
+        from uwccd.acpifields import parse_fields
+        t = self._aml_field("ECMG", [(0x727 * 8 + 6, "CUME", 1), (0, "PL4D", 1), (0x29 * 8 + 4, "TBME", 1)])
+        f = parse_fields(t)
+        self.assertEqual(f[("ECMG", "CUME")], (0x727, 6, 1))
+        self.assertEqual(f[("ECMG", "PL4D")], (0x727, 7, 1))
+        self.assertEqual(f[("ECMG", "TBME")], (0x751, 4, 1))
+
+    def test_custom_mode_sets_cume_on_0x1a(self):
+        from uwccd import fan_std
+        from uwccd.ec import MockEC
+        for project, expect in ((0x1A, True), (0x10, False)):
+            ec = MockEC()
+            m = fan_std.PowerManagerStd.__new__(fan_std.PowerManagerStd)
+            m.ec, m.pf = ec, type("P", (), {"project_raw": project, "nv_gpu": True})()
+            m.option = {"FanBoostEnable": 0}
+            m.overclocking = lambda: False
+            ec.write(0x727, 0x80)                      # PL4D set, as on the Aurora X
+            m.set_fan_mode(fan_std.MODE_CUSTOM)
+            self.assertEqual(bool(ec.read(0x727) & 0x40), expect, hex(project))
+            self.assertTrue(ec.read(0x727) & 0x80)     # PL4D untouched
+            self.assertTrue(ec.read(fan_std.REG_CUSTOM_FLAG) & 0x80)
+            m.set_fan_mode(1)                          # Gaming: the flag goes off again
+            self.assertFalse(ec.read(0x727) & 0x40)
+
+    def test_gpu_rpm_is_46c_46d(self):
+        from uwccd import regs as R
+        self.assertEqual(R.GPU_FAN_RPM_H, 0x46C)
+        from uwccd.ec import MockEC
+        from uwccd.monitor import Monitor
+        ec = MockEC()
+        ec.write(0x46B, 0x55)                  # a constant on every board (0x32 / 0xA0 / 0x55 / 0x2D in 12 reports)
+        ec.write(0x46C, 0x06)
+        ec.write(0x46D, 0xBD)
+        pf = type("P", (), {"nv_gpu": True, "project_name": "0x1A"})()
+        m = Monitor.__new__(Monitor)
+        m.ec, m.pf = ec, pf
+        self.assertEqual(m.fans()["gpu_rpm"], 0x06BD)
+
+    def test_ec_one_zone_rgb(self):
+        from uwccd import regs as R
+        from uwccd.ec import MockEC
+        from uwccd.lighting.keyboard import KeyboardManager, SingleColor
+        ec = MockEC()
+        ec.write(R.EC_SUPPORT_2, 0xB4)        # Aurora X: bit2 set
+        ec.write(R.KB_SINGLE, 0x80)           # level 4, not white-only
+        sc = SingleColor(ec)
+        self.assertTrue(sc.has_colour())
+        sc.set_colour([255, 0, 128])
+        self.assertEqual([ec.read(R.KB_RGB_R + i) for i in range(3)], [50, 0, 25])
+        self.assertTrue(ec.read(R.TRIGGER_767) & 0x20)
+        self.assertTrue(ec.read(R.KB_SINGLE) & 0x10)
+        self.assertEqual(sc.colour(), [255, 0, 128])
+        sc.set_level(7)                        # 5..7 would reset the backlight: clamped to 4
+        self.assertEqual(ec.read(R.KB_SINGLE) >> 5, 4)
+        ec.write(R.KB_SINGLE, 0x81)           # white-only keyboard: no colour
+        self.assertFalse(sc.has_colour())
+
+        class St(dict):
+            def set(self, k, v):
+                self[k] = v
+        ec.write(R.KB_SINGLE, 0x80)
+        pf = type("P", (), {"project_id": 0x55, "nv_gpu": True})()     # a project not in SINGLE_COLOR_EC_IDS
+        km = KeyboardManager(ec, pf, St(), mock=False)
+        import uwccd.lighting.ite as ite
+        orig = ite.open_keyboard
+        ite.open_keyboard = lambda *a, **k: None            # no ITE controller on this laptop
+        try:
+            km.start()
+        finally:
+            ite.open_keyboard = orig
+        self.assertEqual(km.kind, "single")                  # found through 0x766 bit2
+        km.set_colour([0, 255, 0])
+        self.assertEqual(km.st["kb_single_colour"], [0, 255, 0])
+        self.assertTrue(km.status()["colour_support"])
+
+
 class AfterburnerUnit(unittest.TestCase):
     """1.7.1: every mode can switch an MSI Afterburner profile slot (its command line -Profile<N>)."""
 
