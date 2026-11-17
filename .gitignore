@@ -19,3 +19,6 @@ uwccd/_build.py
 *.rar
 *.zip
 *.7z
+# Visual Studio "open folder" files (1.8.1.1 committed them by mistake)
+.vs/
+*.sln

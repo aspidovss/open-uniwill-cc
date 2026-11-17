@@ -1117,3 +1117,85 @@ Object.assign(RU, {
   "The firmware limit table did not answer for {0}: those limits come from the controller defaults or are not offered.":
     "Таблица пределов прошивки не ответила для {0}: эти пределы взяты из значений контроллера по умолчанию или не предлагаются.",
 });
+
+// 1.8.2.0: greyed-out functions and unlocking, help "?", Settings -> API
+Object.assign(RU, {
+  "this laptop does not have it": "на этом ноутбуке нет",
+  "the controller does not report fan control (RamFan 1.5)": "контроллер не сообщает об управлении вентиляторами (RamFan 1.5)",
+  "the service module is off": "модуль службы выключен",
+  "not confirmed on this project over WMI": "не подтверждено на этом проекте через WMI",
+  "experimental platform: commands are not allowed yet": "экспериментальная платформа: команды ещё не разрешены",
+  "the WMI warning has not been accepted": "предупреждение WMI не принято",
+  "no OEM driver": "нет OEM-драйвера", "not available on this access path": "недоступно на этом пути доступа",
+  "Enable the module": "Включить модуль", "Unlock…": "Разблокировать…", "Lock": "Заблокировать",
+  "Back to the profile's own state": "Вернуть как в профиле", "Unlocked": "Разблокировано", "Locked": "Заблокировано",
+  "Module enabled": "Модуль включён", "module off": "модуль выключен",
+  "Unlocked. Restart the service to apply it.": "Разблокировано. Перезапустите службу, чтобы применить.",
+  "Locked. Restart the service to apply it.": "Заблокировано. Перезапустите службу, чтобы применить.",
+  "The module starts at the next service start. Enable it?": "Модуль запустится при следующем старте службы. Включить?",
+  "The “{0}” service module is off.": "Модуль службы «{0}» выключен.",
+  "Not confirmed on this laptop over WMI.": "Не подтверждено на этом ноутбуке через WMI.",
+  "Keyboard and light bar": "Клавиатура и световая полоса", "MSI Afterburner": "MSI Afterburner",
+  "The Bluetooth adapter is off or not working: check Bluetooth in the system settings, then press Search again.":
+    "Адаптер Bluetooth выключен или не работает: проверьте Bluetooth в настройках системы и снова нажмите «Поиск».",
+  "This function is off because nobody has confirmed it on your laptop over the WMI path.\n\nUnlocking makes the service WRITE to the embedded controller over an UNVERIFIED path. If the registers differ on your model, this can set wrong power limits, wrong fan behaviour or disturb thermal protection. Undo: the Lock button (Information → Functions on this laptop), Restore default settings, or removing the override in EC Manager.\n\nEvery unlock is written to the service log and included in diagnostic reports.\n\nUnlock it?":
+    "Эта функция выключена, потому что никто не подтвердил её работу на вашем ноутбуке через WMI.\n\nПосле разблокировки служба будет ЗАПИСЫВАТЬ во встроенный контроллер по НЕПРОВЕРЕННОМУ пути. Если на вашей модели регистры другие, это может выставить неверные пределы мощности, неправильную работу вентиляторов или нарушить тепловую защиту. Отмена: кнопка «Заблокировать» (Информация → Функции на этом ноутбуке), «Восстановить настройки по умолчанию» или удаление переопределения в Менеджере EC.\n\nКаждая разблокировка записывается в журнал службы и попадает в диагностический отчёт.\n\nРазблокировать?",
+  "This platform support is experimental: it was built from research, not from the manufacturer.\n\nUnlocking allows the service to SEND COMMANDS to the firmware (modes, fans, keyboard). Close the vendor's own program first — two programs driving the same firmware conflict. If fans or modes behave wrongly, lock it back and send a diagnostic report.\n\nEvery unlock is written to the service log and included in diagnostic reports.\n\nUnlock it?":
+    "Поддержка этой платформы экспериментальная: она сделана по результатам исследования, а не по данным производителя.\n\nРазблокировка разрешает службе ОТПРАВЛЯТЬ КОМАНДЫ прошивке (режимы, вентиляторы, клавиатура). Сначала закройте программу производителя — две программы, управляющие одной прошивкой, конфликтуют. Если вентиляторы или режимы ведут себя неправильно, заблокируйте обратно и отправьте диагностический отчёт.\n\nКаждая разблокировка записывается в журнал службы и попадает в диагностический отчёт.\n\nРазблокировать?",
+  // help
+  "Click for more": "Нажмите, чтобы узнать больше", "API for scripts and other computers": "API для скриптов и других компьютеров",
+  "Switch the mode, the profile and the cooler profile when a condition holds long enough.":
+    "Переключает режим, профиль и профиль охладителя, когда условие держится нужное время.",
+  "A zip file for adding support for another laptop or looking into a problem. Nothing is changed on the laptop.":
+    "Zip-файл для поддержки другого ноутбука или разбора проблемы. На ноутбуке ничего не меняется.",
+  "What the program knows about this laptop platform. Your own profile replaces the built-in one.":
+    "Что программа знает о платформе этого ноутбука. Ваш собственный профиль заменяет встроенный.",
+  "Stage 1 only reads. Stage 2 (administrator, on AC power) switches every function a little and back; the registers are restored even after a crash.":
+    "Этап 1 только читает. Этап 2 (администратор, от сети) немного переключает каждую функцию и обратно; регистры восстанавливаются даже после сбоя.",
+  "Used only on the WMI path: which functions stay available, how often the EC is read and the power limits used instead of SMRW.":
+    "Только для пути WMI: какие функции доступны, как часто читается EC и пределы мощности вместо SMRW.",
+  // Settings -> API
+  "API": "API", "Access for scripts and other computers. Off by default.": "Доступ для скриптов и других компьютеров. По умолчанию выключен.",
+  "External API": "Внешний API",
+  "The window, the tray and uwccctl work without it. A separate token with limited rights for your own scripts, Home Assistant and the like.":
+    "Окно, трей и uwccctl работают и без него. Отдельный ключ с ограниченными правами для ваших скриптов, Home Assistant и т. п.",
+  "Allow the external API": "Разрешить внешний API", "Access": "Доступ",
+  "Read only (state, sensors, history, events)": "Только чтение (состояние, датчики, история, события)",
+  "Full (modes, fans, switches, battery, lighting, cooler)": "Полный (режимы, вентиляторы, переключатели, батарея, подсветка, СЖО)",
+  "Full access lets the token holder change modes, fans and power. Consents, unlocks, EC access, updates and these API settings stay out of reach.":
+    "Полный доступ позволяет владельцу ключа менять режимы, вентиляторы и мощность. Согласия, разблокировки, доступ к EC, обновления и эти настройки API остаются недоступны.",
+  "Token": "Ключ", "Make a new token": "Создать новый ключ", "not made yet": "ещё не создан",
+  "Copy the token now: it is shown only once. Only its fingerprint is kept.": "Скопируйте ключ сейчас: он показывается только один раз. Хранится лишь его отпечаток.",
+  "Local address:": "Локальный адрес:", "header": "заголовок",
+  "Access from the local network": "Доступ из локальной сети",
+  "Allow connections from other computers": "Разрешить подключения с других компьютеров",
+  "Anyone in the allowed networks who has the token can use it. Turn it on only in a network you trust.":
+    "Любой в разрешённых сетях, у кого есть ключ, может им воспользоваться. Включайте только в сети, которой доверяете.",
+  "Port": "Порт", "HTTPS (self-signed certificate)": "HTTPS (самоподписанный сертификат)",
+  "Without HTTPS the token crosses the network in plain text.": "Без HTTPS ключ передаётся по сети открытым текстом.",
+  "Certificate fingerprint (SHA-256):": "Отпечаток сертификата (SHA-256):", "New certificate": "Новый сертификат",
+  "Allowed addresses and networks, one per line (e.g. 192.168.1.0/24 or 192.168.1.20)":
+    "Разрешённые адреса и сети, по одной на строку (например, 192.168.1.0/24 или 192.168.1.20)",
+  "This computer:": "Этот компьютер:", "Add to the list": "Добавить в список",
+  "Listening: {0}": "Принимает подключения: {0}", "Not listening: {0}": "Не принимает подключения: {0}",
+  "save the settings": "сохраните настройки",
+  "Windows Firewall: the rule “open-uniwill-cc API” allows this port for the allowed addresses only.":
+    "Брандмауэр Windows: правило «open-uniwill-cc API» открывает этот порт только для разрешённых адресов.",
+  "Windows Firewall: {0}": "Брандмауэр Windows: {0}",
+  "Linux: if a firewall is on, open the port yourself, e.g. sudo ufw allow from 192.168.1.0/24 to any port {0} proto tcp":
+    "Linux: если включён брандмауэр, откройте порт сами, например sudo ufw allow from 192.168.1.0/24 to any port {0} proto tcp",
+  "Recent external requests": "Последние внешние запросы", "Blocked after wrong tokens: {0}": "Заблокированы после неверных ключей: {0}",
+  "Time": "Время", "Address": "Адрес", "Request": "Запрос", "Answer": "Ответ", "No requests yet": "Запросов пока нет",
+  "local": "локально", "blocked": "заблокирован",
+  "External API on": "Внешний API включён", "External API off": "Внешний API выключен",
+  "Other computers in the allowed networks will be able to reach the service with the token. Turn it on?":
+    "Другие компьютеры в разрешённых сетях смогут обращаться к службе с ключом. Включить?",
+  "The current token stops working at once. Make a new one?": "Текущий ключ сразу перестанет работать. Создать новый?",
+  "New token made": "Новый ключ создан",
+  "Clients that trust the current certificate will have to trust the new one. Make it?":
+    "Клиентам, доверяющим текущему сертификату, придётся доверять новому. Создать?",
+  "New certificate made": "Новый сертификат создан",
+});
+Object.assign(RU, { "Allow full access?": "Разрешить полный доступ?" });
+Object.assign(RU, { "the fan manager of this platform has no Custom mode": "у менеджера вентиляторов этой платформы нет пользовательского режима",
+  "no event source: the keys are polled": "нет источника событий: клавиши опрашиваются" });

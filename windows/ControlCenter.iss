@@ -147,6 +147,7 @@ Filename: "{sys}\sc.exe"; Parameters: "stop uwccd"; Flags: runhidden waituntilte
 Filename: "{cmd}"; Parameters: "/c timeout /t 2 /nobreak >nul"; Flags: runhidden waituntilterminated; RunOnceId: "Wait"
 Filename: "{app}\uwccctl.exe"; Parameters: "release"; Flags: runhidden waituntilterminated; RunOnceId: "Release"
 Filename: "{sys}\sc.exe"; Parameters: "delete uwccd"; Flags: runhidden waituntilterminated; RunOnceId: "DelSvc"
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""open-uniwill-cc API"""; Flags: runhidden waituntilterminated; RunOnceId: "DelFwRule"
 Filename: "{sys}\sc.exe"; Parameters: "config GCUService start= auto"; Flags: runhidden waituntilterminated; RunOnceId: "OemOn"
 Filename: "{sys}\sc.exe"; Parameters: "start GCUService"; Flags: runhidden; RunOnceId: "OemStart"
 

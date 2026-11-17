@@ -270,6 +270,9 @@ def log_tail(lines=2000):
 
 def settings_info(svc, private):
     st = {k: v for k, v in svc.settings_store.d.items() if "token" not in k}
+    if isinstance(st.get("api_external"), dict):          # 1.8.2.0: the settings, never the token's hash or prefix
+        st["api_external"] = {k: v for k, v in st["api_external"].items()
+                              if k in ("enabled", "scope", "lan", "https", "port")}
     if "apps" not in private:
         st.pop("app_binding", None)
     return st
@@ -543,6 +546,11 @@ def build(svc, sections=DEFAULT_SECTIONS, private=()):
     js = _redact(json.dumps(data, indent=1, ensure_ascii=False, default=str), private, secrets_)
     s = data["summary"] if isinstance(data["summary"], dict) else {}
     txt = ["open-uniwill-cc diagnostic report", "=" * 34] + [f"{k:12} {v}" for k, v in s.items()]
+    unl = svc.settings_store.get("unlocks") or []
+    if unl:                                                # 1.8.2.0: functions the user turned on over the profile
+        txt += ["", "Unlocked by the user", "-" * 20] + [
+            f"  {u.get('type')} {u.get('key')} since {time.strftime('%Y-%m-%d %H:%M', time.localtime(u.get('t', 0)))}"
+            for u in unl]
     if "selfcheck" in sections:
         txt += selfcheck_text(data.get("selfcheck"))
     cl = data.get("clevo")

@@ -187,7 +187,7 @@ function render() {
   }
   renderModes(); renderFanPage(); renderLiquid(); renderLight(); renderBattery(); renderSwitches(); renderBinding(); renderInfo(); renderAuto(); renderAbout(); renderReportCard();
   renderHistSeg(); drawHistory();
-  renderAltPages(); renderAfterburner(); renderDriver(); renderEcBanner(); applyFeatures(); renderBusy(S.busy || []); renderMonOff(); setupCollapsible();
+  renderAltPages(); renderAfterburner(); renderDriver(); renderEcBanner(); applyFeatures(); applyModuleGates(); renderBusy(S.busy || []); renderMonOff(); setupCollapsible();
 }
 
 // ---------------------------------------------------------------- monitor
@@ -1413,9 +1413,15 @@ function renderInfo() {
       keyboard_backlight: "Keyboard backlight", keyboard_rgb: "RGB keyboard", lightbar: "Light bar",
       liquid_cooler: "Liquid cooler (Bluetooth)", afterburner: "MSI Afterburner", clevo: "Clevo interface",
       leishen: "Leishen interface", hotkeys: "Hotkey events", ec_write: "EC access" };
+    NAMES.switches = "Switches"; NAMES.automation = "Automation";
     for (const [k, c] of Object.entries(S.capabilities || {})) {
-      caps.append(h("dt", {}, t(NAMES[k] || k)),
-        h("dd", { class: c.available ? "" : "muted" }, (c.available ? "✓" : "—") + (c.detail ? ` · ${t(c.detail)}` : "")));
+      const dd = h("dd", { class: c.available ? "" : "muted" },
+        (c.available ? "✓" : "—") + (c.detail ? ` · ${t(c.detail)}` : "") + (c.reason ? ` · ${t(CAP_REASON[c.reason] || c.reason)}` : ""));
+      if (c.unlock) dd.append(" ", h("button", { class: "btn ghost sm", onclick: () => capUnlock(k, c) },
+        c.unlock.type === "module" ? t("Enable the module") : c.unlock.type === "page" ? t("Open EC Manager") : t("Unlock…")));
+      if (c.lock) dd.append(" ", h("button", { class: "btn ghost sm", title: t("Back to the profile's own state"),
+        onclick: () => capLock(k, c) }, t("Lock")));
+      caps.append(h("dt", {}, t(NAMES[k] || k)), dd);
     }
   }
   const w = []; if (!p.ramfan15) w.push(t("The controller does not report RamFan 1.5 support — fan control may not work on this model."));
@@ -1531,6 +1537,7 @@ function renderLiquid() {
   $("#lc-scan").textContent = L.connected ? t("Search") : (c.address && !c.enabled ? t("Search") : t("Search"));
   $("#lc-hint").classList.toggle("hidden", L.connected || !!(L.scan || []).length);
   $("#lc-cycle").classList.toggle("hidden", L.connected || L.error_hint !== "power_cycle");
+  $("#lc-bt").classList.toggle("hidden", L.connected || L.error_hint !== "bluetooth_off");
   // scan results
   const f = $("#lc-found"); f.innerHTML = "";
   for (const d of L.scan || []) {
@@ -1949,6 +1956,8 @@ $("#lc-scan").addEventListener("click", async () => {
   lcScanning = true; renderLiquid();
   try { const r = await api("lc/scan", {}); if (!r.devices.length) toast(t("No cooler found. Is it powered on and is Bluetooth enabled?"), true); }
   catch (e) { lcScanning = false; await refresh();
+    const bt = S.liquid && S.liquid.error_hint === "bluetooth_off";
+    if (bt) { toast(t("Error: {0}", errText(e.message)) + " " + t("The Bluetooth adapter is off or not working: check Bluetooth in the system settings, then press Search again."), true); lcScanning = false; await refresh(); return; }
     const cyc = S.liquid && S.liquid.error_hint === "power_cycle";
     toast(t("Error: {0}", errText(e.message)) + (cyc ? " " + t("Switch the cooler off and on again, wait until its light blinks, then press Search and connect it again.") : ""), true); }
   lcScanning = false; await refresh();
@@ -2926,6 +2935,81 @@ const EC_PATHS = [
 const ecA = () => (S && S.ec_access) || null;
 const ecWin = () => { const a = ecA(); return !!(a && a.windows); };
 
+// 1.8.2.0: why a capability is unavailable (uwccd/capabilities.py) and how it is unlocked
+const CAP_REASON = {
+  no_hardware: "this laptop does not have it",
+  no_fan_control: "the controller does not report fan control (RamFan 1.5)",
+  module_off: "the service module is off",
+  wmi_feature_off: "not confirmed on this project over WMI",
+  writes_off: "experimental platform: commands are not allowed yet",
+  wmi_consent: "the WMI warning has not been accepted",
+  oem_missing: "no OEM driver",
+  no_driver: "no EC access",
+  not_installed: "not installed",
+  locked: "not available on this access path",
+  no_custom: "the fan manager of this platform has no Custom mode",
+  no_events: "no event source: the keys are polled",
+};
+const UNLOCK_WARN = {
+  wmi_feature: "This function is off because nobody has confirmed it on your laptop over the WMI path.\n\n" +
+    "Unlocking makes the service WRITE to the embedded controller over an UNVERIFIED path. If the registers differ on your model, this can set wrong power limits, wrong fan behaviour or disturb thermal protection. Undo: the Lock button (Information → Functions on this laptop), Restore default settings, or removing the override in EC Manager.\n\n" +
+    "Every unlock is written to the service log and included in diagnostic reports.\n\nUnlock it?",
+  consent: "This platform support is experimental: it was built from research, not from the manufacturer.\n\n" +
+    "Unlocking allows the service to SEND COMMANDS to the firmware (modes, fans, keyboard). Close the vendor's own program first — two programs driving the same firmware conflict. If fans or modes behave wrongly, lock it back and send a diagnostic report.\n\n" +
+    "Every unlock is written to the service log and included in diagnostic reports.\n\nUnlock it?",
+};
+async function capUnlock(name, c) {
+  const u = c.unlock;
+  if (u.type === "page") { goPage("driver"); return; }
+  if (u.risk && !confirm(t(UNLOCK_WARN[u.type] || UNLOCK_WARN.wmi_feature))) return;
+  if (u.type === "module" && u.restart && !confirm(t("The module starts at the next service start. Enable it?"))) return;
+  await act(async () => {
+    const r = await api("unlock", { type: u.type, key: u.key, enabled: true });
+    await refresh();
+    if (r.restart_needed || u.restart) toast(t("Unlocked. Restart the service to apply it."));
+  }, u.risk ? t("Unlocked") : t("Module enabled"));
+}
+async function capLock(name, c) {
+  await act(async () => {
+    const r = await api("unlock", { type: c.lock.type, key: c.lock.key, enabled: false });
+    await refresh();
+    if (r.restart_needed || c.lock.restart) toast(t("Locked. Restart the service to apply it."));
+  }, t("Locked"));
+}
+// Service modules that are off grey their pages, with a chip that enables the module from where you are
+const MODULE_AREAS = {                                  // grey: what is disabled; chip: where the "Enable" line goes
+  liquid: { grey: ["#lc-ui"], chip: ["#lc-ui"] },
+  afterburner: { grey: ["#modes-ab"], chip: ["#modes-ab"] },
+  lighting: { grey: ["#page-light > .card", "#rgb-ui", "#page-lightbar > .card"], chip: ["#page-light > .card", "#lb-ui"] },
+  automation: { grey: ["#page-auto > .card"], chip: ["#au-rules-card"] },
+};
+function gateChip(el, show, text, btn, onclick) {      // the line above a greyed block that unlocks it in place
+  const prev = el.previousElementSibling;
+  let chip = prev && prev.classList && prev.classList.contains("mod-chip") ? prev : null;
+  if (show) {
+    const body = [h("span", { class: "muted tiny" }, text)];
+    if (btn) body.push(" ", h("button", { class: "btn sm", onclick }, btn));
+    if (!chip) { chip = h("div", { class: "mod-chip" }); el.insertAdjacentElement("beforebegin", chip); }
+    chip.replaceChildren(...body);
+  } else if (chip) chip.remove();
+}
+function applyModuleGates() {
+  const mods = {}; for (const m of (S.modules || [])) mods[m.name] = m;
+  for (const [name, area] of Object.entries(MODULE_AREAS)) {
+    const m = mods[name], off = !!m && m.available && !m.enabled;
+    for (const el of area.grey.flatMap(x => $$(x))) {
+      el.classList.toggle("feat-off", off);
+      if (off) el.dataset.featText = t("module off");
+      el.inert = off;
+    }
+    for (const el of area.chip.map(x => $(x)).filter(Boolean))
+      gateChip(el, off, t("The \u201C{0}\u201D service module is off.", t(MODULE_TITLES[name] || name)),
+        t("Enable the module"), () => capUnlock(name, { unlock: { type: "module", key: name, risk: false, restart: !(m && m.live) } }));
+  }
+}
+const MODULE_TITLES = { liquid: "Liquid cooling", afterburner: "MSI Afterburner", automation: "Automation",
+                        lighting: "Keyboard and light bar" };
+
 function applyFeatures() {
   const a = ecA();
   const feats = (a && a.features) || {};
@@ -2938,8 +3022,13 @@ function applyFeatures() {
       el.dataset.featText = st === "off" ? (a && a.active === "none" ? t("no EC access") : t("not available with WMI")) : st === "slow" ? t("slow with WMI") : "";
       el.inert = st === "off";
     }
+    // 1.8.2.0: on the WMI path a function the profile keeps off can be unlocked from where it is (with the warning)
+    const canUnlock = st === "off" && a && a.active === "wmi" && !WMI_LOCKED.includes(k);
+    if (els[0]) gateChip(els[0], canUnlock, t("Not confirmed on this laptop over WMI."), t("Unlock…"),
+      () => capUnlock(k, { unlock: { type: "wmi_feature", key: k, risk: true, restart: true } }));
   }
 }
+const WMI_LOCKED = ["power_boost_lc"];                // PWUP: OEM driver only (uwccd/ecaccess.py FEATURES)
 
 function renderEcBanner() {
   const a = ecA(), b = $("#ec-banner"), badge = $("#wmi-badge"), alt = S && S.alt;
@@ -3513,6 +3602,7 @@ const HELP_PAGES = [
   { id: "leishen", name: "Leishen / Thunderobot (experimental)", en: "LEISHEN.md", ru: "LEISHEN.ru.md" },
   { id: "afterburner", name: "MSI Afterburner (experimental)", en: "AFTERBURNER.md", ru: "AFTERBURNER.ru.md" },
   { id: "cli", name: "Command line (uwccctl)", en: "CLI.md", ru: "CLI.ru.md" },
+  { id: "api", name: "API for scripts and other computers", en: "API.md", ru: "API.ru.md" },
 ];
 var helpCur = null;                     // var: setLang() may run before this line
 function helpFile(p) { return p[LANG === "ru" ? "ru" : "en"] || p.en; }
@@ -3563,8 +3653,30 @@ async function openHelp(id, anchor) {
   else { const m = body.closest("main"); if (m) m.scrollTop = 0; window.scrollTo(0, 0); }
 }
 function helpLink(id, anchor) {                       // anchor: "x" or {en: "x", ru: "y"}
-  return h("button", { class: "help-q", title: t("Help"), "aria-label": t("Help"),
-    onclick: e => { e.stopPropagation(); openHelp(id, anchor && typeof anchor === "object" ? anchor[LANG === "ru" ? "ru" : "en"] : anchor); } }, "?");
+  const an = () => anchor && typeof anchor === "object" ? anchor[LANG === "ru" ? "ru" : "en"] : anchor;
+  const b = h("button", { class: "help-q", title: t("Help"), "aria-label": t("Help"),
+    onclick: e => { e.stopPropagation(); openHelp(id, an()); } }, "?");
+  b.addEventListener("mouseenter", async () => {         // 1.8.2.0: the first sentences of the section as the tooltip
+    const tip = await helpTip(id, an());
+    if (tip) b.title = tip + "\n\n" + t("Click for more");
+  });
+  return b;
+}
+const helpTips = {};
+async function helpTip(id, anchor) {
+  const p = HELP_PAGES.find(x => x.id === id); if (!p || !anchor) return "";
+  const file = helpFile(p), key = file + "#" + anchor;
+  if (key in helpTips) return helpTips[key];
+  helpTips[key] = "";
+  try {
+    const r = await fetch("help/" + file, { cache: "no-cache" }); if (!r.ok) return "";
+    const d = h("div"); d.innerHTML = MD.render(await r.text());
+    let el = d.querySelector("#md-" + CSS.escape(anchor)), txt = "";
+    while (el && (el = el.nextElementSibling) && !/^H[1-6]$/.test(el.tagName) && txt.length < 60) txt += " " + el.textContent;
+    const sent = txt.replace(/\s+/g, " ").trim().match(/.+?[.!?](?=\s+[A-ZА-ЯЁ«"*(]|$)/gu) || [];
+    helpTips[key] = sent.slice(0, 2).join("").trim().slice(0, 400);
+  } catch (_) {}
+  return helpTips[key];
 }
 $(`#nav a[data-page="help"]`)?.addEventListener("click", () => { if (!helpCur) openHelp("ec-manager"); else renderHelpToc(); });
 (function addHelpLinks() {                               // "?" next to the titles of the EC Manager cards
@@ -3576,6 +3688,11 @@ $(`#nav a[data-page="help"]`)?.addEventListener("click", () => { if (!helpCur) o
   const firstCard = $$("#page-driver .card h3").find(x => (x.dataset.en || x.textContent) === "EC access path");
   const mon = $$("#page-driver .card h3").find(x => (x.dataset.en || x.textContent) === "Monitoring");
   const els = pairs.map(([sel, id, a]) => [$(sel), id, a]).concat([[firstCard, "wmi-vs-driver"], [mon, "ec-manager", { en: "monitoring", ru: "мониторинг" }]]);
+  // 1.8.2.0: data-help="page#anchor-en|anchor-ru" on any title — the short text stays on the card, the rest in Help
+  for (const el of $$("[data-help]")) {
+    const [id, an] = el.dataset.help.split("#"), [en, ru] = (an || "").split("|");
+    els.push([el, id, an ? { en, ru: ru || en } : undefined]);
+  }
   for (const [el, id, a] of els) {
     if (!el || el.parentElement.classList.contains("h-help")) continue;
     const wrap = h("span", { class: "h-help" });
@@ -3613,3 +3730,97 @@ function setupCollapsible() {
     h3.setAttribute("aria-expanded", String(!card.classList.contains("folded")));
   }
 }
+
+// ---------------------------------------------------------------- Settings -> API (1.8.2.0, uwccd/extapi.py)
+let EXT = null;
+async function loadExt(poll) {
+  try { EXT = await api("external"); } catch (e) { if (!poll) EXT = null; return; }
+  renderExt(!poll);                                   // the timer refreshes the state and the log, not the form
+}
+function renderExt(fromServer = true) {
+  const x = EXT; if (!x) return;
+  if (fromServer) {
+    $("#api-on").checked = x.enabled; $("#api-scope").value = x.scope; $("#api-lan").checked = x.lan;
+    $("#api-port").value = x.port; $("#api-https").checked = x.https; $("#api-allow").value = (x.allow || []).join("\n");
+  }
+  const on = $("#api-on").checked, lan = $("#api-lan").checked;
+  $("#api-body").classList.toggle("feat-off", !on); $("#api-body").inert = !on;
+  $("#api-lan-card").classList.toggle("feat-off", !on); $("#api-lan-card").inert = !on;
+  $("#api-lan-body").classList.toggle("feat-off", on && !lan); $("#api-lan-body").inert = !lan;
+  $("#api-full-warn").classList.toggle("hidden", $("#api-scope").value !== "full");
+  $("#api-http-warn").classList.toggle("hidden", !lan || $("#api-https").checked);
+  $("#api-token-hint").textContent = x.token_set ? x.token_hint + "…" + (x.token_made ? "  ·  " + new Date(x.token_made * 1000).toLocaleString() : "") : t("not made yet");
+  $("#api-local-url").textContent = `http://127.0.0.1:${x.ui_port}/api/state`;
+  $("#api-fp-row").classList.toggle("hidden", !(x.lan && x.https && x.fingerprint));
+  $("#api-fp").textContent = x.fingerprint || "";
+  const sug = $("#api-suggest"); sug.replaceChildren();
+  (x.addresses || []).forEach((a, i) => sug.append(i ? " · " : "", h("code", {}, a)));
+  (x.suggested || []).forEach(n => sug.append(" ", h("button", { class: "btn ghost sm", title: t("Add to the list"), onclick: () => {
+    const cur = $("#api-allow").value.split(/\s+/).filter(Boolean); if (!cur.includes(n)) cur.push(n);
+    $("#api-allow").value = cur.join("\n"); } }, "+ " + n)));
+  const scheme = x.https ? "https" : "http";
+  $("#api-lan-state").textContent = !x.lan ? "" : x.listening
+    ? t("Listening: {0}", (x.addresses || []).map(a => `${scheme}://${a}:${x.port}/api/state`).join(", ") || `${scheme}://*:${x.port}`)
+    : t("Not listening: {0}", x.error || t("save the settings"));
+  $("#api-fw").textContent = !x.lan ? "" : x.os === "windows"
+    ? (x.firewall === "added" ? t("Windows Firewall: the rule “open-uniwill-cc API” allows this port for the allowed addresses only.")
+       : x.firewall ? t("Windows Firewall: {0}", x.firewall) : "")
+    : t("Linux: if a firewall is on, open the port yourself, e.g. sudo ufw allow from 192.168.1.0/24 to any port {0} proto tcp", x.port);
+  const bl = Object.entries(x.blocked || {});
+  $("#api-blocked").textContent = bl.length ? t("Blocked after wrong tokens: {0}", bl.map(([ip, s]) => `${ip} (${s} s)`).join(", ")) : "";
+  const tb = $("#api-log"); tb.replaceChildren(h("tr", {}, ...["Time", "Address", "Request", "Answer"].map(c => h("th", {}, t(c)))));
+  if (!(x.log || []).length) tb.append(h("tr", {}, h("td", { colspan: 4, class: "muted" }, t("No requests yet"))));
+  for (const e of (x.log || []).slice(0, 50))
+    tb.append(h("tr", { class: e.code >= 400 ? "bad" : "" }, h("td", {}, new Date(e.t * 1000).toLocaleTimeString()),
+      h("td", {}, e.ip + (e.via === "lan" ? "" : " · " + t("local"))), h("td", {}, e.note === "blocked" ? t("blocked") : `${e.method} ${e.path}`),
+      h("td", {}, String(e.code))));
+}
+function showNewToken(tok) {
+  if (!tok) return;
+  $("#api-newtok").classList.remove("hidden"); $("#api-token").textContent = tok;
+}
+async function extConfig(body) {
+  const r = await adminApi("external", { action: "config", ...body });
+  EXT = r; renderExt(); showNewToken(r.token);
+  return r;
+}
+$("#api-on").addEventListener("change", e => act(async () => {
+  try { await extConfig({ enabled: e.target.checked }); }
+  catch (err) { e.target.checked = !e.target.checked; renderExt(false); throw err; }
+}, e.target.checked ? t("External API on") : t("External API off")));
+for (const id of ["#api-lan", "#api-https"]) $(id).addEventListener("change", () => renderExt(false));
+$("#api-scope").addEventListener("change", e => {
+  const prev = EXT ? EXT.scope : "read";
+  if (e.target.value === "full" && !confirm(t("Full access lets the token holder change modes, fans and power. Consents, unlocks, EC access, updates and these API settings stay out of reach.") + "\n\n" + t("Allow full access?"))) {
+    e.target.value = prev; renderExt(false); return; }
+  act(async () => { try { await extConfig({ scope: e.target.value }); } catch (err) { e.target.value = prev; renderExt(false); throw err; } }, t("Saved"));
+});
+$("#api-lan").addEventListener("change", e => {
+  if (e.target.checked && !$("#api-allow").value.trim() && EXT && (EXT.suggested || []).length)
+    $("#api-allow").value = EXT.suggested.join("\n");
+});
+$("#api-save").addEventListener("click", () => {
+  const lan = $("#api-lan").checked;
+  if (lan && !(EXT && EXT.lan) && !confirm(t("Other computers in the allowed networks will be able to reach the service with the token. Turn it on?"))) return;
+  act(() => extConfig({ lan, port: Number($("#api-port").value), https: $("#api-https").checked,
+                        allow: $("#api-allow").value.split(/[\s,;]+/).filter(Boolean) }), t("Saved"));
+});
+$("#api-token-new").addEventListener("click", () => {
+  if (EXT && EXT.token_set && !confirm(t("The current token stops working at once. Make a new one?"))) return;
+  act(async () => { const r = await adminApi("external", { action: "token" }); EXT = r; renderExt(); showNewToken(r.token); }, t("New token made"));
+});
+$("#api-token-copy").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText($("#api-token").textContent); toast(t("Copied")); }
+  catch (_) { const r = document.createRange(); r.selectNodeContents($("#api-token")); getSelection().removeAllRanges(); getSelection().addRange(r); }
+});
+$("#api-cert-new").addEventListener("click", () => {
+  if (!confirm(t("Clients that trust the current certificate will have to trust the new one. Make it?"))) return;
+  act(async () => { EXT = await adminApi("external", { action: "renew_cert" }); renderExt(); }, t("New certificate made"));
+});
+$("#api-log-clear").addEventListener("click", () => act(async () => { EXT = await adminApi("external", { action: "clear_log" }); renderExt(); }));
+let extTimer = null;
+$$("#nav a").forEach(a => a.addEventListener("click", () => {
+  clearInterval(extTimer); extTimer = null;
+  if (a.dataset.page === "api") { loadExt(); extTimer = setInterval(() => { if (!document.hidden) loadExt(true); }, 5000); }
+}));
+try { if (localStorage.getItem("uwcc-page") === "api") loadExt(); } catch (_) {}

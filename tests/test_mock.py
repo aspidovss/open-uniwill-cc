@@ -3126,3 +3126,164 @@ class LeishenUnit(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ExternalApi(unittest.TestCase):
+    """1.8.2.0: Settings -> API — the external token, its scopes, the network listener with TLS, lock-out, Origin."""
+    setUpClass = classmethod(MockService.setUpClass.__func__)
+    tearDownClass = classmethod(MockService.tearDownClass.__func__)
+    get = classmethod(MockService.get.__func__)
+    post = MockService.post
+
+    def admin(self, body):
+        with open(os.path.join(self.tmp, "run", "admin-token")) as f:
+            key = f.read().strip()
+        r = urllib.request.Request(f"http://127.0.0.1:{self.port}/api/external", data=json.dumps(body).encode(),
+                                   method="POST", headers={"X-UWCC-Token": TOKEN, "X-UWCC-Admin": key})
+        return json.load(urllib.request.urlopen(r, timeout=60))
+
+    def req(self, path, token=None, body=None, base=None, headers=None, ctx=None):
+        hd = dict(headers or {})
+        if token:
+            hd["Authorization"] = "Bearer " + token
+        r = urllib.request.Request((base or f"http://127.0.0.1:{self.port}") + path,
+                                   data=None if body is None else json.dumps(body).encode(),
+                                   method="GET" if body is None else "POST", headers=hd)
+        try:
+            resp = urllib.request.urlopen(r, timeout=20, context=ctx)
+            return resp.status, resp.read()
+        except urllib.error.HTTPError as e:
+            return e.code, e.read()
+
+    def test_external_api_flow(self):
+        # off by default; /api/version answers without a token
+        code, raw = self.req("/api/version")
+        self.assertEqual(code, 200)
+        self.assertFalse(json.loads(raw)["external"])
+        self.assertFalse(self.get("external")["enabled"])
+        # another web page (Origin) is refused even with the window's token
+        self.assertEqual(self.req("/api/state", headers={"X-UWCC-Token": TOKEN, "Origin": "http://evil.example"})[0], 403)
+        self.assertEqual(self.req("/api/state", headers={"X-UWCC-Token": TOKEN,
+                                                         "Origin": f"http://127.0.0.1:{self.port}"})[0], 200)
+        # turning it on needs administrator rights
+        self.assertEqual(self.post("external", {"action": "config", "enabled": True})[0], 403)
+        st = self.admin({"action": "config", "enabled": True, "scope": "read"})
+        tok = st["token"]
+        self.assertTrue(tok.startswith("uwx_") and st["token_set"] and st["token_hint"] == tok[:8])
+        self.assertNotIn("token", self.get("external"))                # shown once only
+        # read scope: the stable read endpoints only
+        self.assertEqual(self.req("/api/state", tok)[0], 200)
+        self.assertEqual(self.req("/api/monitor", tok)[0], 200)
+        for p in ("/api/export", "/api/external", "/api/report/summary", "/api/ec/751"):
+            self.assertEqual(self.req(p, tok)[0], 403, p)
+        self.assertEqual(self.req("/api/fanboost", tok, {"on": False})[0], 403)
+        # full scope: control, but no consents, unlocks, administrator paths or the API settings
+        self.admin({"action": "config", "scope": "full"})
+        self.assertEqual(self.req("/api/fanboost", tok, {"on": False})[0], 200)
+        self.assertEqual(self.req("/api/setting", tok, {"key": "osd", "value": True})[0], 200)
+        for p, b in (("/api/setting", {"key": "eula_accepted", "value": True}),
+                     ("/api/setting", {"key": "clevo_writes", "value": True}),
+                     ("/api/unlock", {"type": "module", "key": "liquid"}),
+                     ("/api/external", {"action": "token"}), ("/api/service/restart", {}),
+                     ("/api/ec-access", {"path": "wmi"})):
+            self.assertEqual(self.req(p, tok, b)[0], 403, p)
+        # the network listener: TLS, only /api/, only the external token, lock-out after wrong tokens
+        lan = free_port()
+        st = self.admin({"action": "config", "lan": True, "allow": ["10.0.0.0/8", "192.168.1.7"], "port": lan,
+                         "https": True})
+        self.assertTrue(st["listening"], st["error"])
+        self.assertEqual(st["allow"], ["10.0.0.0/8", "192.168.1.7/32"])
+        import ssl
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        with socket.create_connection(("127.0.0.1", lan), timeout=10) as raw_s:
+            with ctx.wrap_socket(raw_s) as tls:
+                import hashlib
+                fp = ":".join(f"{b:02X}" for b in hashlib.sha256(tls.getpeercert(binary_form=True)).digest())
+        self.assertEqual(fp, st["fingerprint"])
+        base = f"https://127.0.0.1:{lan}"
+        self.assertEqual(self.req("/api/state", tok, base=base, ctx=ctx)[0], 200)
+        self.assertEqual(self.req("/", tok, base=base, ctx=ctx)[0], 404)
+        self.assertEqual(self.req("/api/state", None, base=base, ctx=ctx, headers={"X-UWCC-Token": TOKEN})[0], 401)
+        self.assertEqual(self.req(f"/api/state?token={tok}", base=base, ctx=ctx)[0], 401)     # header only
+        for _ in range(8):                         # + the window's token above: also wrong on the network listener
+            self.req("/api/state", "wrong", base=base, ctx=ctx)
+        self.assertEqual(self.req("/api/state", "wrong", base=base, ctx=ctx)[0], 401)          # the 10th: blocked now
+        self.assertEqual(self.req("/api/state", tok, base=base, ctx=ctx)[0], 429)
+        st = self.get("external")
+        self.assertIn("127.0.0.1", st["blocked"])
+        self.assertTrue(any(e["via"] == "lan" and e["code"] == 200 for e in st["log"]))
+        self.assertTrue(any(e["via"] == "local" and e["path"] == "/api/fanboost" for e in st["log"]))
+        self.admin({"action": "clear_log"})
+        self.assertEqual(self.req("/api/state", tok, base=base, ctx=ctx)[0], 200)
+        # a new token: the old one stops working
+        new = self.admin({"action": "token"})["token"]
+        self.assertEqual(self.req("/api/state", tok)[0], 401)
+        self.assertEqual(self.req("/api/state", new)[0], 200)
+        # off again: the network listener stops, the token is refused, the window keeps working
+        st = self.admin({"action": "config", "enabled": False})
+        self.assertFalse(st["listening"] or st["lan"])
+        self.assertEqual(self.req("/api/state", new)[0], 401)
+        self.assertRaises(OSError, socket.create_connection, ("127.0.0.1", lan), 2)
+        self.assertEqual(self.req("/api/state", headers={"X-UWCC-Token": TOKEN})[0], 200)
+
+
+    def test_unlock_module_and_reasons(self):
+        """1.8.2.0: an unavailable capability says why and how to unlock it; /api/unlock turns a module back on."""
+        self.assertEqual(self.post("module", {"name": "automation", "enabled": False})[0], 200)
+        cap = self.get("state")["capabilities"]["automation"]
+        self.assertEqual((cap["available"], cap["reason"]), (False, "module_off"))
+        self.assertEqual(cap["unlock"]["type"], "module")
+        code, r = self.post("unlock", {"type": "module", "key": "automation", "enabled": True})
+        self.assertEqual(code, 200)
+        self.assertTrue(r["capabilities"]["automation"]["available"])
+        self.assertEqual(self.post("unlock", {"type": "bogus", "key": "x"})[0], 400)
+        self.assertEqual(self.post("unlock", {"type": "wmi_feature", "key": "power_boost_lc"})[0], 400)
+
+
+class ExternalApiUnit(unittest.TestCase):
+    def test_permitted(self):
+        from uwccd.extapi import permitted
+        self.assertTrue(permitted("read", "GET", "/api/state"))
+        self.assertTrue(permitted("read", "GET", "/api/lang/ru"))
+        self.assertFalse(permitted("read", "GET", "/api/export"))
+        self.assertFalse(permitted("read", "POST", "/api/mode", {"mode": 1}))
+        self.assertTrue(permitted("full", "POST", "/api/mode", {"mode": 1}))
+        self.assertTrue(permitted("full", "POST", "/api/lc/config", {}))
+        self.assertFalse(permitted("full", "POST", "/api/setting", {"key": "api_external"}))
+        self.assertFalse(permitted("full", "POST", "/api/setting", {"key": "leishen_writes"}))
+        self.assertFalse(permitted("full", "POST", "/api/import", {}))
+
+    def test_allow_list(self):
+        from uwccd.extapi import norm_allow
+        self.assertEqual(norm_allow(["192.168.1.15/24", " 10.1.2.3 ", ""]), ["192.168.1.0/24", "10.1.2.3/32"])
+        self.assertRaises(ValueError, norm_allow, ["0.0.0.0/0"])
+        self.assertRaises(ValueError, norm_allow, ["fe80::/64"])
+        self.assertRaises(ValueError, norm_allow, ["999.1.1.1"])
+
+    def test_selfcert(self):
+        import ssl
+        import threading
+        from uwccd import selfcert
+        d = tempfile.mkdtemp(prefix="uwcc-tls-")
+        cert, key = os.path.join(d, "c.pem"), os.path.join(d, "k.pem")
+        fp = selfcert.make(cert, key, names=("localhost",), ips=("127.0.0.1",))
+        with open(cert) as f:
+            self.assertEqual(selfcert.pem_fingerprint(f.read()), fp)
+        srv = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        srv.load_cert_chain(cert, key)
+        ls = socket.socket()
+        ls.bind(("127.0.0.1", 0))
+        ls.listen(1)
+
+        def accept():
+            c, _ = ls.accept()
+            with srv.wrap_socket(c, server_side=True) as t:
+                t.sendall(b"ok")
+        threading.Thread(target=accept, daemon=True).start()
+        cli = ssl.create_default_context(cafile=cert)                   # verifies the signature and the SAN
+        with socket.create_connection(ls.getsockname(), timeout=10) as s:
+            with cli.wrap_socket(s, server_hostname="localhost") as t:
+                self.assertEqual(t.recv(2), b"ok")
+        ls.close()

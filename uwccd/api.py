@@ -1,7 +1,9 @@
 """Local HTTP API + web UI.
 
-Security: binds to 127.0.0.1 only, checks the Host header (DNS-rebinding), and every
-state-changing request needs the X-UWCC-Token header (token in /run/uwcc/token, group uwcc).
+Security: binds to 127.0.0.1 only, checks the Host header (DNS-rebinding) and the Origin header (other web pages,
+1.8.2.0), and every /api/ request needs the X-UWCC-Token header (token in /run/uwcc/token, group uwcc).
+The external API (Settings -> API, uwccd/extapi.py, off by default) adds a second, scoped token and optionally a
+listener in the local network (LanHandler below).
 """
 import json
 import logging
@@ -21,7 +23,7 @@ log = logging.getLogger("uwccd.api")
 
 # changes that need administrator rights (admin.py): how the EC is reached, its settings, platform profiles
 ADMIN_PATHS = ("/api/ec-access", "/api/ec-access/config", "/api/ec-access/install-driver", "/api/ec-access/fetch-driver",
-               "/api/history/config", "/api/platform/import",
+               "/api/history/config", "/api/platform/import", "/api/external",
                "/api/platform/apply-draft", "/api/platform/reset")
 # refused while a mode / profile is being applied (the window shows "Applying…")
 BUSY_PATHS = ("/api/mode", "/api/profile", "/api/fanboost", "/api/restore")
@@ -34,6 +36,53 @@ for _ext, _type in ((".js", "text/javascript"), (".css", "text/css"), (".svg", "
 WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
 # The API contract: version, stability promise — docs/API.md. "1" changes only when something breaks.
 API = {"version": 1, "program": None}      # program version is filled at import below
+
+def _unlock(s, b):
+    """Turn a capability on (or back off) by its "unlock" / "lock" action — see uwccd/capabilities.py (1.8.2.0).
+
+    Risky unlocks (an unverified write path) are the user's explicit choice: the window shows the warning before
+    calling this, the service logs each one and keeps it in the settings under "unlocks", which reports carry."""
+    from . import ecaccess
+    kind, key = str(b.get("type") or ""), str(b.get("key") or "")
+    on = b.get("enabled", True) is not False
+    restart_needed = False
+    if kind == "module":
+        s.modules.set_enabled(key, on)                        # raises KeyError for an unknown module
+    elif kind == "wmi_feature":
+        if key not in ecaccess.FEATURES:
+            raise ValueError(f"unknown WMI feature {key!r}")
+        if ecaccess.FEATURES[key]["locked"]:
+            raise ValueError(f"{key} is not available on the WMI path at all")
+        cfg = ecaccess.user_config()
+        if on:
+            cfg.setdefault("features", {})[key] = "on"
+        else:
+            (cfg.get("features") or {}).pop(key, None)        # back to the profile's own state
+        ecaccess.save_user_config(cfg)
+        restart_needed = s.ec_info.get("active") == "wmi"
+    elif kind == "consent" and key in ("clevo_writes", "leishen_writes"):
+        if key == "leishen_writes" and not on and s.leishen.present                 and s.leishen.state().get("fan_mode", "auto") != "auto":
+            s.settings_store.set(key, True)
+            try:
+                s.leishen.set_fans_auto()                     # commands off: the fans go back to the firmware first
+            finally:
+                s.settings_store.set(key, False)
+        else:
+            s.settings_store.set(key, bool(on))
+        s.emit(key.split("_")[0], {})
+    else:
+        raise ValueError("unlock: type module | wmi_feature | consent")
+    log.warning("unlock: %s %s -> %s%s", kind, key, "on" if on else "off",
+                " (service restart needed)" if restart_needed else "")
+    rec = [u for u in (s.settings_store.get("unlocks") or []) if not (u.get("type") == kind and u.get("key") == key)]
+    if on and kind != "module":
+        import time as _t
+        rec.append({"type": kind, "key": key, "t": int(_t.time())})
+    s.settings_store.set("unlocks", rec)
+    s.emit("status", {})
+    return {"ok": True, "restart_needed": restart_needed, "capabilities": s.capabilities(),
+            "unlocks": rec}
+
 
 def _fill_api():
     from . import __version__
@@ -91,13 +140,73 @@ class Handler(BaseHTTPRequestHandler):
         log.debug("%s %s", self.address_string(), fmt % args)
 
     # -- helpers ---------------------------------------------------------------
+    lan = False                  # LanHandler: the external API in the local network
+    ext_role = None              # None / "internal" / "read" / "full" — set per request by _gate()
+
     def _host_ok(self):
         host = (self.headers.get("Host") or "").split(":")[0]
-        return host in ("127.0.0.1", "localhost")
+        if host not in ("127.0.0.1", "localhost"):
+            return False
+        origin = self.headers.get("Origin")          # a web page of another site must not drive the service (1.8.2.0)
+        return not origin or origin in (f"http://127.0.0.1:{self.port}", f"http://localhost:{self.port}")
+
+    def _token(self, query=True):
+        tok = self.headers.get("X-UWCC-Token")
+        if not tok:
+            a = self.headers.get("Authorization") or ""
+            if a[:7].lower() == "bearer ":
+                tok = a[7:].strip()
+        if not tok and query:
+            tok = parse_qs(urlparse(self.path).query).get("token", [None])[0]
+        return tok
+
+    def _role(self, query=True):
+        """"internal" (the window, tray, uwccctl), "read" / "full" (the external token), or None."""
+        tok = self._token(query)
+        if tok is None:
+            return None
+        if not self.lan and secrets.compare_digest(tok, self.token):
+            return "internal"
+        ext = getattr(self.svc, "extapi", None)
+        return ext.role(tok) if ext else None
 
     def _auth(self):
-        tok = self.headers.get("X-UWCC-Token") or parse_qs(urlparse(self.path).query).get("token", [None])[0]
-        return tok is not None and secrets.compare_digest(tok, self.token)
+        return self._role() == "internal"
+
+    def _gate(self, method):
+        """Common checks before any route. -> True to go on, False when an answer was already sent."""
+        self.ext_role = None
+        path = urlparse(self.path).path
+        if not self._host_ok():
+            self._json(403, {"error": "bad host"})
+            return False
+        if path == "/api/version":                           # no token: is the service there, which API
+            self._json(200, {"api": API, "external": bool(getattr(self.svc, "extapi", None)
+                                                         and self.svc.extapi.cfg()["enabled"])})
+            return False
+        if not path.startswith("/api/"):
+            return True                                       # the window's files
+        role = self._role(query=(method == "GET" and not self.lan))
+        if role is None:
+            self._json(401, {"error": "token required"})
+            return False
+        self.ext_role = role
+        if role != "internal" and method == "GET":
+            from .extapi import permitted
+            if not permitted(role, "GET", path):
+                self._json(403, {"error": "not allowed for the external token"})
+                return False
+        return True
+
+    def log_request(self, code="-", size="-"):
+        r = self.ext_role
+        if (r and r != "internal") or self.lan:
+            ext = getattr(self.svc, "extapi", None)
+            if ext:
+                ext.record(self.client_address[0], self.command, urlparse(self.path).path,
+                           code if isinstance(code, int) else int(getattr(code, "value", 0) or 0),
+                           "lan" if self.lan else "local")
+        super().log_request(code, size)
 
     @staticmethod
     def _range(u):
@@ -149,13 +258,11 @@ class Handler(BaseHTTPRequestHandler):
 
     # -- routing ---------------------------------------------------------------
     def do_GET(self):
-        if not self._host_ok():
-            return self._json(403, {"error": "bad host"})
+        if not self._gate("GET"):
+            return
         u = urlparse(self.path)
         if not u.path.startswith("/api/"):
             return self._static(u.path)
-        if not self._auth():
-            return self._json(401, {"error": "token required"})
         s = self.svc
         try:
             if u.path == "/api/state":
@@ -313,6 +420,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(200, s.selfcheck.export())
             if u.path == "/api/admin":
                 return self._json(200, s.admin.status())
+            if u.path == "/api/external" and self.ext_role == "internal":     # Settings -> API (1.8.2.0)
+                return self._json(200, s.extapi.status())
             if u.path == "/api/busy":
                 return self._json(200, {"ops": s.busy.state()})
             if u.path == "/api/nvram":
@@ -332,15 +441,19 @@ class Handler(BaseHTTPRequestHandler):
         return self._write("PUT")
 
     def _write(self, method):
-        if not self._host_ok():
-            return self._json(403, {"error": "bad host"})
-        if not self.headers.get("X-UWCC-Token") or not self._auth():
-            return self._json(401, {"error": "token required"})
+        if not self._gate(method):
+            return
         s = self.svc
         u = urlparse(self.path)
         path = u.path
+        if not path.startswith("/api/"):
+            return self._json(404, {"error": "not found"})
         try:
             b = self._body()
+            if self.ext_role != "internal":
+                from .extapi import permitted
+                if not permitted(self.ext_role, method, path, b):
+                    return self._json(403, {"error": "not allowed for the external token"})
             if path in ADMIN_PATHS or (path == "/api/selfcheck" and int(b.get("stage", 1)) >= 2):
                 if not s.admin.allowed(self.headers.get("X-UWCC-Admin")):
                     return self._json(403, {"error": "administrator rights required", "admin_required": True})
@@ -534,6 +647,20 @@ class Handler(BaseHTTPRequestHandler):
                 rules = [{"process": str(r["process"])[:64], "mode": int(r["mode"]),
                           "enabled": bool(r.get("enabled", True))} for r in b.get("rules", [])]
                 s.settings_store.set("app_binding", rules)
+            elif path == "/api/external":                 # Settings -> API: {action: config|token|clear_log|renew_cert}
+                act = b.get("action", "config")
+                ext = s.extapi
+                if act == "config":
+                    return self._json(200, ext.configure(b))
+                if act == "token":
+                    return self._json(200, ext.new_token())
+                if act == "clear_log":
+                    return self._json(200, ext.clear_log())
+                if act == "renew_cert":
+                    return self._json(200, ext.renew_cert())
+                raise ValueError("action: config | token | clear_log | renew_cert")
+            elif path == "/api/unlock":
+                return self._json(200, _unlock(s, b))
             elif path == "/api/module":                   # {name, enabled}: Switches -> Service modules
                 s.modules.set_enabled(str(b.get("name")), bool(b.get("enabled")))
                 s.emit("status", {})
@@ -858,14 +985,67 @@ class Handler(BaseHTTPRequestHandler):
                 s.tray_clients -= 1
 
 
+class LanHandler(Handler):
+    """The external API in the local network (uwccd/extapi.py): only /api/, only the external token (in a header),
+    only from the allowed addresses; 10 wrong tokens block an address for 5 minutes."""
+    lan = True
+    ext = None
+
+    def _host_ok(self):
+        return True                       # any Host: nothing here works without the external token in a header
+
+    def _pre(self):
+        ip = self.client_address[0]
+        if not self.ext.addr_allowed(ip):
+            self._json(403, {"error": "this address is not allowed"})
+            return False
+        if self.ext.is_blocked(ip):
+            self._json(429, {"error": "too many wrong tokens, try again later"})
+            return False
+        if not urlparse(self.path).path.startswith("/api/"):
+            self._json(404, {"error": "not found"})
+            return False
+        if urlparse(self.path).path != "/api/version" and self._role(query=False) is None:
+            if self._token(query=False):
+                self.ext.failed(ip)
+        return True
+
+    def do_GET(self):
+        if self._pre():
+            super().do_GET()
+
+    def _write(self, method):
+        if self._pre():
+            super()._write(method)
+
+
+class QuietServer(ThreadingHTTPServer):
+    def handle_error(self, request, client_address):      # TLS handshakes of scanners, closed connections
+        log.debug("connection from %s failed", client_address[0])
+
+
+class UIServer(ThreadingHTTPServer):
+    def shutdown(self):
+        ext = getattr(Handler.svc, "extapi", None)
+        if ext:
+            ext.stop()
+        super().shutdown()
+
+
 def serve(svc, port=47321, token=None):
+    from .extapi import ExtApi
     Handler.svc = svc
     Handler.token = token or secrets.token_urlsafe(24)
     Handler.port = port
     write_token(Handler.token)
-    httpd = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    svc.extapi = ExtApi(svc, port)
+    httpd = UIServer(("127.0.0.1", port), Handler)
     httpd.daemon_threads = True
     t = threading.Thread(target=httpd.serve_forever, daemon=True, name="http")
     t.start()
     log.info("UI/API on http://127.0.0.1:%d/", port)
+    try:
+        svc.extapi.start()
+    except Exception:  # noqa: BLE001   the window must come up even if the network listener cannot
+        log.exception("external API")
     return httpd

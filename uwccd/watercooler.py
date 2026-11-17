@@ -87,11 +87,17 @@ DEFAULTS = {
 # Errors of the Bluetooth stack after which the cooler should be switched off and on and connected again (1.7.6.0)
 POWER_CYCLE_ERRORS = ("callbacks are not working", "pythoncom", "could not get gatt", "unreachable", "was not found",
                       "not found", "timeout", "timed out", "disconnected", "device is not ready", "operation aborted")
+# The Bluetooth adapter itself is missing or broken: power-cycling the cooler will not help (1.8.2.0)
+ADAPTER_ERRORS = ("no bluetooth adapter", "bluetooth is not available", "no_bluetooth", "bluetooth device is turned off",
+                  "bluetooth adapter", "org.bluez was not provided", "bluez")
 
 
 def error_hint(err):
-    """-> "power_cycle" when the error usually goes away after the cooler is switched off and on, else None."""
+    """-> "bluetooth_off" when the Bluetooth adapter is missing / off (check the adapter, not the cooler);
+    "power_cycle" when the error usually goes away after the cooler is switched off and on; else None."""
     e = str(err or "").lower()
+    if e and any(x in e for x in ADAPTER_ERRORS):
+        return "bluetooth_off"
     return "power_cycle" if e and any(x in e for x in POWER_CYCLE_ERRORS) else None
 
 

@@ -61,7 +61,13 @@ cooler's mode (Automatic … Off, or *keep*) and profile. A rule must change at 
 choice). On the return each item the rule changed is put back only if nobody changed it meanwhile. The card lists what
 the rules did (the last 10, *Show all*: up to 100 kept since the service started; *Clear*, `uwccctl rules clear-log`).
 Rules are checked from the top; the first that held long enough is applied once. While a rule is active, App binding and the power-source
-settings do not change the mode. Needs full monitoring. `uwccctl rules …`.
+settings do not change the mode. Needs full monitoring (*EC Manager → Monitoring*); without it the rules are paused.
+`uwccctl rules …`.
+
+**Averaged conditions** (1.8.1.0): a rule whose time is set in **minutes** (or hours) can compare the **one-minute
+averages** instead of the instant values, so single spikes and dips between samples do not reset its timer; the choice
+is made per rule (*of the one-minute averages* / *of the instant values*), and the current average is shown next to
+each condition. A time in **seconds** always reacts to the instant values.
 
 
 * **Power source:** a mode for "charger plugged in" (keep / the mode before unplugging / a mode) and for "unplugged";
@@ -170,6 +176,14 @@ self-check* (an unknown project, WMI without a profile), or *Make a report and s
 GitHub issue form *New laptop* opens with the laptop, the platform and the functions filled in; the zip is attached by
 hand, nothing is sent by itself. Serial numbers, the system UUID, MAC addresses, the computer and user names stay out of
 the report unless ticked. *Information → Check the platform*, `uwccctl detect`.
+
+## Diagnostic report
+
+*Information → Diagnostic report* or `uwccctl report` makes a zip file with everything needed to add support for
+another laptop or to look into a problem: the EC registers the program uses, BIOS settings (UniWillVariable, SmartAPC),
+keyboard and light bar devices, NVIDIA limits, sensors, the self-check (stage 1) and the service log. Nothing is changed
+on the laptop. Serial numbers, UUID, MAC addresses, the computer and user names are hidden unless you tick them (inside
+ACPI tables too, keeping the same length). The report lists the functions you unlocked yourself (1.8.2.0).
 
 ## What was ported
 

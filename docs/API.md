@@ -26,7 +26,12 @@ Every `/api/` request needs the access token — the service writes it on start 
 | Windows | `%ProgramData%\UWCC\run\token` |
 
 Send it as the header **`X-UWCC-Token: <token>`** (for `/api/events` the query `?token=` also works).
-The server answers only on 127.0.0.1 and checks the `Host:` header.
+The server answers only on 127.0.0.1 and checks the `Host:` header; since 1.8.2.0 it also refuses requests whose
+`Origin:` is another web site, so a page open in a browser cannot drive the service. `GET /api/version` answers
+without a token: `{"api": {...}, "external": bool}`.
+
+This token is meant for the program's own clients (the window, the tray, `uwccctl`). For your scripts and for other
+computers use the **external token** — see [External access](#external-access-settings--api) below.
 
 ## Endpoints (the stable set)
 
@@ -61,7 +66,23 @@ list the window (Information → *Functions on this laptop*), the tray and `uwcc
 ```
 
 `source`: `ec` — the EC capability bits of this laptop; `profile` — the platform profile; `driver` — depends on
-the access path (OEM driver / kernel module vs WMI); `os` — the OS or another program provides it; `none` — absent.
+the access path (OEM driver / kernel module vs WMI); `os` — the OS or another program provides it; `user` — turned on
+by the user over the profile (unlocked); `none` — absent.
+
+Since 1.8.2.0 an unavailable capability says **why** (`reason`) and, when it can be turned on, **how** (`unlock`):
+
+```json
+"fan_tables": {"available": false, "source": "profile", "reason": "wmi_feature_off",
+               "unlock": {"type": "wmi_feature", "key": "fan_tables", "risk": true, "restart": true}}
+```
+
+`reason`: `no_hardware`, `no_fan_control`, `module_off`, `wmi_feature_off`, `writes_off`, `wmi_consent`,
+`oem_missing`, `no_driver`, `not_installed`, `locked`, `no_custom`, `no_events`. `unlock.type`: `module` (a service module), `wmi_feature` (a
+function the platform profile keeps off on the WMI path), `consent` (Clevo / Leishen commands), `page` (open EC
+Manager). The window greys out the controls of an unavailable function and shows the unlock button; `risk: true`
+means it shows a warning first. `POST /api/unlock {type, key, enabled}` does it (the window's token only); a
+capability the user unlocked carries `lock` with the reverse action. Risky unlocks are logged and listed in
+diagnostic reports.
 
 ### Modules
 
@@ -92,6 +113,48 @@ Inside the service the same bus carries them (`uwccd/bus.py`); modules subscribe
 | `afterburner`, `clevo`, `leishen`, `selfcheck`, `detect`, `admin`, `osd`, `toast`, … | the rest of `bus.EVENTS` |
 
 Unknown kinds must be ignored — new ones appear without an API version change.
+
+## External access (Settings → API)
+
+Off by default. *Settings → API* turns on a **separate token** for scripts, Home Assistant, a monitoring server and
+the like, and optionally a listener in the local network. Changing these settings needs administrator rights.
+
+| Setting | Meaning |
+|---|---|
+| Allow the external API | off: the external token is refused everywhere |
+| Access: **read only** | `GET /api/version`, `/api/state`, `/api/monitor`, `/api/history`, `/api/events`, `/api/langs`, `/api/lang/<code>` |
+| Access: **full** | read + `POST /api/mode`, `/api/profile`, `/api/fanboost`, `/api/setting`, `/api/module`, `/api/battery`, `/api/lightbar`, `/api/keyboard/power`, `/level`, `/colour`, `/effect`, `/api/lc/...`, `/api/afterburner` |
+| Token | `uwx_…`, shown **once** when it is made; the service keeps only its SHA-256. *Make a new token* revokes the old one |
+| Access from the local network | a second listener on `0.0.0.0:<port>` (default **47322**) |
+| Allowed addresses | IPv4 addresses or networks (`192.168.1.0/24`, `192.168.1.20`); others get `403` |
+| HTTPS | on by default: a self-signed certificate made by the service; check its SHA-256 fingerprint shown on the page |
+
+Send the token as **`Authorization: Bearer <token>`** (or `X-UWCC-Token`). Never in the URL on the network listener.
+
+Even the **full** token cannot reach: administrator paths (EC access, WMI settings, platform profiles, self-check with
+writes), unlocks and consents (`/api/unlock`, `clevo_writes`, `leishen_writes`, `eula_accepted`, untested keyboard
+effects), risky switches (`super_performance`, `tcc_extended`, `mem_oc`, `lc_hwoc`, `fan_manager`, `monitoring`),
+updates, import / export, reports, raw EC access and the API settings themselves. Such requests get `403`.
+
+The network listener answers **only `/api/`** (no window), accepts only the external token, and after **10 wrong
+tokens in 10 minutes blocks the address for 5 minutes** (`429`). On Windows the service adds the inbound firewall
+rule *open-uniwill-cc API* for the port and the allowed addresses and removes it when the listener stops; on Linux open
+the port yourself if a firewall is on (`sudo ufw allow from 192.168.1.0/24 to any port 47322 proto tcp`).
+The page lists the last external requests (time, address, request, answer) and the blocked addresses.
+
+> [!WARNING]
+> Anyone in the allowed networks who has the token can use it. Turn the network access on only in a network you
+> trust. Without HTTPS the token crosses the network in plain text.
+
+```bash
+curl -s -H "Authorization: Bearer $UWX" http://127.0.0.1:47321/api/monitor            # this computer
+curl -sk -H "Authorization: Bearer $UWX" https://192.168.1.5:47322/api/state           # another computer (-k: self-signed)
+curl -sk -H "Authorization: Bearer $UWX" -d '{"mode": 0}' https://192.168.1.5:47322/api/mode   # full access
+```
+
+To check the certificate instead of `-k`, compare the fingerprint
+(`openssl s_client -connect 192.168.1.5:47322 </dev/null | openssl x509 -noout -fingerprint -sha256`) or trust the
+service's `cert.pem` (`<data>/api-tls/cert.pem`; its names are `localhost`, the computer name and its addresses).
 
 ## Writing an integration
 

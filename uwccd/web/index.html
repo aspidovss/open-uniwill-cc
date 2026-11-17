@@ -32,6 +32,7 @@
       <a data-page="switches"><i class="ico ico-switch"></i><span data-i>Switches</span></a>
       <a data-page="auto"><i class="ico ico-auto"></i><span data-i>Automation</span></a>
       <a data-page="binding"><i class="ico ico-bind"></i><span data-i>App binding</span></a>
+      <a data-page="api"><i class="ico ico-api"></i><span data-i>API</span></a>
       <a data-page="help"><i class="ico ico-help"></i><span data-i>Help</span></a>
     </nav>
     <div class="nav-foot">
@@ -122,8 +123,8 @@
           <div><b data-i>Check intermediate updates</b><p class="muted tiny" data-i>Releases that change only the last number of the version (1.7.6.1, 1.7.6.2 …): settings for particular laptops. They are optional.</p></div></div>
       </div>
       <div class="card" id="report-card">
-        <div class="row between wrap"><h3 data-i>Diagnostic report</h3><button class="btn" id="rep-make" data-i>Create report</button></div>
-        <p class="muted" data-i>A zip file with everything needed to add support for another laptop or to look into a problem: the EC registers the program uses, BIOS settings (UniWillVariable, SmartAPC), keyboard and light bar devices, NVIDIA limits, sensors and the service log. Nothing is changed on the laptop.</p>
+        <div class="row between wrap"><h3 data-i data-help="features#diagnostic-report|диагностический-отчёт">Diagnostic report</h3><button class="btn" id="rep-make" data-i>Create report</button></div>
+        <p class="muted" data-i>A zip file for adding support for another laptop or looking into a problem. Nothing is changed on the laptop.</p>
         <div class="rep-grid">
           <div><h4 data-i>Included</h4><div id="rep-sections" class="rep-list"></div></div>
           <div><h4 data-i>Private details</h4>
@@ -154,7 +155,7 @@
             <button class="btn ghost" id="dm-plat-import" data-i>Import</button><input type="file" id="dm-plat-file" accept=".json,application/json" class="hidden">
             <button class="btn ghost" id="dm-plat-export" data-i>Export</button>
             <button class="btn ghost hidden" id="dm-plat-reset" data-i>Use the built-in profile</button></div></div>
-        <p class="muted tiny" data-i>What the program knows about this laptop platform: which functions work through WMI, the power limits used instead of the firmware table, tested EC and BIOS versions. Built-in profiles are verified by the authors; your own one (imported or made by the self-check) replaces it.</p>
+        <p class="muted tiny" data-i>What the program knows about this laptop platform. Your own profile replaces the built-in one.</p>
         <dl class="kv" id="dm-platform-kv"></dl>
         <ul class="muted tiny" id="dm-platform-notes"></ul>
       </div>
@@ -165,7 +166,7 @@
             <button class="btn ghost" id="dm-sc-2" disabled data-i>Stage 2: with writes</button>
             <button class="btn ghost" id="dm-sc-apply" disabled data-i>Apply as platform profile</button>
             <button class="btn ghost" id="dm-sc-export" data-i>Export for GitHub</button></div></div>
-        <p class="muted tiny" data-i>Stage 1 only reads: identity, access paths (both compared byte by byte when the OEM driver and WMI are present), plausibility of known registers, time per access, firmware methods. Stage 2 (administrator, on AC power) switches every function a little and back with read-back: mode, Fan Boost, PL1, cTGP, charge limit, Fn Lock, the fan-table handshake; the registers are saved first and restored even after a crash. The result lists what works, what is not clear, and a draft platform profile.</p>
+        <p class="muted tiny" data-i>Stage 1 only reads. Stage 2 (administrator, on AC power) switches every function a little and back; the registers are restored even after a crash.</p>
         <p class="muted" id="dm-sc-state"></p>
         <div id="dm-sc-out"></div>
       </div>
@@ -180,7 +181,7 @@
             <button class="btn ghost" id="dm-export" data-i>Export</button>
             <button class="btn ghost" id="dm-reset" data-i>Factory settings</button>
             <button class="btn" id="dm-save" data-i>Save</button></div></div>
-        <p class="muted tiny" data-i>Used only on the WMI path. The open implementation reaches the EC through the WMI interface of the firmware (root\WMI AcpiTest_MULong): every access takes about 125 ms, the Smart APC limit table (SMRW) and the liquid-cooling power level (PWUP) are not reachable. Here you choose which functions stay available, how often the EC is read and the power limits used instead of SMRW. Poll, timeout and limit changes apply after the service restarts.</p>
+        <p class="muted tiny" data-i>Used only on the WMI path: which functions stay available, how often the EC is read and the power limits used instead of SMRW.</p>
         <p class="muted tiny" data-i>Factory values come from the platform profile. Limits cannot exceed the hard caps of the program, and on a verified platform they cannot exceed the factory values.</p>
         <h4 data-i>Functions</h4>
         <div class="dm-grid" id="dm-features"></div>
@@ -288,7 +289,7 @@
 
     <!-- LIQUID COOLING -->
     <section class="page" id="page-liquid">
-      <header class="ph"><h1 data-i>Liquid cooling</h1><p data-i>XMG Oasis and compatible Bluetooth coolers (LCT21001 Mk1 / LCT22002 Mk2)</p></header>
+      <header class="ph"><h1 data-i data-help="features#liquid-cooling|жидкостное-охлаждение">Liquid cooling</h1><p data-i>XMG Oasis and compatible Bluetooth coolers (LCT21001 Mk1 / LCT22002 Mk2)</p></header>
       <div class="card warn hidden" id="lc-na">
         <h3 data-i>Liquid cooling is unavailable</h3>
         <p class="muted" data-i>The Bluetooth library is not installed. Run: sudo apt install python3-bleak bluez — then restart the service: sudo systemctl restart uwccd</p>
@@ -308,6 +309,7 @@
           </div>
           <div id="lc-found"></div>
           <p class="tiny warn-text hidden" id="lc-cycle" data-i>Switch the cooler off and on again, wait until its light blinks, then press Search and connect it again.</p>
+          <p class="tiny warn-text hidden" id="lc-bt" data-i>The Bluetooth adapter is off or not working: check Bluetooth in the system settings, then press Search again.</p>
           <p class="muted tiny hidden" id="lc-hint" data-i>Turn the cooler on and wait until its light blinks, then press Search. The laptop's Bluetooth must be enabled.</p>
         </div>
 
@@ -553,9 +555,9 @@
     <section class="page" id="page-auto">
       <header class="ph"><h1 data-i>Automation</h1><p data-i>What Control Center does by itself when the power source changes or the laptop overheats</p></header>
       <div class="card" id="au-rules-card">
-        <div class="row between wrap"><h3 data-i>Automatic profile switching</h3>
+        <div class="row between wrap"><h3 data-i data-help="features#automation-settings--automation|автоматизация-настройки--автоматизация">Automatic profile switching</h3>
           <div class="row wrap"><select id="au-rule-tpl"></select><button class="btn ghost" id="au-rule-add" data-i>Add rule</button><button class="btn" id="au-rules-save" data-i>Save</button></div></div>
-        <p class="muted tiny" data-i>Switch the mode, the profile and the cooler profile when power, temperature, load, battery charge or the power source stays past a limit. The rules are checked from the top; the first one that held long enough is applied. A rule whose time is set in minutes compares the one-minute averages, so single spikes and dips between samples do not reset it; a time in seconds reacts to the instant values. While a rule is active, App binding and the power source settings do not change the mode. Needs full monitoring (EC Manager → Monitoring).</p>
+        <p class="muted tiny" data-i>Switch the mode, the profile and the cooler profile when a condition holds long enough.</p>
         <p class="warn-text tiny hidden" id="au-rules-mon" data-i>Monitoring is not complete — the rules are paused.</p>
         <div id="au-rules"></div>
         <div id="au-log" class="hidden"></div>
@@ -592,6 +594,52 @@
           <select id="bind-mode"><option value="1" data-i>Gaming</option><option value="0" data-i>Office</option><option value="2" data-i>Turbo</option></select>
           <button class="btn" id="bind-add" data-i>Add</button>
         </div>
+      </div>
+    </section>
+
+    <!-- EXTERNAL API (1.8.2.0) -->
+    <section class="page" id="page-api">
+      <header class="ph"><h1 data-i>API</h1><p data-i>Access for scripts and other computers. Off by default.</p></header>
+      <div class="card" id="api-card">
+        <h3 data-i data-help="api#external-access-settings--api|внешний-доступ-настройки--api">External API</h3>
+        <p class="muted tiny" data-i>The window, the tray and uwccctl work without it. A separate token with limited rights for your own scripts, Home Assistant and the like.</p>
+        <div class="row between"><span data-i>Allow the external API</span><label class="sw"><input type="checkbox" id="api-on"><span></span></label></div>
+        <div id="api-body">
+          <div class="row wrap"><span data-i>Access</span>
+            <select id="api-scope"><option value="read" data-i>Read only (state, sensors, history, events)</option>
+              <option value="full" data-i>Full (modes, fans, switches, battery, lighting, cooler)</option></select></div>
+          <p class="tiny warn-text hidden" id="api-full-warn" data-i>Full access lets the token holder change modes, fans and power. Consents, unlocks, EC access, updates and these API settings stay out of reach.</p>
+          <div class="row wrap"><span data-i>Token</span><code id="api-token-hint" class="api-code"></code>
+            <button class="btn ghost sm" id="api-token-new" data-i>Make a new token</button></div>
+          <div class="api-newtok hidden" id="api-newtok">
+            <p class="tiny" data-i>Copy the token now: it is shown only once. Only its fingerprint is kept.</p>
+            <div class="row"><code id="api-token" class="api-code sel"></code><button class="btn sm" id="api-token-copy" data-i>Copy</button></div>
+          </div>
+          <p class="muted tiny"><span data-i>Local address:</span> <code id="api-local-url"></code> · <span data-i>header</span> <code>Authorization: Bearer &lt;token&gt;</code></p>
+        </div>
+      </div>
+      <div class="card" id="api-lan-card">
+        <h3 data-i data-help="api#external-access-settings--api|внешний-доступ-настройки--api">Access from the local network</h3>
+        <div class="row between"><span data-i>Allow connections from other computers</span><label class="sw"><input type="checkbox" id="api-lan"><span></span></label></div>
+        <p class="tiny warn-text" data-i>Anyone in the allowed networks who has the token can use it. Turn it on only in a network you trust.</p>
+        <div id="api-lan-body">
+          <div class="row wrap"><span data-i>Port</span><input type="number" id="api-port" min="1024" max="65535" style="width:110px">
+            <label class="chk"><input type="checkbox" id="api-https"> <span data-i>HTTPS (self-signed certificate)</span></label></div>
+          <p class="tiny warn-text hidden" id="api-http-warn" data-i>Without HTTPS the token crosses the network in plain text.</p>
+          <div class="row wrap hidden" id="api-fp-row"><span class="muted tiny" data-i>Certificate fingerprint (SHA-256):</span>
+            <code id="api-fp" class="api-code sel tiny"></code><button class="btn ghost sm" id="api-cert-new" data-i>New certificate</button></div>
+          <label class="muted tiny" for="api-allow" data-i>Allowed addresses and networks, one per line (e.g. 192.168.1.0/24 or 192.168.1.20)</label>
+          <textarea id="api-allow" rows="3" class="api-allow" spellcheck="false"></textarea>
+          <div class="row wrap"><span class="muted tiny" data-i>This computer:</span> <span id="api-suggest" class="tiny"></span></div>
+          <p class="muted tiny" id="api-lan-state"></p>
+          <p class="muted tiny" id="api-fw"></p>
+        </div>
+        <div class="row"><button class="btn" id="api-save" data-i>Save</button></div>
+      </div>
+      <div class="card" id="api-log-card">
+        <div class="row between"><h3 data-i>Recent external requests</h3><button class="btn ghost sm" id="api-log-clear" data-i>Clear</button></div>
+        <p class="muted tiny" id="api-blocked"></p>
+        <table class="bind api-log" id="api-log"></table>
       </div>
     </section>
   </main>

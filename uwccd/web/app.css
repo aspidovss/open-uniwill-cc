@@ -311,7 +311,7 @@ pre.code{margin:0;padding:10px 12px;background:var(--bg0);border:1px solid var(-
 .help-q{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;border:1px solid var(--line);color:var(--muted);font-size:12px;font-weight:700;cursor:pointer;text-decoration:none;margin-left:6px;vertical-align:middle;background:none}
 .help-q:hover{color:var(--acc);border-color:var(--acc)}
 @media (max-width:900px){.help-wrap{grid-template-columns:1fr}.help-toc{position:static}}
-.h-help{display:inline-flex;align-items:center;gap:2px}.h-help h3{margin:0}
+.h-help{display:inline-flex;align-items:center;gap:2px}.h-help h3,.h-help h1{margin:0}
 .busy-backup{margin:0;padding:10px 12px;border:1px solid var(--acc);border-radius:10px;background:rgba(50,219,190,.08);font-size:13px;overflow-wrap:anywhere}
 /* EC Manager: folding cards, spacing under the header buttons */
 #page-driver .card-head{margin-bottom:12px}
@@ -448,3 +448,14 @@ svg.lc-curve text.draglbl{font-size:16px}
 /* 1.7.6.0: About card — switch "Check intermediate updates" */
 .upd-minor{gap:12px;align-items:flex-start;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
 .upd-minor b{font-size:13px;font-weight:600}.upd-minor p{margin:2px 0 0}
+/* 1.8.2.0: unlock line under a greyed block; Settings -> API */
+.mod-chip{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 12px;padding:8px 12px;border:1px dashed var(--line);border-radius:10px;background:var(--bg2)}
+.ico-api{--m:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M8.6 7.4 4 12l4.6 4.6L7.2 18l-6-6 6-6zm6.8 0L16.8 6l6 6-6 6-1.4-1.4L20 12zM13.1 4l1.9.5-4.1 15.5-1.9-.5z"/></svg>')}
+.api-code{font-family:ui-monospace,Consolas,monospace;font-size:12.5px;padding:3px 8px;border-radius:6px;background:var(--bg3);border:1px solid var(--line);word-break:break-all}
+.api-code.sel{user-select:all}
+.api-newtok{margin:8px 0;padding:10px 12px;border:1px solid var(--acc);border-radius:10px;background:rgba(0,200,150,.06)}
+.api-allow{width:100%;box-sizing:border-box;font-family:ui-monospace,Consolas,monospace;font-size:13px;margin:4px 0 8px;padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--bg3);color:var(--fg);resize:vertical}
+.api-log td{font-size:12.5px}
+.api-log tr.bad td{color:var(--bad)}
+#page-api .row{margin:8px 0}
+.feat-off:not([data-feat-text])::after,.feat-off[data-feat-text=""]::after{display:none}

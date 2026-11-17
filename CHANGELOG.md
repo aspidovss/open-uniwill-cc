@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.8.2.0
+
+- **Unavailable functions are greyed out, with the reason and a way to unlock them.** The capability registry now
+  says *why* a function is not available (`reason`: the laptop does not have it, the service module is off, not
+  confirmed on this project over WMI, experimental platform without consent, no EC access, …) and *how* it can be
+  turned on (`unlock`). The window greys out the controls of such a function and puts a line above them: *Enable the
+  module* for a module that is off; *Unlock…* for a function the platform profile keeps off on the WMI path — with a
+  warning that the service will write to the EC over an unverified path. Information → *Functions on this laptop*
+  shows the reason next to every function with the same buttons, and *Lock* for what you unlocked. Every risky
+  unlock is written to the service log and listed in the diagnostic report. `POST /api/unlock`.
+- **Liquid cooler: a hint when the Bluetooth adapter itself is off or broken** ("No Bluetooth adapter found" and
+  alike) instead of the advice to switch the cooler off and on.
+- **Help "?" next to the card titles.** Long explanations moved from the cards into the built-in help (one short line
+  stays on the card); the "?" opens the right section and its tooltip shows the first sentences. Automation, Liquid
+  cooling, Diagnostic report, the EC Manager cards and the new API page have it. The help gained the sections
+  *Diagnostic report* and *Averaged conditions* and the page *API for scripts and other computers*.
+- **Settings → API: external access, off by default.** A separate token for scripts, Home Assistant, a monitoring
+  server: *read only* (state, sensors, history, events) or *full* (modes, fans, switches, battery, lighting, cooler —
+  never administrator paths, consents, unlocks, updates, import, reports or the API settings). The token is shown
+  once; the service keeps only its SHA-256. Optional **access from the local network**: a second listener (port
+  47322) for the allowed addresses / networks only, HTTPS with a self-signed certificate made by the service
+  (fingerprint shown on the page), lock-out of an address for 5 minutes after 10 wrong tokens, the Windows Firewall
+  rule added and removed with it, a list of the recent external requests. Changing it needs administrator rights.
+  [docs/API.md](docs/API.md) *External access*.
+- **The window's own API refuses other web sites** (`Origin:` check), and `GET /api/version` answers without a token.
+- `.vs/` and `*.sln` (Visual Studio files) are ignored by git.
+
 ## 1.8.1.1
 
 Fixes from the MECHREVO Aurora X (Jiguang / Kuangshi, project `0x1A`) report on Linux.
