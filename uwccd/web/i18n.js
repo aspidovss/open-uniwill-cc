@@ -1199,3 +1199,9 @@ Object.assign(RU, {
 Object.assign(RU, { "Allow full access?": "Разрешить полный доступ?" });
 Object.assign(RU, { "the fan manager of this platform has no Custom mode": "у менеджера вентиляторов этой платформы нет пользовательского режима",
   "no event source: the keys are polled": "нет источника событий: клавиши опрашиваются" });
+
+// 1.8.2.1
+Object.assign(RU, {
+  "The service is running again, but with a new access key. Close this window and open Control Center again from the application menu or the tray.":
+    "Служба снова работает, но с новым ключом доступа. Закройте это окно и снова откройте Control Center из меню приложений или из трея.",
+});

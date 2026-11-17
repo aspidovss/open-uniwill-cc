@@ -51,9 +51,15 @@ protection, bit7 Custom mode. On the Tsunami `0x00`.
 MECHREVO Yaoshi, Aurora X, XMG NEO 16 E25; not on the Tsunami). Without it those ECs keep the Gaming fan curve and
 their own power limits in Custom mode, whatever the RAM fan table says. The DSDT method `PMSC` reads the mode as:
 `CUME = 1` → Custom; else `TBME` (`0x751` bit4) → Turbo; else `UFME` (`0x751` bit7) → Office; else Gaming. So
-`0x751` bit7 is the Office bit (`0xA0` above), not a "use the RAM table" switch. Since 1.8.1.1 the service sets
-`CUME` together with `0x726` bit7, taking its address from the laptop's own DSDT (`uwccd/acpifields.py`). `0x727`
-bit7 is `PL4D` (PL4 disable) — left as the firmware has it.
+without `CUME`, `0x751` bit7 is the Office bit (`0xA0` above). Since 1.8.1.1 the service sets `CUME` together with
+`0x726` bit7, taking its address from the laptop's own DSDT (`uwccd/acpifields.py`). `0x727` bit7 is `PL4D` (PL4
+disable) — left as the firmware has it.
+
+**1.8.2.1:** with `CUME` alone the Aurora X EC followed some user curves, but on others drove the fans steadily to
+full speed within ~45 s whatever the temperature (diagnostic report, 2026-11-17); its owner's test with `CUME` +
+`UFME` + `0x7C6` bit2 followed every curve. Because `PMSC` checks `CUME` first, `UFME` does not turn Custom into
+Office, so in Custom the service now also sets `UFME` (`0x751` = `0x80`, `0xC0` with Fan Boost) on boards with
+`CUME`. Every other mode rewrites the whole byte, so the bit never stays behind.
 
 ### 2.2 Fan speed and duty (read only)
 | Register | On the Tsunami | Formula |

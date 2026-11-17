@@ -8,7 +8,8 @@ Compared with the commercial (_CML) manager it has:
   * a fourth mode, Custom (OperatingMode 3), with five user slots Mode4_Profile1..5 / tables M4T1..M4T5;
     in the EC it is the Gaming fan mode plus bit 7 of 0x726 and, on boards whose DSDT names it (CUME, project 0x1A:
     MECHREVO Yaoshi / Aurora X, XMG NEO 16 E25), bit 6 of 0x727 — without it these ECs run the Gaming fan curve and
-    their own power limits instead of the user's (1.8.1.1);
+    their own power limits instead of the user's (1.8.1.1); with it these boards also get their "user fan mode"
+    flag (UFME, 0x751 bit7) in Custom, without which the EC drifts the fans to full speed on some curves (1.8.2.1);
   * PL4 (0x785) and the CPU TCC offset (0x786, bit 7 = enable) in every profile;
   * limits from the firmware "Smart APC" table (ACPI method SMRW): PL1/PL2/PL4 maxima, TCC offset maximum,
     cTGP range above the default TGP, Dynamic Boost maximum;
@@ -53,18 +54,30 @@ REG_TCC_OFFSET = 0x786          # bit7 enable, bits0-6 offset below TjMax
 REG_FAN_SWITCH_SPEED = 0x787    # bit7 enable, bits0-6 speed / 100 rpm
 REG_CUSTOM_FLAG = 0x726         # bit7: Custom mode
 CUME_FALLBACK = {0x1A: (0x727, 6)}  # Custom mode enable when the DSDT cannot be read (same in 3 DSDTs of 0x1A)
+UFME_FALLBACK = {0x1A: (0x751, 7)}  # User fan mode enable, the same boards
 
 
-def cume_bit(project):
-    """(addr, bit) of the firmware's Custom-mode-enable flag (DSDT field CUME), or None on boards without it."""
+def _dsdt_bit(name, project, fallback):
     try:
         from .acpifields import ec_field
-        f = ec_field("CUME")
+        f = ec_field(name)
     except Exception:  # noqa: BLE001
         f = None
     if f and f[2] == 1:
         return f[0], f[1]
-    return CUME_FALLBACK.get(project)
+    return fallback.get(project)
+
+
+def cume_bit(project):
+    """(addr, bit) of the firmware's Custom-mode-enable flag (DSDT field CUME), or None on boards without it."""
+    return _dsdt_bit("CUME", project, CUME_FALLBACK)
+
+
+def ufme_bit(project):
+    """(addr, bit) of the "user fan mode" flag (DSDT field UFME, 0x751 bit7 on project 0x1A) — used only together
+    with CUME. The DSDT's PMSC checks CUME first, so in Custom this bit does not turn the mode into Office; the
+    Aurora X owner found that the fans follow the RAM table steadily only with both set (1.8.2.1)."""
+    return _dsdt_bit("UFME", project, UFME_FALLBACK)
 REG_FAN_SAFETY = 0x7A5          # bit3: fan safety protection active
 REG_TCC_DEFAULT = (0x7D8, 0x7D9, 0x7DA)   # gaming, office, turbo
 REG_VRM_LIMIT = (0x753, 0x754)
@@ -352,15 +365,23 @@ class PowerManagerStd(PowerManager):
         self._set_cume(mode == MODE_CUSTOM)
 
     def _set_cume(self, on):
-        """Custom mode enable of the firmware (0x727 bit6 on project 0x1A) — 1.8.1.1."""
+        """Custom mode enable of the firmware (0x727 bit6 on project 0x1A, 1.8.1.1) and, on the same boards, the
+        user fan mode flag (0x751 bit7, 1.8.2.1). Called after 0x751 is written, so the mode byte keeps its bits."""
         if not hasattr(self, "_cume"):
             mock = type(self.ec).__name__ == "MockEC"           # simulation: the container's DSDT says nothing
-            self._cume = CUME_FALLBACK.get(getattr(self.pf, "project_raw", None)) if mock \
-                else cume_bit(getattr(self.pf, "project_raw", None))
+            proj = getattr(self.pf, "project_raw", None)
+            self._cume = CUME_FALLBACK.get(proj) if mock else cume_bit(proj)
+            self._ufme = None
             if self._cume:
-                log.info("custom mode flag: 0x%03X bit%d (CUME)", *self._cume)
+                self._ufme = UFME_FALLBACK.get(proj) if mock else ufme_bit(proj)
+                if self._ufme and self._ufme[0] != R.FAN_MODE:      # only inside the mode byte, which every
+                    self._ufme = None                               # mode rewrites — so it never stays set
+                log.info("custom mode flag: 0x%03X bit%d (CUME)%s", *self._cume,
+                         ", user fan mode 0x%03X bit%d (UFME)" % self._ufme if self._ufme else "")
         if self._cume:
             self.ec.set_bit(self._cume[0], self._cume[1], bool(on))
+            if self._ufme and on:                # only set: the mode byte of the other modes was written just
+                self.ec.set_bit(self._ufme[0], self._ufme[1], True)   # before (Office 0xA0 has this very bit)
 
     def set_tcc(self, value, on):
         self.ec.write(REG_TCC_OFFSET, ((int(value) & 0x7F) | 0x80) if on else 0)

@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.8.2.1
+
+Fixes from the MECHREVO Aurora X (project `0x1A`) report on Linux.
+
+- **Custom mode: on some curves the fans crept to full speed.** With only `CUME` set the EC followed some user
+  curves, but on others drove the fans steadily to maximum within ~45 s whatever the temperature. On boards with
+  `CUME` the service now also sets the "user fan mode" flag `UFME` (`0x751` bit7, address from the DSDT) in Custom —
+  the combination the Aurora X owner found to follow every curve. The DSDT checks `CUME` before `UFME`, so the mode
+  stays Custom; the other modes write the whole mode byte, so Office / Gaming / Turbo are unchanged.
+  [docs/EC/Registers.md](docs/EC/Registers.md) §2.1.
+- **The window stayed on "The service is restarting" forever** after a restart of the service (fan manager change,
+  settings import) — on Linux every time: the restarted service made a new access token and the window kept asking
+  with the old one. The token now stays the same until the computer restarts (`/run/uwcc` is emptied at boot; on
+  Windows a token file older than the boot is not reused), so the window reloads by itself. If the key did change
+  anyway, the window says to open Control Center again instead of waiting.
+
 ## 1.8.2.0
 
 - **Unavailable functions are greyed out, with the reason and a way to unlock them.** The capability registry now

@@ -2747,7 +2747,17 @@ class Fix1811Unit(unittest.TestCase):
             self.assertEqual(bool(ec.read(0x727) & 0x40), expect, hex(project))
             self.assertTrue(ec.read(0x727) & 0x80)     # PL4D untouched
             self.assertTrue(ec.read(fan_std.REG_CUSTOM_FLAG) & 0x80)
-            m.set_fan_mode(1)                          # Gaming: the flag goes off again
+            # 1.8.2.1: UFME (0x751 bit7) goes with CUME in Custom; nothing else in the mode byte
+            self.assertEqual(ec.read(0x751), 0x80 if expect else 0x00, hex(project))
+            m.option["FanBoostEnable"] = 1
+            m.set_fan_mode(fan_std.MODE_CUSTOM)
+            self.assertEqual(ec.read(0x751), 0xC0 if expect else 0x40, hex(project))
+            m.option["FanBoostEnable"] = 0
+            m.set_fan_mode(1)                          # Gaming: the flags go off again
+            self.assertFalse(ec.read(0x727) & 0x40)
+            self.assertEqual(ec.read(0x751), 0x00)
+            m.set_fan_mode(0)                          # Office keeps its own byte (bit7 is part of it)
+            self.assertEqual(ec.read(0x751), 0xA0)
             self.assertFalse(ec.read(0x727) & 0x40)
 
     def test_gpu_rpm_is_46c_46d(self):
@@ -3287,3 +3297,26 @@ class ExternalApiUnit(unittest.TestCase):
             with cli.wrap_socket(s, server_hostname="localhost") as t:
                 self.assertEqual(t.recv(2), b"ok")
         ls.close()
+
+
+class TokenReuse(unittest.TestCase):
+    """1.8.2.1: a restarted service keeps the token of this boot, so the open window reloads instead of waiting."""
+    def test_reuse_within_boot(self):
+        from uwccd import api
+        d = tempfile.mkdtemp(prefix="uwcc-run-")
+        old = api.RUN_DIR
+        api.RUN_DIR = d
+        try:
+            self.assertIsNone(api.reuse_token())                       # first start: nothing to reuse
+            tok = "A" * 32
+            api.write_token(tok)
+            self.assertEqual(api.reuse_token(), tok)                   # restart: the same token
+            with open(os.path.join(d, "token"), "w") as f:
+                f.write("short")
+            self.assertIsNone(api.reuse_token())                       # not a token of ours
+            api.write_token(tok)
+            boot = api._boot_time()
+            os.utime(os.path.join(d, "token"), (boot - 3600, boot - 3600))
+            self.assertIsNone(api.reuse_token())                       # older than this boot (Windows)
+        finally:
+            api.RUN_DIR = old

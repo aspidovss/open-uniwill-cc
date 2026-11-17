@@ -130,6 +130,39 @@ def write_token(token):
         log.warning("token file: %s", e)
 
 
+def _boot_time():
+    """When the computer started (epoch seconds), or None."""
+    try:
+        if sys.platform == "win32":
+            import ctypes
+            k = ctypes.windll.kernel32
+            k.GetTickCount64.restype = ctypes.c_ulonglong
+            return time.time() - k.GetTickCount64() / 1000.0
+        with open("/proc/uptime") as f:
+            return time.time() - float(f.read().split()[0])
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
+def reuse_token():
+    """The token of the previous start of the service since this boot, or None (1.8.2.1).
+
+    A restart of the service (settings import, fan manager change, update) used to make a new token: the open window
+    kept the old one, got 401 and waited forever on "The service is restarting". The token stays for the whole boot
+    now: /run/uwcc is emptied at every boot on Linux; on Windows a file older than the boot is not reused."""
+    p = os.path.join(RUN_DIR, "token")
+    try:
+        st = os.stat(p)
+        with open(p, encoding="ascii") as f:
+            tok = f.read().strip()
+    except (OSError, UnicodeDecodeError):
+        return None
+    boot = _boot_time()
+    if not re.fullmatch(r"[\w-]{24,128}", tok) or boot is None or st.st_mtime < boot - 5:
+        return None
+    return tok
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "uwccd"
     svc = None
@@ -1035,7 +1068,7 @@ class UIServer(ThreadingHTTPServer):
 def serve(svc, port=47321, token=None):
     from .extapi import ExtApi
     Handler.svc = svc
-    Handler.token = token or secrets.token_urlsafe(24)
+    Handler.token = token or reuse_token() or secrets.token_urlsafe(24)
     Handler.port = port
     write_token(Handler.token)
     svc.extapi = ExtApi(svc, port)

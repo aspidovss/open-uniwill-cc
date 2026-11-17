@@ -3319,6 +3319,11 @@ function showRestart() {
     try {
       const r = await fetch("/api/state", { headers: { "X-UWCC-Token": TOKEN }, cache: "no-store" });
       if (r.ok && (downSeen || sec > 20)) { location.reload(); return; }
+      if (r.status === 401) {          // 1.8.2.1: the service is back but with another key (an older service, a reboot)
+        bar.classList.add("hidden");
+        sub.textContent = t("The service is running again, but with a new access key. Close this window and open Control Center again from the application menu or the tray.");
+        return;
+      }
     } catch (_) { downSeen = true; }
     setTimeout(tick, 2000);
   };
