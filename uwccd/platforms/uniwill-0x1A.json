@@ -24,8 +24,12 @@
   "limits": null,
   "notes": {
     "en": ["Linux (kernel module uwcc) and Windows with the OEM driver: all functions. The power limits come from the firmware table SMRW, which differs between models and graphics cards of this project, so the profile holds no limits of its own. On Linux the table needs open-uniwill-cc 1.7.3 or later (issue #5).",
-           "WMI path (free Windows build): only reading is confirmed (34 registers equal through the OEM driver and WMI); other functions stay off until the self-check confirms them."],
+           "WMI path (free Windows build): only reading is confirmed (34 registers equal through the OEM driver and WMI); other functions stay off until the self-check confirms them.",
+           "Custom mode: the EC follows the user's fan curve only with its Custom-mode flags CUME (0x727 bit6, from 1.8.1.1) and UFME (0x751 bit7, from 1.8.2.1); the service takes both from the laptop's DSDT.",
+           "MECHREVO Aurora X: one-zone RGB keyboard backlight driven by the EC (no ITE controller), colour and 5 levels, from 1.8.1.1; tested on CachyOS (kernel 7.3) and Windows 11. Battery protection is written again on every charger change from 1.8.2.2."],
     "ru": ["Linux (модуль ядра uwcc) и Windows с OEM-драйвером: все функции. Пределы мощности берутся из таблицы прошивки SMRW, она разная у моделей и видеокарт этого проекта, поэтому своих пределов в профиле нет. На Linux таблица читается с open-uniwill-cc 1.7.3 (issue #5).",
-           "Путь WMI (свободная сборка Windows): подтверждено только чтение (34 регистра совпадают через OEM-драйвер и WMI); остальные функции выключены, пока их не подтвердит самопроверка."]
+           "Путь WMI (свободная сборка Windows): подтверждено только чтение (34 регистра совпадают через OEM-драйвер и WMI); остальные функции выключены, пока их не подтвердит самопроверка.",
+           "Пользовательский режим: EC выполняет кривую вентиляторов пользователя только с флагами CUME (0x727 bit6, с 1.8.1.1) и UFME (0x751 bit7, с 1.8.2.1); служба берёт оба из DSDT ноутбука.",
+           "MECHREVO Aurora X: однозонная RGB-подсветка клавиатуры через EC (без контроллера ITE), цвет и 5 уровней, с 1.8.1.1; проверено на CachyOS (ядро 7.3) и Windows 11. Защита батареи с 1.8.2.2 записывается заново при каждом подключении и отключении зарядки."]
   }
 }
