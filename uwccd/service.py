@@ -362,6 +362,10 @@ class Service:
                 self.rules.on_ac_change(value)
             except Exception:  # noqa: BLE001
                 log.exception("power source rules")
+            try:
+                self.battery.on_ac_change(value)               # 1.8.2.2: the EC may reset the protection mode
+            except Exception:  # noqa: BLE001
+                log.exception("battery protection")
             self.emit("ac", {"online": value})
         elif key == "resume":
             log.info("resume detected — re-applying settings")

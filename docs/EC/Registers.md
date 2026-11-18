@@ -135,7 +135,7 @@ The limit table (`TGP 150`, `DB max 25`, TCC per mode) is not in the EC but in t
 
 | Register | On the Tsunami | Meaning |
 |---|---|---|
-| `0x7B9` | `0x5F` | upper charge limit: bits0..6 % (`0` = 100 %), keep bit7 → 95 % — **write** |
+| `0x7B9` | `0x5F` | upper charge limit: bits0..6 % (`0` = 100 %) → 95 % — **write**; bit7 is set by the EC when the limit is reached (not written back since 1.8.2.2) |
 | `0x7D0` | `0x50` | lower charge limit 1..95 % → 80 % — **write** |
 | `0x7A6` bits4..5 | `0x28` | protection mode: `00` full capacity, `01` balanced, `10` stationary → stationary — **write** |
 | `0x7CC` bit7 | `0x00` | Type-C priority (not supported on the Tsunami, see `0x742`) |
@@ -143,6 +143,15 @@ The limit table (`TGP 150`, `DB max 25`, TCC per mode) is not in the EC but in t
 | `0x4A6` / `0x4A7` | `0x4E` `0x00` | charge cycles → 78 |
 | `0x434` / `0x435` | | battery current |
 | `0x494` | `0x00` | battery alert |
+
+**Limit or modes (1.8.2.2).** A Uniwill board has **either** the custom charge limit (`0x7B9` / `0x7D0`) **or** the
+protection modes (`0x7A6` bits4..5), not both: the Linux kernel driver `uniwill-laptop` keeps a per-model list
+(`UNIWILL_FEATURE_BATTERY_CHARGE_LIMIT` vs `..._CHARGE_MODES`, "mutually exclusive") and offers
+`charge_control_end_threshold` or `charge_types` accordingly. The EC may switch the mode by itself when a charger is
+plugged in, and the limit does not survive sleep on every board; the driver restores both on the adapter event and on
+resume. The service does the same since 1.8.2.2 (at once and 6 s later), and when the driver is loaded it writes
+through the driver's sysfs files and shows the battery card the laptop does not have as unavailable. Seen on the
+MECHREVO Aurora X: balanced + 90/85 % in the EC, charged to 100 %.
 
 ## 6. Switches and lighting
 

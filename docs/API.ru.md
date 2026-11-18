@@ -77,7 +77,7 @@
 ```
 
 `reason`: `no_hardware`, `no_fan_control`, `module_off`, `wmi_feature_off`, `writes_off`, `wmi_consent`,
-`oem_missing`, `no_driver`, `not_installed`, `locked`, `no_custom`, `no_events`. `unlock.type`: `module` (модуль службы), `wmi_feature`
+`oem_missing`, `no_driver`, `not_installed`, `locked`, `no_custom`, `no_events`, `modes_only`, `limit_only`. `unlock.type`: `module` (модуль службы), `wmi_feature`
 (функция, которую профиль платформы держит выключенной на пути WMI), `consent` (команды Clevo / Leishen), `page`
 (открыть Менеджер EC). Окно делает элементы недоступной функции неактивными и показывает кнопку разблокировки;
 `risk: true` — сначала показывается предупреждение. Выполняет `POST /api/unlock {type, key, enabled}` (только ключ

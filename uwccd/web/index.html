@@ -511,12 +511,12 @@
     <section class="page" id="page-battery">
       <header class="ph"><h1 data-i>Battery</h1><p data-i>Battery status and wear protection mode</p></header>
       <div class="grid g4" id="bat-stats"></div>
-      <div class="card">
+      <div class="card" id="bat-modes-card">
         <h3 data-i>Battery protection mode</h3>
         <p class="muted" data-i>Choose another mode to protect the battery from a high charge level when the laptop is always plugged in.</p>
         <div class="choices" id="bat-modes"></div>
       </div>
-      <div class="card">
+      <div class="card" id="bat-limit-card">
         <h3 data-i>Custom charge limit</h3>
         <label class="slider"><span data-i>Charge up to</span> <input type="range" min="50" max="100" step="1" id="lim-up"><output></output></label>
         <label class="slider"><span data-i>Start charging below</span> <input type="range" min="40" max="95" step="1" id="lim-down"><output></output></label>

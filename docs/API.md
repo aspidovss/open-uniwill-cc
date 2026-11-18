@@ -77,7 +77,7 @@ Since 1.8.2.0 an unavailable capability says **why** (`reason`) and, when it can
 ```
 
 `reason`: `no_hardware`, `no_fan_control`, `module_off`, `wmi_feature_off`, `writes_off`, `wmi_consent`,
-`oem_missing`, `no_driver`, `not_installed`, `locked`, `no_custom`, `no_events`. `unlock.type`: `module` (a service module), `wmi_feature` (a
+`oem_missing`, `no_driver`, `not_installed`, `locked`, `no_custom`, `no_events`, `modes_only`, `limit_only`. `unlock.type`: `module` (a service module), `wmi_feature` (a
 function the platform profile keeps off on the WMI path), `consent` (Clevo / Leishen commands), `page` (open EC
 Manager). The window greys out the controls of an unavailable function and shows the unlock button; `risk: true`
 means it shows a warning first. `POST /api/unlock {type, key, enabled}` does it (the window's token only); a

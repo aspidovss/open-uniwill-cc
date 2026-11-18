@@ -1205,3 +1205,13 @@ Object.assign(RU, {
   "The service is running again, but with a new access key. Close this window and open Control Center again from the application menu or the tray.":
     "Служба снова работает, но с новым ключом доступа. Закройте это окно и снова откройте Control Center из меню приложений или из трея.",
 });
+
+// 1.8.2.2
+Object.assign(RU, {
+  "This laptop has the protection modes above, not a custom charge limit (Linux kernel driver uniwill-laptop).":
+    "У этого ноутбука есть режимы защиты выше, а пользовательского предела заряда нет (драйвер ядра Linux uniwill-laptop).",
+  "This laptop has the custom charge limit below, not the protection modes (Linux kernel driver uniwill-laptop).":
+    "У этого ноутбука есть пользовательский предел заряда ниже, а режимов защиты нет (драйвер ядра Linux uniwill-laptop).",
+  "this laptop has the protection modes instead": "у этого ноутбука вместо этого режимы защиты",
+  "this laptop has the custom charge limit instead": "у этого ноутбука вместо этого пользовательский предел заряда",
+});

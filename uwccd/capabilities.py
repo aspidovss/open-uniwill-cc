@@ -27,6 +27,8 @@ Reasons (only on unavailable capabilities; the window translates them):
   locked           deliberately not available on this path (e.g. PWUP without the OEM driver)
   no_custom        the fan manager of this platform has no Custom mode (only the std manager has it)
   no_events        no hotkey event source (Linux: the kernel module; Windows: the OEM driver), the keys are polled
+  modes_only       this laptop has the battery protection modes, not a custom charge limit (kernel uniwill-laptop)
+  limit_only       this laptop has the custom charge limit, not the protection modes (kernel uniwill-laptop)
 
 "unlock" says how the user can turn the capability on: {"type": "module"|"wmi_feature"|"consent"|"page",
 "key": ..., "risk": bool, "restart": bool}. risk=true means the window must show the warning first
@@ -131,8 +133,12 @@ def capabilities(svc):
                                         reason="locked" if wmi else "no_hardware")   # PWUP: OEM driver only
 
     # battery and switches
-    caps["battery_limits"] = ec_cap(True, feat="battery")
-    caps["battery_modes"] = ec_cap(True, feat="battery")
+    # Uniwill boards have either the charge limit or the protection modes; the kernel driver knows which (1.8.2.2)
+    kk = svc.battery.kernel_kind() if getattr(svc, "battery", None) else None
+    caps["battery_limits"] = ec_cap(True, feat="battery") if kk != "modes" else \
+        _cap(False, "os", "uniwill-laptop: charge_types only", reason="modes_only")
+    caps["battery_modes"] = ec_cap(True, feat="battery") if kk != "limit" else \
+        _cap(False, "os", "uniwill-laptop: charge_control_end_threshold only", reason="limit_only")
     caps["switches"] = ec_cap(True, feat="switches")
 
     # lighting (module "lighting" needs a service restart to start again)

@@ -1258,6 +1258,15 @@ function renderBattery() {
   $("#lim-down").value = b.limit_down; $("#lim-down").nextElementSibling.textContent = b.limit_down + "%";
   $("#typec-card").classList.toggle("hidden", !b.typec_priority_support);
   $("#typec").checked = !!b.typec_priority;
+  // 1.8.2.2: a Uniwill board has either the protection modes or the custom limit (the kernel driver tells which)
+  const caps = S.capabilities || {};
+  for (const [id, key] of [["#bat-modes-card", "battery_modes"], ["#bat-limit-card", "battery_limits"]]) {
+    const c = caps[key], off = !!c && !c.available && ["modes_only", "limit_only"].includes(c.reason);
+    $(id).classList.toggle("cap-off", off); $(id).inert = off;
+    gateChip($(id), off, off ? t(c.reason === "modes_only"
+      ? "This laptop has the protection modes above, not a custom charge limit (Linux kernel driver uniwill-laptop)."
+      : "This laptop has the custom charge limit below, not the protection modes (Linux kernel driver uniwill-laptop).") : "");
+  }
   updateBatStats();
 }
 function updateBatStats() {
@@ -2949,6 +2958,8 @@ const CAP_REASON = {
   locked: "not available on this access path",
   no_custom: "the fan manager of this platform has no Custom mode",
   no_events: "no event source: the keys are polled",
+  modes_only: "this laptop has the protection modes instead",
+  limit_only: "this laptop has the custom charge limit instead",
 };
 const UNLOCK_WARN = {
   wmi_feature: "This function is off because nobody has confirmed it on your laptop over the WMI path.\n\n" +

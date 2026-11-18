@@ -459,3 +459,5 @@ svg.lc-curve text.draglbl{font-size:16px}
 .api-log tr.bad td{color:var(--bad)}
 #page-api .row{margin:8px 0}
 .feat-off:not([data-feat-text])::after,.feat-off[data-feat-text=""]::after{display:none}
+/* 1.8.2.2: a battery card this laptop does not have */
+.cap-off{opacity:.42;filter:grayscale(.7)}

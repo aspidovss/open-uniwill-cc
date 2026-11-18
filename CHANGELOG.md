@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.8.2.2
+
+- **Battery protection did not hold** (MECHREVO Aurora X on Linux: balanced mode and 90/85 % set in the EC, charged
+  to 100 %). The EC may switch the protection mode by itself when a charger is plugged in, and the limit is not kept
+  through sleep on every board. The service now writes the saved mode and limits again on every AC change (at once
+  and 6 s later) and after resume, like the Linux kernel driver `uniwill-laptop`; limits set before this version are
+  taken from the EC once.
+- **Limit or modes.** A Uniwill board has either the custom charge limit or the protection modes. When the kernel
+  driver `uniwill-laptop` is loaded, the service writes through its sysfs files (`charge_types`,
+  `charge_control_end_threshold`) so that the driver does not put its own value back, and the Battery page greys out
+  the card the laptop does not have (capability reasons `modes_only` / `limit_only`).
+- Bit 7 of `0x7B9` is the EC's "limit reached" flag; it is no longer written back with the limit.
+  [docs/EC/Registers.md](docs/EC/Registers.md) §5.
+
 ## 1.8.2.1
 
 Fixes from the MECHREVO Aurora X (project `0x1A`) report on Linux.

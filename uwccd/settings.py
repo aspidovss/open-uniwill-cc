@@ -4,6 +4,7 @@ import logging
 import os
 import subprocess
 import sys
+import threading
 
 from . import EULA_VERSION
 from . import regs as R
@@ -259,9 +260,23 @@ class SettingsManager:
 
 
 class BatteryManager:
-    """BatteryProtection2 — health modes and custom charge limits."""
+    """BatteryProtection2 — health modes and custom charge limits.
+
+    1.8.2.2 (MECHREVO Aurora X: set to balanced + 90/85 %, charged to 100 %):
+      * the EC may change the protection mode when a charger is plugged in, and keeps 0x7B9 only until sleep — the
+        mode and the limits are written again on every AC change (twice: at once and a few seconds later) and after
+        resume, as the Linux kernel driver uniwill-laptop does;
+      * bit7 of 0x7B9 is the EC's "limit reached" flag (kernel: CHARGE_CTRL_REACHED), not ours to write back;
+      * Uniwill boards have EITHER the charge limit (0x7B9) OR the protection modes (0x7A6 bits4..5) — never both;
+        when the kernel driver is loaded it knows which one (charge_control_end_threshold vs charge_types in the
+        battery's sysfs folder): the other one is reported unavailable, and changes go through the driver's file so
+        that its own copy (restored by the driver on AC change and resume) matches ours.
+    """
 
     HEALTH = {0: (0, 0), 1: (1, 0), 2: (0, 1)}   # high(full) / middle / low -> bits 4,5 of 0x7A6
+    KERNEL_TYPES = {0: "Standard", 1: "Long Life", 2: "Trickle"}     # POWER_SUPPLY_CHARGE_TYPE_* of uniwill-laptop
+    SYS_PS = "/sys/class/power_supply"
+    SYS_MOD = "/sys/module/uniwill_laptop"
 
     def __init__(self, ec, platform, nvram, store):
         self.ec = ec
@@ -269,10 +284,41 @@ class BatteryManager:
         self.nvram = nvram
         self.st = store
 
+    # -- the kernel driver uniwill-laptop (Linux) ------------------------------------------------------------
+    def _kernel_bat(self):
+        """The battery's sysfs folder when the kernel's uniwill-laptop driver is loaded, else None."""
+        if sys.platform == "win32" or not os.path.isdir(self.SYS_MOD):
+            return None
+        for d in sorted(glob.glob(os.path.join(self.SYS_PS, "BAT*"))):
+            if os.path.isfile(os.path.join(d, "charge_types")) or \
+                    os.path.isfile(os.path.join(d, "charge_control_end_threshold")):
+                return d
+        return None
+
+    def kernel_kind(self):
+        """"modes" / "limit" — what the kernel driver offers on this laptop — or None (no driver)."""
+        d = self._kernel_bat()
+        if not d:
+            return None
+        return "limit" if os.path.isfile(os.path.join(d, "charge_control_end_threshold")) else "modes"
+
+    def _kernel_write(self, name, value):
+        d = self._kernel_bat()
+        if not d or not os.path.isfile(os.path.join(d, name)):
+            return False
+        try:
+            with open(os.path.join(d, name), "w") as f:
+                f.write(str(value))
+            return True
+        except OSError as e:
+            log.warning("battery: %s/%s <- %s: %s", d, name, value, e)
+            return False
+
     def start(self):
-        h = self.st.get("battery_health")
-        if h is not None:
-            self.set_health(h, save=False)
+        if self.st.get("battery_limits") is None:          # set before 1.8.2.2: keep what the EC holds now
+            up, down = self.limit_up(), self.limit_down()
+            self.st.set("battery_limits", {"up": up, "down": down} if up != 100 else {})
+        self.reapply()
         tc = self.st.get("typec_priority")
         if tc is not None and self.pf.typec_prio_support:
             self.set_typec_priority(tc, save=False)
@@ -283,10 +329,35 @@ class BatteryManager:
         return 1 if b4 else (2 if b5 else 0)
 
     def set_health(self, mode, save=True):
-        b4, b5 = self.HEALTH[int(mode)]
+        mode = int(mode)
+        b4, b5 = self.HEALTH[mode]
+        self._kernel_write("charge_types", self.KERNEL_TYPES[mode])       # keeps the driver's own copy in step
         self.ec.update(R.TOUCHPAD, 0x30, (b4 << 4) | (b5 << 5))
         if save:
-            self.st.set("battery_health", int(mode))
+            self.st.set("battery_health", mode)
+
+    def reapply(self, why=""):
+        """Write the saved protection mode and charge limits again (start, resume, AC change)."""
+        h = self.st.get("battery_health")
+        lim = self.st.get("battery_limits")
+        try:
+            if h is not None:
+                self.set_health(h, save=False)
+            if lim:
+                self._write_limits(lim.get("up"), lim.get("down"))
+        except Exception as e:  # noqa: BLE001
+            log.warning("battery: re-applying failed: %s", e)
+            return
+        if why and (h is not None or lim):
+            log.info("battery: protection mode %s%s re-applied (%s)", h,
+                     f", limits {lim.get('up')}/{lim.get('down')} %" if lim else "", why)
+
+    def on_ac_change(self, online):
+        """The EC may switch the mode itself right after a charger is plugged in: write it now and once more later."""
+        self.reapply("AC " + ("online" if online else "offline"))
+        t = threading.Timer(6.0, self.reapply)
+        t.daemon = True
+        t.start()
 
     def limit_up(self):
         v = self.ec.read(R.CHARGE_LIMIT_UP) & 0x7F
@@ -296,20 +367,34 @@ class BatteryManager:
         v = self.ec.read(R.CHARGE_LIMIT_DOWN)
         return 95 if v == 0 else v
 
+    def _write_limits(self, up=None, down=None):
+        if up is not None:
+            # bits0..6 the limit (0 = 100 %); bit7 is set by the EC when the limit is reached — never written back
+            self.ec.write(R.CHARGE_LIMIT_UP, 0 if up == 100 else up)
+            self._kernel_write("charge_control_end_threshold", up)
+        if down is not None:
+            v = self.ec.read(R.CHARGE_LIMIT_DOWN) & 0x80
+            self.ec.write(R.CHARGE_LIMIT_DOWN, v + down)
+
     def set_limits(self, up=None, down=None, mode=None):
         if up is not None:
             up = int(up)
             if not 1 <= up <= 100:
                 raise ValueError("upper limit 1..100")
-            v = self.ec.read(R.CHARGE_LIMIT_UP) & 0x80
-            self.ec.write(R.CHARGE_LIMIT_UP, v if up == 100 else v + up)
-            self.nvram.set("ChargeMaximumLimit", up)
         if down is not None:
             down = int(down)
-            if 1 <= down <= 95:
-                v = self.ec.read(R.CHARGE_LIMIT_DOWN) & 0x80
-                self.ec.write(R.CHARGE_LIMIT_DOWN, v + down)
+            if not 1 <= down <= 95:
+                down = None
+        self._write_limits(up, down)
+        if up is not None or down is not None:
+            lim = dict(self.st.get("battery_limits") or {})
+            if up is not None:
+                lim["up"] = up
+                self.nvram.set("ChargeMaximumLimit", up)
+            if down is not None:
+                lim["down"] = down
                 self.nvram.set("ChargeMinimumLimit", down)
+            self.st.set("battery_limits", lim)
         if mode is not None:
             self.nvram.set("BatteryLimitation", int(mode))
 
@@ -331,4 +416,6 @@ class BatteryManager:
             "alert": bool(self.ec.read(R.BAT_ALERT)),
             "typec_priority": self.typec_priority(),
             "typec_priority_support": self.pf.typec_prio_support,
+            "limit_reached": bool(self.ec.read(R.CHARGE_LIMIT_UP) & 0x80),
+            "kernel": self.kernel_kind(),
         }

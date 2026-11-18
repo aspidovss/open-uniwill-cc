@@ -3320,3 +3320,76 @@ class TokenReuse(unittest.TestCase):
             self.assertIsNone(api.reuse_token())                       # older than this boot (Windows)
         finally:
             api.RUN_DIR = old
+
+
+class BatteryProtection1822(unittest.TestCase):
+    """1.8.2.2: re-apply on AC change, 0x7B9 bit7 is the EC's flag, the kernel driver's modes-or-limit."""
+    def make(self):
+        from uwccd.settings import BatteryManager
+        from uwccd.ec import MockEC
+
+        class St(dict):
+            def get(self, k, d=None):
+                return dict.get(self, k, d)
+
+            def set(self, k, v):
+                self[k] = v
+
+        class NV:
+            def set(self, *a):
+                pass
+        ec = MockEC()
+        pf = type("P", (), {"typec_prio_support": False})()
+        bm = BatteryManager(ec, pf, NV(), St())
+        bm.SYS_MOD = bm.SYS_PS = "/nonexistent"
+        return bm, ec
+
+    def test_limits_and_reapply(self):
+        from uwccd import regs as R
+        bm, ec = self.make()
+        ec.write(R.CHARGE_LIMIT_UP, 0x80 | 95)              # the EC says "limit reached"
+        bm.set_limits(90, 85)
+        self.assertEqual(ec.read(R.CHARGE_LIMIT_UP), 90)    # bit7 is not written back
+        self.assertEqual(ec.read(R.CHARGE_LIMIT_DOWN), 85)
+        bm.set_health(1)
+        self.assertEqual((ec.read(R.TOUCHPAD) >> 4) & 3, 1)
+        # the EC drops the mode and the limit when the charger is plugged in -> written again
+        ec.update(R.TOUCHPAD, 0x30, 0)
+        ec.write(R.CHARGE_LIMIT_UP, 0)
+        bm.on_ac_change(True)
+        self.assertEqual((ec.read(R.TOUCHPAD) >> 4) & 3, 1)
+        self.assertEqual(ec.read(R.CHARGE_LIMIT_UP), 90)
+        bm.set_limits(100)
+        self.assertEqual(ec.read(R.CHARGE_LIMIT_UP), 0)
+        self.assertEqual(bm.limit_up(), 100)
+
+    def test_seed_from_ec(self):
+        from uwccd import regs as R
+        bm, ec = self.make()
+        ec.write(R.CHARGE_LIMIT_UP, 80)
+        ec.write(R.CHARGE_LIMIT_DOWN, 70)
+        bm.start()
+        self.assertEqual(bm.st["battery_limits"], {"up": 80, "down": 70})
+
+    def test_kernel_driver(self):
+        bm, ec = self.make()
+        root = tempfile.mkdtemp(prefix="uwcc-sys-")
+        bm.SYS_MOD = os.path.join(root, "module")
+        bm.SYS_PS = os.path.join(root, "ps")
+        os.makedirs(bm.SYS_MOD)
+        bat = os.path.join(bm.SYS_PS, "BAT0")
+        os.makedirs(bat)
+        self.assertIsNone(bm.kernel_kind())
+        with open(os.path.join(bat, "charge_types"), "w") as f:
+            f.write("[Standard] Long Life Trickle\n")
+        self.assertEqual(bm.kernel_kind(), "modes")
+        bm.set_health(2)
+        with open(os.path.join(bat, "charge_types")) as f:
+            self.assertEqual(f.read(), "Trickle")             # the driver's own copy follows ours
+        os.remove(os.path.join(bat, "charge_types"))
+        with open(os.path.join(bat, "charge_control_end_threshold"), "w") as f:
+            f.write("100")
+        self.assertEqual(bm.kernel_kind(), "limit")
+        bm.set_limits(80)
+        with open(os.path.join(bat, "charge_control_end_threshold")) as f:
+            self.assertEqual(f.read(), "80")
