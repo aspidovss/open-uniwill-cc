@@ -486,6 +486,8 @@ LOAD_METRICS = {                     # key -> (unit, max value)
     "cpu_power": ("W", 500), "gpu_power": ("W", 500), "total_power": ("W", 1000),
     "cpu_temp": ("°C", 110), "gpu_temp": ("°C", 110), "cpu_load": ("%", 100), "gpu_load": ("%", 100),
     "battery": ("%", 100),           # charge level
+    "ram_load": ("%", 100),          # memory in use, % of the total (1.8.2.3)
+    "ram_used": ("GB", 1024),        # memory in use, GB (1 GB = 1024 MB, as the monitor shows it)
     "ac": ("", 1),                   # power source: op "=", value 1 = from the mains, 0 = on battery
     "sys_profile": ("", 2),          # system power profile: op "=", 0 power-saver / 1 balanced / 2 performance
     "saver": ("", 1),                # Windows battery saver: op "=", 1 on / 0 off
@@ -531,6 +533,11 @@ def load_metric(m, key):
         return cpu.get("usage")
     if key == "gpu_load":
         return 0 if asleep else gpu.get("usage")
+    if key in ("ram_load", "ram_used"):
+        mem = m.get("memory") or {}
+        if not mem.get("total_mb"):
+            return None
+        return mem.get("usage") if key == "ram_load" else round(mem.get("used_mb", 0) / 1024, 1)
     if key == "battery":
         b = m.get("battery") or {}
         return b.get("percent") if b.get("present", True) else None

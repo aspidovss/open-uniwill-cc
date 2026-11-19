@@ -3393,3 +3393,18 @@ class BatteryProtection1822(unittest.TestCase):
         bm.set_limits(80)
         with open(os.path.join(bat, "charge_control_end_threshold")) as f:
             self.assertEqual(f.read(), "80")
+
+
+class RamRuleMetrics(unittest.TestCase):
+    """1.8.2.3: automation conditions on memory in use (% and GB)."""
+    def test_ram_metrics(self):
+        from uwccd.automation import load_metric, check_load_rules
+        m = {"memory": {"total_mb": 32768, "used_mb": 12800, "usage": 39}}
+        self.assertEqual(load_metric(m, "ram_load"), 39)
+        self.assertEqual(load_metric(m, "ram_used"), 12.5)
+        self.assertIsNone(load_metric({}, "ram_used"))
+        rr = check_load_rules([{"conditions": [{"metric": "ram_used", "op": ">", "value": 20.5},
+                                               {"metric": "ram_load", "op": "<", "value": 90}], "mode": 0}])
+        self.assertEqual(rr[0]["conditions"][0], {"metric": "ram_used", "op": ">", "value": 20.5})
+        self.assertRaises(ValueError, check_load_rules,
+                          [{"conditions": [{"metric": "ram_load", "op": ">", "value": 101}], "mode": 0}])

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.8.2.3
+
+- **Automation: RAM conditions.** Rules can test the memory in use — *RAM load* in % of the total or *RAM used* in
+  GB (`ram_load`, `ram_used`; one-minute averages work for them too). Linux: `/proc/meminfo` (total − available);
+  Windows: the same figure as the Task Manager (`psutil`). `uwccctl rules` and [docs/CLI.md](docs/CLI.md) know them.
+
 ## 1.8.2.2
 
 - **Battery protection did not hold** (MECHREVO Aurora X on Linux: balanced mode and 90/85 % set in the EC, charged

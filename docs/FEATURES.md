@@ -51,7 +51,7 @@ WhisperMode.
 **Automatic profile switching** (1.6.8): rules like *"CPU + GPU power above 120 W for 30 s → Turbo, profile 2;
 back to the previous mode when it has not held for 60 s"*, *"CPU power below 15 W for 60 s → Office"* or *"CPU above
 90 °C or GPU above 85 °C for 20 s → Gaming"*. Up to 3 conditions per rule (and / or) on CPU, GPU or CPU + GPU power,
-CPU / GPU temperature and load, battery charge, the power source (mains / battery), and the state: the laptop's mode,
+CPU / GPU temperature and load, RAM in use (% or GB, 1.8.2.3), battery charge, the power source (mains / battery), and the state: the laptop's mode,
 the cooler profile in use (= / ≠) and whether another rule is on (its conditions held long enough, or it is active);
 the target is a mode and a
 profile slot (or the current one, or *keep the mode*), **Fan Boost** (*keep it / turn on / turn off*), and the liquid

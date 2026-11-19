@@ -2566,13 +2566,14 @@ function renderSysFollow(a, modes) {
 }
 // ---- automatic profile switching (load rules, 1.6.8)
 const AU_METRIC = { cpu_power: "CPU power", gpu_power: "GPU power", total_power: "CPU + GPU power", cpu_temp: "CPU temperature",
-  gpu_temp: "GPU temperature", cpu_load: "CPU load", gpu_load: "GPU load", battery: "Battery charge", ac: "Power source",
+  gpu_temp: "GPU temperature", cpu_load: "CPU load", gpu_load: "GPU load", ram_load: "RAM load", ram_used: "RAM used",
+  battery: "Battery charge", ac: "Power source",
   sys_profile: "System power profile", saver: "Battery saver (Windows)", mode: "Laptop mode", lc_profile: "Cooler profile",
   rule: "Automation rule" };
 const AU_EQ = ["ac", "sys_profile", "saver"];          // compared with "=": a choice instead of > / < and a number
 const AU_STATE = ["mode", "lc_profile", "rule"];       // = / ≠ and a choice (a rule: is on / is not on)
 const AU_UNIT_S = { s: 1, min: 60, h: 3600 }, AU_UNIT_NAME = { s: "s", min: "min", h: "h" };
-const AU_UNIT = { cpu_power: "W", gpu_power: "W", total_power: "W", cpu_temp: "°C", gpu_temp: "°C", cpu_load: "%", gpu_load: "%", battery: "%" };
+const AU_UNIT = { cpu_power: "W", gpu_power: "W", total_power: "W", cpu_temp: "°C", gpu_temp: "°C", cpu_load: "%", gpu_load: "%", ram_load: "%", ram_used: "GB", battery: "%" };
 const AU_TEMPLATES = [                                   // the first one is chosen by default
   ["empty", "Empty rule", { name: "", conditions: [{ metric: "cpu_power", op: ">", value: 50 }], hold: 30, mode: 1, slot: null, back: false, back_after: 60 }],
   ["heavy", "Heavy load → Turbo", { name: "Heavy load", conditions: [{ metric: "total_power", op: ">", value: 120 }], hold: 30, mode: 2, slot: null, back: true, back_after: 60 }],
@@ -2598,7 +2599,7 @@ function renderLoadRules(force) {                 // force: our own change, redr
   const change = () => { auDirty = true; };
   const ruleAvg = r => r.avg !== false && (r.hold_unit || "s") !== "s";
   const sel = (opts, val, on) => { const e = h("select", {}, ...opts.map(([v, n]) => { const o = h("option", { value: v }, n); if (String(val) === String(v)) o.selected = true; return o; })); e.addEventListener("change", () => { on(e.value); change(); renderLoadRules(true); }); return e; };
-  const num = (val, min, max, on) => { const e = h("input", { type: "number", class: "num", min, max, value: val }); e.addEventListener("change", () => { on(+e.value); change(); }); return e; };
+  const num = (val, min, max, on) => { const e = h("input", { type: "number", class: "num", min, max, step: "any", value: val }); e.addEventListener("change", () => { on(+e.value); change(); }); return e; };
   auRules.forEach((r, i) => {
     const active = R.active === i && !auDirty, held = (R.held || {})[i];
     const en = h("input", { type: "checkbox", ...(r.enabled !== false ? { checked: true } : {}) }); en.addEventListener("change", () => { r.enabled = en.checked; change(); });

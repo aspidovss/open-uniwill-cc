@@ -1215,3 +1215,6 @@ Object.assign(RU, {
   "this laptop has the protection modes instead": "у этого ноутбука вместо этого режимы защиты",
   "this laptop has the custom charge limit instead": "у этого ноутбука вместо этого пользовательский предел заряда",
 });
+
+// 1.8.2.3
+Object.assign(RU, { "RAM load": "Загрузка ОЗУ", "RAM used": "Занято ОЗУ" });
