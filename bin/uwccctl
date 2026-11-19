@@ -15,7 +15,7 @@ Overview
   fan list|show|set|separate|reset ...   fan tables
   battery [mode|limit|typec] ... battery protection mode, charge limits, Type-C priority
   kb [on|off|effects|effect|level] ...   keyboard backlight
-  lb [hinge|base|logo] on|off|color|effect|light ...   light bar
+  lb [hinge|base|logo|front] on|off|color|effect|light ...   light bar
   lb ec on|off                                        light bar power (EC)
   clevo ...                      Control Center 3.0 / Clevo (experimental, separate module): see uwccctl help clevo
   leishen ...                    Leishen / Thunderobot (experimental, separate module): see uwccctl help leishen
@@ -246,7 +246,7 @@ HELP = {
         "                                           MODE static|breathing|cycle|ambilight, LEVEL 0 off, 1 low, 2 high"),
     "lb": (
         "uwccctl lb ec on|off                   (whole bar through the EC, like the Fn key)\n"
-        "uwccctl lb [hinge|base|logo] on|off\n"
+        "uwccctl lb [hinge|base|logo|front] on|off\n"
         "uwccctl lb [ZONE] color RRGGBB [EFFECT]\n"
         "uwccctl lb [ZONE] effect static|breathing|breathing_multi|wave|cycle|rainbow|colorbreath|colorwave\n"
         "uwccctl lb [ZONE] light 0-4"),
@@ -1048,9 +1048,12 @@ def cmd_kb(a):
 
 
 def cmd_lb(a):
-    zones = ("hinge", "base", "logo")
+    zones = ("hinge", "base", "logo", "front")
     rest = list(a)
-    zone = rest.pop(0) if rest and rest[0] in zones else "hinge"
+    zone = rest.pop(0) if rest and rest[0] in zones else None
+    if zone is None:                            # default: the bar's first zone (hinge; front on the 048D:7001 bar)
+        have = list(((call("state")["keyboard"].get("lightbar") or {}).get("zones") or {}))
+        zone = have[0] if have else "hinge"
     op = rest[0] if rest else "status"
     if op == "ec":                              # power of the whole bar through the EC (the Fn key's trigger)
         if rest[1:2] not in (["on"], ["off"]):

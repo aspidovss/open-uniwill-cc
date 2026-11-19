@@ -113,7 +113,7 @@ uwccctl fan set current cpu 0/45:0 55/50:30 70/65:60 85/80:100
 | `kb fx-config КЛЮЧ=ЗНАЧЕНИЕ ...` | `fps_ac`, `fps_battery` (10..60), `transition`, `transition_ms`, `bar`, `bar_direction`, `bar_start`, `bar_end` |
 | `kb fx-calibrate start\|cancel\|reset` / `kb fx-calibrate apply RRGGBB` | калибровка белого (RRGGBB — цвет, который вы видите) |
 | `lb ec on\|off` | питание всей полосы через встроенный контроллер, как клавишей Fn (модели со световой полосой в EC) |
-| `lb [hinge\|base\|logo] on\|off` | зона световой полосы (по умолчанию `hinge`) |
+| `lb [hinge\|base\|logo\|front] on\|off` | зона световой полосы (по умолчанию — первая зона полосы: `hinge`, у полосы `048D:7001` — `front`) |
 | `lb [ЗОНА] color RRGGBB [ЭФФЕКТ]` | цвет |
 | `lb [ЗОНА] effect static\|breathing\|breathing_multi\|wave\|cycle\|rainbow\|colorbreath\|colorwave` | эффект |
 | `lb [ЗОНА] light 0..4` | яркость |

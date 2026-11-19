@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.8.2.4
+
+- **Front light bar of XMG NEO 16 (E25) (`048D:7001`).** Driven like the `048D:7000` bar it stayed dark (user
+  report). It has its own addresses — facts from TUXEDO's Linux driver (`tuxedo-drivers`, `ite_8291_lb`, the same
+  chassis as TUXEDO Stellaris Gen7): one strip, colour `14h` with byte 1 = `00`, static `08h 22h`, brightness 0..100,
+  and an "on" command `1Ah 02 …` that is sent when it is opened and after sleep. The *Laptop light bar* page shows it
+  as one zone *Front* with static colour, 5 brightness levels and breathing (experimental). `uwccctl lb` takes the
+  bar's first zone by default (`front` here).
+
 ## 1.8.2.3
 
 - **Automation: RAM conditions.** Rules can test the memory in use — *RAM load* in % of the total or *RAM used* in

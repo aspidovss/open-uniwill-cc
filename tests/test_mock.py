@@ -3408,3 +3408,42 @@ class RamRuleMetrics(unittest.TestCase):
         self.assertEqual(rr[0]["conditions"][0], {"metric": "ram_used", "op": ">", "value": 20.5})
         self.assertRaises(ValueError, check_load_rules,
                           [{"conditions": [{"metric": "ram_load", "op": ">", "value": 101}], "mode": 0}])
+
+
+class Lightbar7001(unittest.TestCase):
+    """1.8.2.4: the front light bar 048D:7001 (XMG NEO 16 E25) has its own addresses (facts: tuxedo-drivers)."""
+    def make(self):
+        import threading
+        from uwccd.lighting import ite
+        lb = ite.ITELightbar7001.__new__(ite.ITELightbar7001)
+        lb.sent = []
+        lb.feature = lambda data: lb.sent.append(bytes(data) + bytes(max(0, 9 - len(data))))
+        lb.firmware_version = lambda: (0, 3, 0, 0)
+        lb.node, lb.pid, lb.lock = "test", 0x7001, threading.RLock()
+        lb._detect()
+        return lb
+
+    def test_static_off_resume(self):
+        lb = self.make()
+        self.assertEqual(lb.zones, ("front",))
+        lb.set_zone("front", "static", light=4, colors=[[10, 20, 30]])
+        self.assertEqual([x.hex() for x in lb.sent], [
+            "001a020104000000" + "01",            # on
+            "00140001" + "0a141e" + "0000",       # colour, byte 1 = 00, entry 1
+            "00082201" + "01" + "64" + "010000",  # static, control 22h, brightness 100
+        ])
+        lb.sent.clear()
+        lb.set_zone_power("front", False)
+        self.assertEqual([x.hex() for x in lb.sent],
+                         ["001200030000000000", "000805000000000000", "000801020000000000", "001a020000000000" + "01"])
+        lb.sent.clear()
+        lb.resume()                               # stays off after sleep
+        self.assertEqual(lb.sent[-1].hex(), "001a020000000000" + "01")
+        lb.set_zone_power("front", True)
+        self.assertEqual(lb.sent[-1].hex(), "000822010164010000")
+        lb.sent.clear()
+        lb.set_zone("front", "breathing", light=2, speed=4)
+        self.assertEqual(lb.sent[-1].hex(), "000822020132010000")      # speed 4 -> 01, brightness 50
+        self.assertRaises(ValueError, lb.set_zone, "hinge")
+        self.assertRaises(ValueError, lb.set_zone, "front", "wave")
+        self.assertEqual(lb.info()["protocol"], "7001")

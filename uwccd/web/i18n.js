@@ -1218,3 +1218,6 @@ Object.assign(RU, {
 
 // 1.8.2.3
 Object.assign(RU, { "RAM load": "Загрузка ОЗУ", "RAM used": "Занято ОЗУ" });
+
+// 1.8.2.4
+Object.assign(RU, { "Front": "Спереди", "(experimental)": "(экспериментально)" });

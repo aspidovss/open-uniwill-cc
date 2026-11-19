@@ -37,7 +37,8 @@ KB_PIDS = [0xCE00, 0x6000, 0x6001, 0x6002, 0x6003, 0x6004, 0x6006, 0x6007, 0x600
 KB_USAGE_PAGES = (0xFF03, 0xFF12, 0xFF02)
 # 0x7001: the RGB light bar of the newer chassis (XMG NEO 16 E25 / MECHREVO, project 0x1A, board X6AR5xxY; 1.6.8
 # report): same vendor collection FF03 with 9-byte feature and 65-byte output reports as 0x7000, and the OEM Control
-# Center 5.56 on that laptop starts "MyRgbLightbar". Not in the GCUService 1.0.2.70 tables; not yet checked by a user.
+# Center 5.56 on that laptop starts "MyRgbLightbar". Not in the GCUService 1.0.2.70 tables. Driving it like 0x7000
+# did nothing (user report, 2026-11-19); since 1.8.2.4 it has its own protocol, ITELightbar7001 below.
 LB_PIDS = [0x7000, 0x7001, 0x6005, 0x6008, 0x6010]
 
 # LightingModel.RGBKB_Effect -> ITE effect code (Translate_ITE_EffectIndex)
@@ -725,6 +726,10 @@ LB_EFFECTS = {"static": (0x01, False), "breathing": (0x02, False), "breathing_mu
 class ITELightbar(ITEKeyboard):
     """LM_ITE_RGB.ILM_RGBLB_Init + MyRgbKeyboard.HIDLightbar4 (_hinge / _logo / base): the RGB light strip(s)
     of the chassis, a separate ITE device (048D:7000, usage page FF03) with up to three zones."""
+    effects = LB_EFFECTS
+
+    def resume(self):
+        """After sleep (the 0x7000 bar keeps its state; ITELightbar7001 does not)."""
 
     def _detect(self):
         try:
@@ -786,6 +791,85 @@ class ITELightbar(ITEKeyboard):
                 "zones": list(self.zones), "support_code": self.support_code}
 
 
+class ITELightbar7001(ITELightbar):
+    """The front light bar 048D:7001 of the 2025 Tongfang chassis (XMG NEO 16 E25, TUXEDO Stellaris Gen7,
+    MECHREVO on project 0x1A), 1.8.2.4.
+
+    Same 8-byte feature reports as 0x7000, but other addresses — facts taken from TUXEDO's Linux driver
+    (tuxedo-drivers, ite_8291_lb, where it is "ITE 8291 rev 0.03"; also used by an OpenRGB fork):
+      * one strip, no zone query (A2h);
+      * colour: 14h with byte 1 = 00 (0x7000: 01), palette entry 1;
+      * static: 08h with control byte 22h (0x7000: 21h), effect 1, speed 1, brightness 0..100 (0x64), colour 1;
+      * on: 1Ah 02 01 04 … 01 — needed after power-up and after sleep; off: 12h 00 03, 08h 05, 08h 01 02,
+        1Ah 02 00 … 01.
+    The driver has no effects for it; breathing (08h 22h 02 <speed> <brightness>) is from a note in the OpenRGB
+    fork and offered as experimental."""
+    effects = {"static": (0x01, False), "breathing": (0x02, False)}
+    LEVEL = (0, 25, 50, 75, 100)          # our brightness 0..4 -> the bar's 0..100
+
+    def _detect(self):
+        try:
+            self.ver = self.firmware_version()
+        except OSError as e:
+            log.warning("ITE light bar firmware version: %s", e)
+        self.kb_type = 0x15
+        self.zones = ("front",)
+        self.support_code = None
+        self.saved = {}
+        log.info("ITE light bar %s pid=7001 fw=%s (front strip)", self.node, ".".join(f"{x:X}" for x in self.ver))
+
+    def power_on(self):
+        self.feature([0, 0x1A, 0x02, 0x01, 0x04, 0, 0, 0, 0x01])
+
+    def power_off(self):
+        self.feature([0, 0x12, 0x00, 0x03])
+        self.feature([0, 0x08, 0x05])
+        self.feature([0, 0x08, 0x01, 0x02])
+        self.feature([0, 0x1A, 0x02, 0, 0, 0, 0, 0, 0x01])
+
+    def set_zone(self, zone, effect="static", light=4, speed=2, colors=None):
+        if zone not in self.zones:
+            raise ValueError("zone: front")
+        if effect not in self.effects:
+            raise ValueError("effect: " + " | ".join(self.effects))
+        lv = self.LEVEL[max(0, min(4, int(light)))]
+        sp = SPEED[max(0, min(4, int(speed)))]
+        cols = [tuple(int(x) & 255 for x in c) for c in (colors or [])] or [(255, 255, 255)]
+        r, g, b = cols[0]
+        with self.lock:
+            self.power_on()
+            self.feature([0, 0x14, 0x00, 0x01, r, g, b, 0, 0])
+            if effect == "static":
+                self.feature([0, 0x08, 0x22, 0x01, 0x01, lv, 0x01, 0, 0])
+            else:
+                self.feature([0, 0x08, 0x22, 0x02, sp, lv, 0x01, 0, 0])
+        self.saved[zone] = dict(effect=effect, light=light, speed=speed, colors=[list(cols[0])], power=True)
+
+    def set_zone_power(self, zone, on):
+        if zone not in self.zones:
+            raise ValueError("zone: front")
+        st = self.saved.get(zone) or {}
+        if on:
+            self.set_zone(zone, **{k: v for k, v in st.items() if k != "power"})
+        else:
+            with self.lock:
+                self.power_off()
+            st["power"] = False
+            self.saved[zone] = st
+
+    def resume(self):
+        st = self.saved.get("front")
+        if not st:
+            self.power_on()
+        elif st.get("power") is False:
+            self.power_off()
+        else:
+            self.set_zone("front", **{k: v for k, v in st.items() if k != "power"})
+
+    def info(self):
+        return {**super().info(), "protocol": "7001"}
+
+
 class MockLightbar(ITELightbar):
     def __init__(self, ec):  # noqa: D401
         self.ec, self.node, self.pid, self.usage_page = ec, "mock-lb", 0x7000, 0xFF03
@@ -808,7 +892,7 @@ def open_lightbar(ec, mock=False):
         if (d["usage_page"] or 0) != 0xFF03:
             continue
         try:
-            return ITELightbar(ec, d)
+            return (ITELightbar7001 if d["pid"] == 0x7001 else ITELightbar)(ec, d)
         except OSError as e:
             log.warning("cannot open light bar %s: %s", d["node"], e)
     return None

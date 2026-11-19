@@ -378,6 +378,13 @@ class Service:
             self.settings.start()
             self.battery.start()
             self.liquid.resume()
+            lb = getattr(self.keyboard, "lb", None)
+            if lb:                                         # 1.8.2.4: the 7001 bar needs its "on" again
+                try:
+                    with self.keyboard.lock:
+                        lb.resume()
+                except Exception as e:  # noqa: BLE001
+                    log.warning("light bar after resume: %s", e)
             if self.keyboard.rgb and self.keyboard.rgb.saved and self.settings_store.get("kb_power", True):
                 try:
                     self.keyboard.rgb.set_effect(**self.keyboard.rgb.saved, force=True)

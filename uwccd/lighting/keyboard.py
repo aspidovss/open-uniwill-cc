@@ -377,7 +377,7 @@ class KeyboardManager:
              "fx": self.engine().info() if self.engine() else None}
         d["untested_effects"] = self.untested_effects(d["unsupported_effects"]) if self.kind == "rgb" else []
         if self.lb:
-            d["lightbar"] = {"device": self.lb.info(), "effects": list(ite.LB_EFFECTS),
+            d["lightbar"] = {"device": self.lb.info(), "effects": list(getattr(self.lb, "effects", ite.LB_EFFECTS)),
                              "zones": {z: {"power": True, "effect": "static", "light": 4, "speed": 2,
                                            "colors": [[255, 255, 255]], **(self.lb.saved.get(z) or {})}
                                        for z in self.lb.zones}}

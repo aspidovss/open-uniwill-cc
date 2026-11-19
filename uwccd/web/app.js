@@ -957,7 +957,7 @@ $("#fx-cal-reset").addEventListener("click", () => act(() => api("keyboard/fx/ca
 // ---------------------------------------------------------------- light bar (chassis)
 const LB_EFFECT_NAME = { static: "Static colour", breathing: "Breathing", breathing_multi: "Breathing, multicolour", wave: "Wave",
   cycle: "Colour cycle", rainbow: "Rainbow", colorbreath: "Colour breathing", colorwave: "Colour wave" };
-const LB_ZONE_NAME = { hinge: "Rear (hinge)", base: "Base", logo: "Logo" };
+const LB_ZONE_NAME = { hinge: "Rear (hinge)", base: "Base", logo: "Logo", front: "Front" };
 let lbZone = null;
 // the EC power switch of the light bar (the Fn key's trigger): models with an RGB light bar in the EC caps
 const lbEc = () => !!(S.platform && S.platform.rgb_lightbar) || !!(S.settings && S.settings.lightbar_on);
@@ -977,7 +977,8 @@ function renderLightbar() {
   if (zones.length > 1) for (const k of zones) seg.append(h("button", { class: k === lbZone ? "on" : "", onclick: () => { lbZone = k; renderLightbar(); } }, t(LB_ZONE_NAME[k] || k)));
   $("#lb-power").checked = z.power !== false;
   const sel = $("#lb-effect"); sel.innerHTML = "";
-  for (const e of lb.effects) { const o = h("option", { value: e }, t(LB_EFFECT_NAME[e] || e)); if (e === z.effect) o.selected = true; sel.append(o); }
+  const lbExp = (lb.device || {}).protocol === "7001" ? ["breathing"] : [];     // 1.8.2.4: not checked on that bar
+  for (const e of lb.effects) { const o = h("option", { value: e }, t(LB_EFFECT_NAME[e] || e) + (lbExp.includes(e) ? " " + t("(experimental)") : "")); if (e === z.effect) o.selected = true; sel.append(o); }
   for (const k of ["light", "speed"]) { $("#lb-" + k).value = z[k]; $("#lb-" + k).nextElementSibling.textContent = z[k]; }
   const sw = $("#lb-swatches"); sw.innerHTML = "";
   for (const c of S.keyboard.default_colors.concat([[255, 255, 255]])) {
