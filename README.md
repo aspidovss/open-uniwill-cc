@@ -243,7 +243,11 @@ from the release page and run `sudo bash install.sh` in it (see [Installation](#
    Mechrevo Questyle 16 Super / XMG NEO 16 (E23)). It can be changed later in **EC Manager**.
    See [docs/EC](docs/EC/README.md).
 3. The icon appears in the notification area. The program **starts with Windows hidden in the tray**;
-   click the icon (or *Start → UWCC Control Center*) to open the window.
+   click the icon (or *Start → OUCC*) to open the window.
+4. **Updating:** run the new setup over the old version — it is found and replaced (also an installation made with
+   `install.ps1`, and the folder `UWCC Control Center` from before 1.8.2.6, when the program was called *UWCC Control
+   Center*); the settings are kept. Since 1.8.2.6 the program is called **OUCC** (Open Uniwill Control Center) and is
+   installed to `C:\Program Files\OUCC`.
 
 **Free build** (`-free-setup.exe`): it does not contain the original OEM driver and is distributed completely freely.
 Without the driver it works through WMI (beta). Recommended: put the OEM driver of the manufacturer's Control Center
@@ -324,7 +328,7 @@ Everything the window changes is available from the console. Full reference: [do
 
 ## Uninstall / back to the original
 
-- **Windows:** *Settings → Apps → UWCC Control Center → Uninstall* (or `uninstall.ps1`). Fan control is handed back to
+- **Windows:** *Settings → Apps → OUCC → Uninstall* (also for an installation made with `install.ps1`). Fan control is handed back to
   the EC and the original `GCUService` is re-enabled.
 - **Linux:** `sudo bash uninstall.sh` (`--purge` also removes settings from `/var/lib/uwcc`).
 

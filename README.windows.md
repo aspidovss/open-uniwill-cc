@@ -62,12 +62,13 @@ installer and *EC Manager → Install the OEM driver* install it from there.
 **portable zip** — unpack, right click `install.ps1` → *Run with PowerShell* (it asks for elevation), or:
 
 ```
-powershell -ExecutionPolicy Bypass -File install.ps1            # to C:\Program Files\UWCC Control Center
+powershell -ExecutionPolicy Bypass -File install.ps1            # to C:\Program Files\OUCC (replaces an earlier installation)
 powershell -ExecutionPolicy Bypass -File uninstall.ps1 [-RemoveData]
 ```
 
 The installer: stops and disables GCUService, installs UWACPIDriver if it is missing (`pnputil /add-driver … /install`),
-registers and starts the **uwccd** service, adds ControlCenter.exe to autostart (HKLM `Run`) and the Start menu.
+registers and starts the **uwccd** service, adds ControlCenter.exe to autostart (HKLM `Run`) and the Start menu, and
+registers itself in *Settings → Apps* as **OUCC** (*Uninstall* runs `uninstall.ps1`).
 Autostart can be switched off per user from the tray menu ("Start with Windows") or in Task Manager → Startup.
 
 Uninstall gives fan control back to the EC (`uwccctl release`), removes the service and re-enables GCUService.

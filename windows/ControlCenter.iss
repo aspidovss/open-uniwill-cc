@@ -1,4 +1,6 @@
-; Inno Setup 6 script for UWCC Control Center (Windows).
+; Inno Setup 6 script for OUCC — Open Uniwill Control Center (Windows). Called "UWCC Control Center" before 1.8.2.6:
+; the same AppId, so Windows sees one program; an earlier installation (this setup or install.ps1, in its old folder)
+; is replaced — files, service path, autostart, shortcuts, PATH — and the settings in C:\ProgramData\UWCC are kept.
 ; Compiled by build_windows.ps1, twice:
 ;   ISCC /DAppVersion=1.6.1 /DSrcDir=dist\ControlCenter /DOutDir=dist windows\ControlCenter.iss            non-free: OEM driver + WMI
 ;   ISCC /DAppVersion=1.6.1 /DSrcDir=dist\ControlCenter-free /DOutDir=dist /DFree windows\ControlCenter.iss  free: WMI only,
@@ -13,7 +15,9 @@
 #ifndef OutDir
   #define OutDir "..\dist"
 #endif
-#define AppName "UWCC Control Center"
+#define AppName "OUCC"
+#define AppLong "Open Uniwill Control Center"
+#define OldName "UWCC Control Center"
 #ifdef Free
   #define Edition " (free)"
   #define SetupName "open-uniwill-cc-windows-" + AppVersion + "-free-setup"
@@ -21,14 +25,14 @@
   #define Edition ""
   #define SetupName "open-uniwill-cc-windows-" + AppVersion + "-setup"
 #endif
-#define RunName "UWCC Control Center"
+#define RunName "OUCC"
 
 [Setup]
 AppId={{6B0E1F43-5C1D-4F0B-9E43-55A1C0C7D7A1}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppVerName={#AppName} {#AppVersion}{#Edition}
-AppPublisher=UWCC (open re-implementation)
+AppPublisher=open-uniwill-cc ({#AppLong})
 AppPublisherURL=https://github.com/aspidovss/open-uniwill-cc
 AppSupportURL=https://github.com/aspidovss/open-uniwill-cc/issues
 AppUpdatesURL=https://github.com/aspidovss/open-uniwill-cc/releases
@@ -36,6 +40,11 @@ AppContact=OUCC@aspidov.ru
 DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
+; 1.8.2.6: the new name gets the new folder; the old one is cleaned up in PrepareToInstall
+UsePreviousAppDir=no
+UsePreviousGroup=no
+VersionInfoDescription={#AppLong} setup
+VersionInfoProductName={#AppLong}
 PrivilegesRequired=admin
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
@@ -97,6 +106,8 @@ en.DrvBad=The OEM driver package cannot be used (files missing or it is a driver
 ru.DrvBad=Пакет OEM-драйвера нельзя использовать (не хватает файлов или это драйвер другого устройства). Он не установлен; программа работает через WMI. Подробности: uwccctl driver-verify "ПАПКА".
 en.Svc=Registering the service...
 ru.Svc=Регистрация службы...
+en.OldFound=An earlier version is installed in:%n%1%nIt will be replaced by this version; the settings, profiles and logs are kept.
+ru.OldFound=Уже установлена предыдущая версия:%n%1%nОна будет заменена этой версией; настройки, профили и журналы сохранятся.
 
 [Tasks]
 Name: "oem"; Description: "{cm:TaskOEM}"
@@ -131,11 +142,11 @@ Filename: "{sys}\sc.exe"; Parameters: "stop GCUService"; Flags: runhidden waitun
 Filename: "{sys}\sc.exe"; Parameters: "config GCUService start= disabled"; Flags: runhidden waituntilterminated; Tasks: oem
 Filename: "{sys}\pnputil.exe"; Parameters: "/add-driver ""{code:DriverInf}"" /install"; \
   StatusMsg: "{cm:Drv}"; Flags: runhidden waituntilterminated; Check: NeedDriver
-Filename: "{sys}\sc.exe"; Parameters: "create uwccd binPath= ""\""{app}\uwccd.exe\"""" start= auto DisplayName= ""UWCC Control Center service"""; \
+Filename: "{sys}\sc.exe"; Parameters: "create uwccd binPath= ""\""{app}\uwccd.exe\"""" start= auto DisplayName= ""OUCC service"""; \
   StatusMsg: "{cm:Svc}"; Flags: runhidden waituntilterminated; Check: not ServiceExists('uwccd')
-Filename: "{sys}\sc.exe"; Parameters: "config uwccd binPath= ""\""{app}\uwccd.exe\"""" start= auto"; \
+Filename: "{sys}\sc.exe"; Parameters: "config uwccd binPath= ""\""{app}\uwccd.exe\"""" start= auto DisplayName= ""OUCC service"""; \
   Flags: runhidden waituntilterminated; Check: ServiceExists('uwccd')
-Filename: "{sys}\sc.exe"; Parameters: "description uwccd ""Performance modes, fans, keyboard lighting, battery and liquid cooler for Uniwill/Tongfang laptops."""; \
+Filename: "{sys}\sc.exe"; Parameters: "description uwccd ""Open Uniwill Control Center: performance modes, fans, keyboard lighting, battery and liquid cooler for Uniwill/Tongfang laptops."""; \
   Flags: runhidden waituntilterminated
 Filename: "{sys}\sc.exe"; Parameters: "failure uwccd reset= 86400 actions= restart/5000/restart/10000/restart/30000"; Flags: runhidden waituntilterminated
 Filename: "{sys}\sc.exe"; Parameters: "start uwccd"; Flags: runhidden waituntilterminated
@@ -291,6 +302,114 @@ begin
   Result := Pos(';' + Uppercase(Dir) + ';', ';' + Uppercase(Old) + ';') = 0;
 end;
 
+{ -- an earlier installation (1.8.2.6) ------------------------------------------------------------------------- }
+const
+  UninstKey = 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{6B0E1F43-5C1D-4F0B-9E43-55A1C0C7D7A1}_is1';
+  PortableKey = 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\OUCC-portable';
+  RunKey = 'SOFTWARE\Microsoft\Windows\CurrentVersion\Run';
+  EnvKey = 'SYSTEM\CurrentControlSet\Control\Session Manager\Environment';
+
+function OursIn(Dir: String): Boolean;
+begin
+  Result := (Dir <> '') and FileExists(AddBackslash(Dir) + 'uwccd.exe') and FileExists(AddBackslash(Dir) + 'ControlCenter.exe');
+end;
+
+function SameDir(A, B: String): Boolean;
+begin
+  Result := CompareText(RemoveBackslashUnlessRoot(A), RemoveBackslashUnlessRoot(B)) = 0;
+end;
+
+procedure AddDir(var Dirs: TArrayOfString; X: String);
+var
+  I: Integer;
+begin
+  if not OursIn(X) then exit;
+  for I := 0 to GetArrayLength(Dirs) - 1 do
+    if SameDir(Dirs[I], X) then exit;
+  SetArrayLength(Dirs, GetArrayLength(Dirs) + 1);
+  Dirs[GetArrayLength(Dirs) - 1] := RemoveBackslashUnlessRoot(X);
+end;
+
+{ folders of earlier installations: this setup (any version), install.ps1 (the service's path), the old default }
+function OldDirs: TArrayOfString;
+var
+  D, Img: String;
+  P: Integer;
+  R: TArrayOfString;
+begin
+  SetArrayLength(R, 0);
+  if RegQueryStringValue(HKLM, UninstKey, 'InstallLocation', D) then AddDir(R, D);
+  if RegQueryStringValue(HKLM, PortableKey, 'InstallLocation', D) then AddDir(R, D);
+  if RegQueryStringValue(HKLM, 'SYSTEM\CurrentControlSet\Services\uwccd', 'ImagePath', Img) then
+  begin
+    Img := RemoveQuotes(Trim(Img));
+    P := Pos('.exe', Lowercase(Img));
+    if P > 0 then
+      AddDir(R, ExtractFileDir(Copy(Img, 1, P + 3)));
+  end;
+  AddDir(R, ExpandConstant('{autopf}\{#OldName}'));
+  AddDir(R, ExpandConstant('{autopf}\{#AppName}'));
+  Result := R;
+end;
+
+function UpdateReadyMemo(Space, NewLine, MemoUserInfoInfo, MemoDirInfo, MemoTypeInfo, MemoComponentsInfo,
+  MemoGroupInfo, MemoTasksInfo: String): String;
+var
+  Dirs: TArrayOfString;
+  I: Integer;
+  L: String;
+begin
+  Result := MemoDirInfo + NewLine + NewLine + MemoTasksInfo;
+  Dirs := OldDirs;
+  L := '';
+  for I := 0 to GetArrayLength(Dirs) - 1 do
+    L := L + Space + Dirs[I] + NewLine;
+  if L <> '' then
+    Result := Result + NewLine + NewLine + FmtMessage(CustomMessage('OldFound'), [L]);
+end;
+
+procedure RemovePathEntry(Dir: String);
+var
+  Path: String;
+  P: Integer;
+begin
+  if not RegQueryStringValue(HKLM, EnvKey, 'Path', Path) then exit;
+  P := Pos(';' + Uppercase(RemoveBackslashUnlessRoot(Dir)) + ';', ';' + Uppercase(Path) + ';');
+  if P = 0 then exit;
+  Delete(Path, P, Length(RemoveBackslashUnlessRoot(Dir)) + 1);
+  if (Length(Path) > 0) and (Path[Length(Path)] = ';') then
+    Delete(Path, Length(Path), 1);
+  RegWriteExpandStringValue(HKLM, EnvKey, 'Path', Path);
+end;
+
+{ the earlier version goes away without its uninstaller: that one would hand the fans back to the EC and switch the
+  original Control Center on again just before this setup switches it off. The service stays registered (its path
+  is set again below), the settings in ProgramData are not touched. }
+procedure RemoveOld;
+var
+  Dirs: TArrayOfString;
+  I: Integer;
+  NewDir: String;
+begin
+  NewDir := ExpandConstant('{app}');
+  Dirs := OldDirs;
+  for I := 0 to GetArrayLength(Dirs) - 1 do
+  begin
+    RemovePathEntry(Dirs[I]);
+    if not SameDir(Dirs[I], NewDir) then
+    begin
+      Log('earlier installation removed: ' + Dirs[I]);
+      DelTree(Dirs[I], True, True, True);
+    end;
+  end;
+  RegDeleteValue(HKLM, RunKey, '{#OldName}');
+  RegDeleteValue(HKCU, RunKey, '{#OldName}');
+  RegDeleteValue(HKCU, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run', '{#OldName}');
+  DeleteFile(ExpandConstant('{commonprograms}\{#OldName}.lnk'));
+  DelTree(ExpandConstant('{commonprograms}\{#OldName}'), True, True, True);
+  RegDeleteKeyIncludingSubkeys(HKLM, PortableKey);
+end;
+
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
   RC: Integer;
@@ -302,6 +421,7 @@ begin
     Exec(ExpandConstant('{sys}\sc.exe'), 'stop uwccd', '', SW_HIDE, ewWaitUntilTerminated, RC);
     Sleep(2000);
   end;
+  RemoveOld;
   Result := '';
 end;
 

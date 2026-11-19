@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.8.2.6
+
+- **The program is called OUCC (Open Uniwill Control Center)** in Windows — setup, *Start* menu, *Settings → Apps*,
+  autostart and the service's display name (it was *UWCC Control Center*). Installed to `C:\Program Files\OUCC`.
+  Internal names stay: the service `uwccd`, `uwccctl`, the settings in `C:\ProgramData\UWCC`.
+- **Updating over an earlier version.** The setup finds an installation made by an earlier setup or by `install.ps1`
+  (in the old folder `UWCC Control Center` or any other) and replaces it: the old files, PATH entry, autostart entry
+  and *Start* menu items are removed, the service is pointed at the new folder; the settings are kept. The ready page
+  names what will be replaced. It is done without the old uninstaller, which would hand the fans back to the EC and
+  switch the original Control Center on again in the middle of the update.
+- **`install.ps1` registers an uninstaller**: the portable installation appears in *Settings → Apps* as *OUCC* and
+  *Uninstall* runs `uninstall.ps1`; `install.ps1` replaces an earlier installation the same way, `uninstall.ps1` finds
+  the installed folder by itself. The tray moves its per-user autostart switch to the new name.
+
 ## 1.8.2.5
 
 - **Colour calibration for every lighting device.** *Keyboard backlight* and *Laptop light bar* → *Colour

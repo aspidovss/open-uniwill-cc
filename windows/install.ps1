@@ -1,10 +1,12 @@
 <#
 .SYNOPSIS
-  Installs UWCC Control Center from the portable folder (alternative to setup.exe).
+  Installs OUCC (Open Uniwill Control Center) from the portable folder (alternative to setup.exe).
 
-  powershell -ExecutionPolicy Bypass -File install.ps1 [-InstallDir "C:\Program Files\UWCC Control Center"] [-KeepOEM]
+  powershell -ExecutionPolicy Bypass -File install.ps1 [-InstallDir "C:\Program Files\OUCC"] [-KeepOEM]
 
-  * copies the program to -InstallDir;
+  * replaces an earlier installation (setup.exe or install.ps1, also the old name "UWCC Control Center" from before
+    1.8.2.6) in another folder; the settings in C:\ProgramData\UWCC are kept;
+  * copies the program to -InstallDir and registers it in Settings -> Apps (uninstall runs uninstall.ps1);
   * stops and disables the original GCUService (two programs must not drive the same EC), unless -KeepOEM;
   * installs the OEM ACPI driver (driver\UWACPIDriver.inf) when it is not present yet;
   * registers and starts the "uwccd" service (LocalSystem, automatic start, restart on failure);
@@ -13,7 +15,7 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$InstallDir = "$env:ProgramFiles\UWCC Control Center",
+    [string]$InstallDir = "$env:ProgramFiles\OUCC",
     [switch]$KeepOEM
 )
 $ErrorActionPreference = "Stop"
@@ -34,7 +36,13 @@ $Src = Split-Path -Parent $MyInvocation.MyCommand.Path
 if (-not (Test-Path "$Src\uwccd.exe")) { Write-Host "uwccd.exe not found next to install.ps1" -ForegroundColor Red; exit 1 }
 $Svc = "uwccd"
 $RunKey = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run"
-$RunName = "UWCC Control Center"
+$RunName = "OUCC"
+$OldName = "UWCC Control Center"
+$AppsKey = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"
+$InnoKey = "$AppsKey\{6B0E1F43-5C1D-4F0B-9E43-55A1C0C7D7A1}_is1"
+$PortableKey = "$AppsKey\OUCC-portable"
+function Same($a, $b) { $a -and $b -and ($a.TrimEnd('\') -ieq $b.TrimEnd('\')) }
+function Ours($d) { $d -and (Test-Path "$d\uwccd.exe") -and (Test-Path "$d\ControlCenter.exe") }
 
 # --- stop a running copy
 Get-Process ControlCenter -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "*UWCC*" -or $_.Path -like "$InstallDir*" } |
@@ -44,6 +52,32 @@ if (Get-Service $Svc -ErrorAction SilentlyContinue) {
     Stop-Service $Svc -Force -ErrorAction SilentlyContinue
     Start-Sleep 1
 }
+
+# --- an earlier installation in another folder (1.8.2.6): files, PATH, autostart, shortcuts, Apps entry
+$old = @()
+foreach ($k in $InnoKey, $PortableKey) {
+    $d = (Get-ItemProperty $k -ErrorAction SilentlyContinue).InstallLocation
+    if ($d) { $old += $d }
+}
+$img = (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\$Svc" -ErrorAction SilentlyContinue).ImagePath
+if ($img -and $img -match '"?([^"]+\.exe)') { $old += (Split-Path $Matches[1]) }
+$old += "$env:ProgramFiles\$OldName"
+$old = $old | Where-Object { Ours $_ } | ForEach-Object { $_.TrimEnd('\') } | Sort-Object -Unique
+$mp = [Environment]::GetEnvironmentVariable("Path", "Machine")
+foreach ($d in $old) {
+    $mp = ($mp -split ";" | Where-Object { $_ -and -not (Same $_ $d) }) -join ";"
+    if (-not (Same $d $InstallDir) -and -not (Same $d $Src)) {
+        Say "Removing the earlier installation in $d (settings are kept)"
+        Get-Process ControlCenter -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$d*" } | Stop-Process -Force -ErrorAction SilentlyContinue
+        Remove-Item -Recurse -Force $d -ErrorAction SilentlyContinue
+        if (Same (Get-ItemProperty $InnoKey -ErrorAction SilentlyContinue).InstallLocation $d) { Remove-Item $InnoKey -Recurse -Force }
+    }
+}
+[Environment]::SetEnvironmentVariable("Path", $mp, "Machine")
+Remove-ItemProperty -Path $RunKey -Name $OldName -ErrorAction SilentlyContinue
+Remove-ItemProperty -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" -Name $OldName -ErrorAction SilentlyContinue
+Remove-ItemProperty -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run" -Name $OldName -ErrorAction SilentlyContinue
+Remove-Item "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\$OldName.lnk", "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\$OldName" -Recurse -Force -ErrorAction SilentlyContinue
 
 # --- original Control Center
 if (-not $KeepOEM) {
@@ -101,12 +135,12 @@ if (Get-Service UWACPIDriver -ErrorAction SilentlyContinue) {
 # --- service
 $exe = "$InstallDir\uwccd.exe"
 if (Get-Service $Svc -ErrorAction SilentlyContinue) {
-    & sc.exe config $Svc binPath= "`"$exe`"" start= auto | Out-Null
+    & sc.exe config $Svc binPath= "`"$exe`"" start= auto DisplayName= "OUCC service" | Out-Null
 } else {
     Say "Registering the service"
-    & sc.exe create $Svc binPath= "`"$exe`"" start= auto DisplayName= "UWCC Control Center service" | Out-Null
+    & sc.exe create $Svc binPath= "`"$exe`"" start= auto DisplayName= "OUCC service" | Out-Null
 }
-& sc.exe description $Svc "Performance modes, fans, keyboard lighting, battery and liquid cooler for Uniwill/Tongfang laptops." | Out-Null
+& sc.exe description $Svc "Open Uniwill Control Center: performance modes, fans, keyboard lighting, battery and liquid cooler for Uniwill/Tongfang laptops." | Out-Null
 & sc.exe failure $Svc reset= 86400 actions= restart/5000/restart/10000/restart/30000 | Out-Null
 Say "Starting the service"
 Start-Service $Svc
@@ -115,7 +149,7 @@ Start-Service $Svc
 Set-ItemProperty -Path $RunKey -Name $RunName -Value "`"$InstallDir\ControlCenter.exe`""
 $lnkDir = "$env:ProgramData\Microsoft\Windows\Start Menu\Programs"
 $sh = New-Object -ComObject WScript.Shell
-$l = $sh.CreateShortcut("$lnkDir\UWCC Control Center.lnk")
+$l = $sh.CreateShortcut("$lnkDir\OUCC.lnk")
 $l.TargetPath = "$InstallDir\ControlCenter.exe"; $l.Arguments = "--open"; $l.WorkingDirectory = $InstallDir
 $l.IconLocation = "$InstallDir\ControlCenter.exe,0"; $l.Save()
 
@@ -124,6 +158,18 @@ $mp = [Environment]::GetEnvironmentVariable("Path", "Machine")
 if (($mp -split ";") -notcontains $InstallDir) {
     [Environment]::SetEnvironmentVariable("Path", "$mp;$InstallDir", "Machine")
 }
+
+# --- Settings -> Apps: an entry whose "Uninstall" runs uninstall.ps1 from the installed folder
+$ver = if (Test-Path "$InstallDir\VERSION") { (Get-Content "$InstallDir\VERSION" -TotalCount 1).Trim() } else { "" }
+New-Item -Path $PortableKey -Force | Out-Null
+$u = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$InstallDir\uninstall.ps1`" -InstallDir `"$InstallDir`""
+foreach ($kv in @{ DisplayName = "OUCC (Open Uniwill Control Center)"; DisplayVersion = $ver; Publisher = "open-uniwill-cc";
+                   InstallLocation = $InstallDir; DisplayIcon = "$InstallDir\ControlCenter.exe"; UninstallString = $u;
+                   URLInfoAbout = "https://github.com/aspidovss/open-uniwill-cc" }.GetEnumerator()) {
+    Set-ItemProperty -Path $PortableKey -Name $kv.Key -Value $kv.Value
+}
+Set-ItemProperty -Path $PortableKey -Name NoModify -Value 1 -Type DWord
+Set-ItemProperty -Path $PortableKey -Name NoRepair -Value 1 -Type DWord
 
 # --- tray for the current user, not elevated (explorer starts it with the user's normal token)
 Start-Process explorer.exe "`"$InstallDir\ControlCenter.exe`""

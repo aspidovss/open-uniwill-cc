@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Builds the Windows version of UWCC Control Center.
+  Builds the Windows version of OUCC (Open Uniwill Control Center).
 
 .DESCRIPTION
   1. creates a virtual environment (.venv-win) and installs windows\requirements.txt;
@@ -52,7 +52,7 @@ $Version = (Select-String -Path "uwccd\__init__.py" -Pattern '__version__\s*=\s*
 $editions = @()
 if ($BuildFull) { $editions += "non-free" }
 if ($BuildFree) { $editions += "free" }
-Say "UWCC Control Center $Version for Windows ($($editions -join ' + '))"
+Say "OUCC $Version for Windows ($($editions -join ' + '))"
 
 if ($Clean) {
     # programs started from dist\ (a test run of uwccd.exe / ControlCenter.exe, setup.exe) lock the folder

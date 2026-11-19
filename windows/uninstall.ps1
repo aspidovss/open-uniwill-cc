@@ -1,6 +1,7 @@
 <#
 .SYNOPSIS
-  Removes UWCC Control Center installed with install.ps1.
+  Removes OUCC (Open Uniwill Control Center; "UWCC Control Center" before 1.8.2.6) installed with install.ps1.
+  Settings -> Apps -> OUCC -> Uninstall runs it.
 
   powershell -ExecutionPolicy Bypass -File uninstall.ps1 [-InstallDir ...] [-RemoveData] [-RemoveDriver]
 
@@ -10,7 +11,7 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$InstallDir = "$env:ProgramFiles\UWCC Control Center",
+    [string]$InstallDir = "",
     [switch]$RemoveData,
     [switch]$RemoveDriver
 )
@@ -26,6 +27,17 @@ if (-not $isAdmin) {
     exit
 }
 function Say($m) { Write-Host "==> $m" -ForegroundColor Cyan }
+$PortableKey = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\OUCC-portable"
+if (-not $InstallDir) {
+    # the registered folder, else the service's folder, else the default (new name, then the old one)
+    $InstallDir = (Get-ItemProperty $PortableKey -ErrorAction SilentlyContinue).InstallLocation
+    $img = (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\uwccd" -ErrorAction SilentlyContinue).ImagePath
+    if (-not $InstallDir -and $img -and $img -match '"?([^"]+\.exe)') { $InstallDir = Split-Path $Matches[1] }
+    if (-not $InstallDir) {
+        $InstallDir = @("$env:ProgramFiles\OUCC", "$env:ProgramFiles\UWCC Control Center") | Where-Object { Test-Path $_ } | Select-Object -First 1
+    }
+    if (-not $InstallDir) { $InstallDir = "$env:ProgramFiles\OUCC" }
+}
 
 Say "Closing the tray application"
 Get-Process ControlCenter -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$InstallDir*" } | Stop-Process -Force
@@ -43,9 +55,13 @@ if (Get-Service uwccd -ErrorAction SilentlyContinue) {
     & sc.exe delete uwccd | Out-Null
 }
 
-Remove-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" -Name "UWCC Control Center" -ErrorAction SilentlyContinue
-Remove-ItemProperty -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run" -Name "UWCC Control Center" -ErrorAction SilentlyContinue
-Remove-Item "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\UWCC Control Center.lnk" -ErrorAction SilentlyContinue
+foreach ($n in "OUCC", "UWCC Control Center") {
+    Remove-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" -Name $n -ErrorAction SilentlyContinue
+    Remove-ItemProperty -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" -Name $n -ErrorAction SilentlyContinue
+    Remove-ItemProperty -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run" -Name $n -ErrorAction SilentlyContinue
+    Remove-Item "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\$n.lnk" -ErrorAction SilentlyContinue
+}
+Remove-Item $PortableKey -Recurse -Force -ErrorAction SilentlyContinue
 $mp = [Environment]::GetEnvironmentVariable("Path", "Machine")
 $np = ($mp -split ";" | Where-Object { $_ -and $_.TrimEnd('\') -ne $InstallDir.TrimEnd('\') }) -join ";"
 if ($np -ne $mp) { [Environment]::SetEnvironmentVariable("Path", $np, "Machine") }

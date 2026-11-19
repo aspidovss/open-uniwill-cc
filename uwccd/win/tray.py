@@ -38,7 +38,8 @@ PORT = int(os.environ.get("UWCC_PORT", "47321"))
 TOKEN_FILE = os.path.join(data_root(), "run", "token")
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 APPROVED_KEY = r"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run"
-RUN_NAME = "UWCC Control Center"
+RUN_NAME = "OUCC"                       # 1.8.2.6; "UWCC Control Center" before (OLD_RUN_NAME, moved over at start)
+OLD_RUN_NAME = "UWCC Control Center"
 MUTEX = "Local\\UWCC-ControlCenter-Tray"
 OPEN_EVENT = "Local\\UWCC-ControlCenter-Open"
 
@@ -194,6 +195,24 @@ class Tray:
             pass
 
     # -- autostart (HKLM Run from the installer, per-user on/off like Task Manager) -------------------
+    @staticmethod
+    def migrate_run_name():
+        """1.8.2.6: the per-user autostart entry and its on/off state move from the old name to the new one."""
+        for key in (RUN_KEY, APPROVED_KEY):
+            try:
+                with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key, 0, winreg.KEY_READ | winreg.KEY_WRITE) as k:
+                    try:
+                        v, t = winreg.QueryValueEx(k, OLD_RUN_NAME)
+                    except OSError:
+                        continue
+                    try:
+                        winreg.QueryValueEx(k, RUN_NAME)
+                    except OSError:
+                        winreg.SetValueEx(k, RUN_NAME, 0, t, f'"{sys.executable}"' if key == RUN_KEY else v)
+                    winreg.DeleteValue(k, OLD_RUN_NAME)
+            except OSError as e:
+                log.debug("autostart name: %s", e)
+
     def autostart_enabled(self, *_):
         hk = self._run_entry()
         if hk is None:
@@ -487,6 +506,8 @@ class Tray:
                 self.open_window()
 
     def run(self):
+        self.migrate_run_name()
+
         def setup(icon):
             icon.visible = True
             for f in (self.events_loop, self.idle_loop, self.open_request_loop, self.fx_loop):

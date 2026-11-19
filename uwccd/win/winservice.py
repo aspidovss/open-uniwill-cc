@@ -17,7 +17,7 @@ import win32service
 import win32serviceutil
 
 SERVICE_NAME = "uwccd"
-DISPLAY_NAME = "UWCC Control Center service"
+DISPLAY_NAME = "OUCC service"               # "UWCC Control Center service" before 1.8.2.6
 DESCRIPTION = ("Performance modes, fan curves, keyboard lighting, battery protection and the Bluetooth liquid cooler "
                "for Uniwill/Tongfang laptops (open re-implementation of GCUService).")
 

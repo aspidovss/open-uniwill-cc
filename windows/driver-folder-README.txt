@@ -1,7 +1,7 @@
-﻿UWCC Control Center (open-uniwill-cc) - folder for the OEM driver
+﻿OUCC - Open Uniwill Control Center (open-uniwill-cc) - folder for the OEM driver
 ==================================================================
 
-The free build of UWCC Control Center does not contain the original OEM driver
+The free build of OUCC does not contain the original OEM driver
 and is distributed completely freely (open source, MIT licence). Without the
 driver it reaches the embedded controller through the open WMI implementation
 (beta: slower, no liquid-cooling power boost, approximate power limits).
@@ -25,7 +25,7 @@ By installing it you confirm that you have the right to use this file.
 
 Папка для OEM-драйвера
 
-Свободная сборка UWCC Control Center не содержит оригинального OEM-драйвера
+Свободная сборка OUCC не содержит оригинального OEM-драйвера
 и распространяется полностью свободно (открытый код, лицензия MIT). Без
 драйвера программа работает с встроенным контроллером через открытую
 реализацию WMI (бета: медленнее, нет повышенной мощности с СЖО, пределы

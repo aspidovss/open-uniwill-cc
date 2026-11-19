@@ -106,7 +106,7 @@ sudo systemctl start uwccd
 ```powershell
 # Windows, elevated PowerShell
 sc.exe stop uwccd
-& "C:\Program Files\UWCC Control Center\uwccd.exe" run -v
+& "C:\Program Files\OUCC\uwccd.exe" run -v
 sc.exe start uwccd
 ```
 
@@ -238,7 +238,7 @@ sudo systemctl start uwccd
 ```powershell
 # Windows, PowerShell от администратора
 sc.exe stop uwccd
-& "C:\Program Files\UWCC Control Center\uwccd.exe" run -v
+& "C:\Program Files\OUCC\uwccd.exe" run -v
 sc.exe start uwccd
 ```
 
