@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.8.2.5
+
+- **Colour calibration for every lighting device.** *Keyboard backlight* and *Laptop light bar* → *Colour
+  calibration*: the device shows pure red, green and blue (and, optionally, white) as they are sent, the user picks
+  the colour seen for each, and the program corrects every colour from then on (a 3 × 3 matrix in linear light:
+  swapped channels, a colour bleeding into another, a tinted white). Separate for the RGB keyboard (all effects and
+  BetterRGB), the one-zone RGB keyboard on the EC and the light bar. Made for the front bar of XMG NEO 16 E25, which
+  swaps some colours in every program. BetterRGB's white calibration became its white step (older white gains are
+  carried over). `POST /api/lighting/calibrate`, `uwccctl calibrate`, [docs/FEATURES.md](docs/FEATURES.md).
+
 ## 1.8.2.4
 
 - **Front light bar of XMG NEO 16 (E25) (`048D:7001`).** Driven like the `048D:7000` bar it stayed dark (user

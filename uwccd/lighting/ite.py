@@ -410,8 +410,16 @@ class ITEKeyboard:
         hi, lo = self.ver[0], self.ver[1]
         return hi == 0x20 or (hi == 0x12 and lo >= 9) or hi == 0x14 or hi == 0x16
 
+    # -- the user's colour calibration (1.8.2.5, uwccd/lighting/calib.py) -----------------
+    def _cal(self, r, g, b):
+        c = getattr(self, "calib", None)
+        if c is None or getattr(self, "calib_raw", False):
+            return (r, g, b)
+        return c.apply(r, g, b)
+
     # -- colour correction per keyboard type (WKDColor.cheatRGB_*) ----------------------
     def correct(self, r, g, b):
+        r, g, b = self._cal(r, g, b)
         if W is None:
             return (r, g, b)
         t = self.kb_type
@@ -435,6 +443,7 @@ class ITEKeyboard:
 
     def correct_user(self, r, g, b):
         """colour correction used by the 12h user-mode path"""
+        r, g, b = self._cal(r, g, b)
         if W is None:
             return (r, g, b)
         if self.kb_type in ME_2P2ND:
@@ -751,7 +760,8 @@ class ITELightbar(ITEKeyboard):
                  ".".join(f"{x:X}" for x in self.ver), ",".join(self.zones))
 
     def cmd14(self, index, r, g, b, flag=0, extra=0):
-        # HID_Set_Color_14H for type 0x15: zone flag in byte 2, no colour correction
+        # HID_Set_Color_14H for type 0x15: zone flag in byte 2, no colour correction (only the user's calibration)
+        r, g, b = self._cal(r, g, b)
         self.feature([0, 0x14, flag, index, r, g, b, 0, 0])
         time.sleep(0.001)
 
@@ -835,7 +845,7 @@ class ITELightbar7001(ITELightbar):
         lv = self.LEVEL[max(0, min(4, int(light)))]
         sp = SPEED[max(0, min(4, int(speed)))]
         cols = [tuple(int(x) & 255 for x in c) for c in (colors or [])] or [(255, 255, 255)]
-        r, g, b = cols[0]
+        r, g, b = self._cal(*cols[0])
         with self.lock:
             self.power_on()
             self.feature([0, 0x14, 0x00, 0x01, r, g, b, 0, 0])

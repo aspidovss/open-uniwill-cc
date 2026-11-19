@@ -185,7 +185,7 @@ function render() {
     const lm = S.leishen && S.leishen.mode;
     pill.textContent = lm ? t((LEISHEN_MODES.find(x => x[0] === lm) || [, lm])[1]) : "—"; pill.className = "modepill";
   }
-  renderModes(); renderFanPage(); renderLiquid(); renderLight(); renderBattery(); renderSwitches(); renderBinding(); renderInfo(); renderAuto(); renderAbout(); renderReportCard();
+  renderModes(); renderFanPage(); renderLiquid(); renderLight(); renderCalCards(); renderBattery(); renderSwitches(); renderBinding(); renderInfo(); renderAuto(); renderAbout(); renderReportCard();
   renderHistSeg(); drawHistory();
   renderAltPages(); renderAfterburner(); renderDriver(); renderEcBanner(); applyFeatures(); applyModuleGates(); renderBusy(S.busy || []); renderMonOff(); setupCollapsible();
 }
@@ -931,8 +931,8 @@ function renderFxEngine(k) {
   $("#fx-bar-box").classList.toggle("hidden", !!k.four_zone);
   $("#fx-screen-row").classList.toggle("hidden", !k.fx_screen_switch);
   $("#fx-screen").checked = !!k.fx_screen_allowed;
-  const g = c.gains;
-  $("#fx-gains").textContent = g.every(x => x === 1000) ? t("Calibration: none (neutral)") : t("Calibration: red {0} %, green {1} %, blue {2} %", g[0] / 10, g[1] / 10, g[2] / 10);
+  const kc = ((k.calibration || {}).devices || {}).keyboard;     // 1.8.2.5: white is a step of the colour calibration
+  $("#fx-gains").textContent = kc && kc.set ? t("Calibration: set (see Colour calibration below)") : t("Calibration: none (neutral)");
   const cal = !!(k.fx && k.fx.calibrating);
   $("#fx-cal-idle").classList.toggle("hidden", cal); $("#fx-cal-run").classList.toggle("hidden", !cal);
   $("#fx-status").textContent = k.fx ? t("Running: {0} — {1} of {2} frames per second", t(k.fx.name), k.fx.fps ?? "—", k.fx.target_fps ?? "—")
@@ -3842,3 +3842,96 @@ $$("#nav a").forEach(a => a.addEventListener("click", () => {
   if (a.dataset.page === "api") { loadExt(); extTimer = setInterval(() => { if (!document.hidden) loadExt(true); }, 5000); }
 }));
 try { if (localStorage.getItem("uwcc-page") === "api") loadExt(); } catch (_) {}
+
+// ---------------------------------------------------------------- colour calibration (1.8.2.5, uwccd/lighting/calib.py)
+const CAL_DEV = { keyboard: "keyboard", single: "keyboard", lightbar: "light bar" };
+const CAL_STEPS = [["r", "red", [255, 0, 0]], ["g", "green", [0, 255, 0]], ["b", "blue", [0, 0, 255]], ["w", "white", [255, 255, 255]]];
+const CAL_PICKS = [["red", [255, 0, 0]], ["green", [0, 255, 0]], ["blue", [0, 0, 255]], ["yellow", [255, 255, 0]],
+  ["cyan", [0, 255, 255]], ["magenta", [255, 0, 255]], ["white", [255, 255, 255]], ["orange", [255, 128, 0]],
+  ["pink", [255, 150, 200]], ["light blue", [140, 190, 255]], ["light green", [170, 255, 170]], ["purple", [140, 60, 255]]];
+const CAL_CHECK = [[255, 0, 0], [0, 255, 0], [0, 0, 255], [255, 255, 0], [0, 255, 255], [255, 0, 255], [255, 128, 0], [255, 255, 255]];
+let CAL = null;     // {dev, step 0..4, obs: {r,g,b,w}}
+function renderCalCards() {
+  const c = (S.keyboard && S.keyboard.calibration) || { devices: {} };
+  for (const card of $$(".cal-card")) {
+    const d = c.devices[card.dataset.calDev];
+    card.classList.toggle("hidden", !d);
+    if (!d) continue;
+    $(".cal-state", card).textContent = d.set ? t("Calibrated {0}", d.t ? new Date(d.t * 1000).toLocaleDateString() : "")
+      : t("Not calibrated: colours are sent as they are.");
+    $(".cal-reset", card).classList.toggle("hidden", !d.set);
+  }
+}
+async function calCall(body) {
+  const r = await api("lighting/calibrate", { device: CAL.dev, ...body });
+  if (S.keyboard) S.keyboard.calibration = r;
+  return r;
+}
+function calRender() {
+  const dlg = $("#cal-dlg"), s = CAL.step, devName = t(CAL_DEV[CAL.dev]);
+  $("#cal-title").textContent = t("Colour calibration — {0}", devName);
+  $("#cal-steps").replaceChildren(...CAL_STEPS.map(([k, n], i) => h("span", { class: "cal-step" + (i === s ? " on" : CAL.obs[k] ? " done" : "") }, t(n))),
+    h("span", { class: "cal-step" + (s === 4 ? " on" : "") }, t("check")));
+  const picks = $("#cal-picks"); picks.replaceChildren();
+  $("#cal-skip").classList.toggle("hidden", s !== 3);
+  $("#cal-back").classList.toggle("hidden", s === 0);
+  $("#cal-custom-row").classList.toggle("hidden", s === 4);
+  $("#cal-cancel").classList.toggle("hidden", s === 4);       // saved already: "Done" puts the effect back
+  if (s < 4) {
+    const [k, n] = CAL_STEPS[s];
+    $("#cal-text").textContent = s < 3
+      ? t("The {0} now shows pure {1} as it is sent. Which colour do you see? Pick the closest one.", devName, t(n))
+      : t("The {0} now shows white as it is sent. Pick the tint you see (optional: it balances white).", devName);
+    for (const [pn, c] of CAL_PICKS)
+      picks.append(h("button", { class: "cal-pick" + (CAL.obs[k] && rgb2hex(CAL.obs[k]) === rgb2hex(c) ? " on" : ""), title: t(pn),
+        style: `background:${rgb2hex(c)}`, onclick: () => { CAL.obs[k] = c; $("#cal-custom").value = rgb2hex(c); calRender(); } }));
+    $("#cal-next").textContent = s === 3 ? t("Apply") : t("Next");
+    $("#cal-next").disabled = !CAL.obs[k];
+  } else {
+    $("#cal-text").textContent = t("Calibration saved. Click a colour to check it on the {0}: it should look like the button.", devName);
+    for (const c of CAL_CHECK)
+      picks.append(h("button", { class: "cal-pick", style: `background:${rgb2hex(c)}`, onclick: () => act(() => calCall({ action: "show", colour: c, raw: false })) }));
+    $("#cal-next").textContent = t("Done"); $("#cal-next").disabled = false;
+  }
+  dlg.classList.remove("hidden");
+}
+function calStep(s) {
+  CAL.step = s;
+  if (s < 4) act(() => calCall({ action: "show", colour: CAL_STEPS[s][2], raw: true }));
+  calRender();
+}
+async function calOpen(dev) {
+  CAL = { dev, step: 0, obs: {} };
+  try { await calCall({ action: "start" }); } catch (e) { CAL = null; toast(e.message || String(e), true); return; }
+  calRender();
+}
+async function calClose(action) {
+  if (!CAL) return;
+  $("#cal-dlg").classList.add("hidden");
+  try { await calCall({ action }); } catch (_) {}
+  CAL = null; renderCalCards();
+}
+$("#cal-custom").addEventListener("input", e => { if (CAL && CAL.step < 4) { CAL.obs[CAL_STEPS[CAL.step][0]] = hex2rgb(e.target.value); $("#cal-next").disabled = false; } });
+$("#cal-back").addEventListener("click", () => CAL && calStep(Math.max(0, CAL.step - 1)));
+$("#cal-skip").addEventListener("click", () => { if (CAL) { delete CAL.obs.w; calApply(); } });
+$("#cal-cancel").addEventListener("click", () => calClose("cancel"));
+$("#cal-next").addEventListener("click", () => {
+  if (!CAL) return;
+  if (CAL.step < 3) calStep(CAL.step + 1);
+  else if (CAL.step === 3) calApply();
+  else calClose("end");
+});
+async function calApply() {
+  try {
+    await calCall({ action: "apply", observed: CAL.obs });
+    CAL.step = 4; calRender(); toast(t("Calibration saved"));
+  } catch (e) { toast(e.message || String(e), true); }
+}
+$$(".cal-card").forEach(card => {
+  $(".cal-open", card).addEventListener("click", () => calOpen(card.dataset.calDev));
+  $(".cal-reset", card).addEventListener("click", () => {
+    if (!confirm(t("Forget the colour calibration of the {0}?", t(CAL_DEV[card.dataset.calDev])))) return;
+    act(async () => { const r = await api("lighting/calibrate", { device: card.dataset.calDev, action: "reset" });
+      if (S.keyboard) S.keyboard.calibration = r; renderCalCards(); }, t("Calibration reset"));
+  });
+});

@@ -112,6 +112,7 @@ uwccctl fan set current cpu 0/45:0 55/50:30 70/65:60 85/80:100
 | `kb fx-config KEY=VALUE ...` | `fps_ac`, `fps_battery` (10..60), `transition`, `transition_ms`, `bar`, `bar_direction`, `bar_start`, `bar_end` |
 | `kb fx-calibrate start\|cancel\|reset` / `kb fx-calibrate apply RRGGBB` | white calibration (RRGGBB: the colour you see) |
 | `lb ec on\|off` | power of the whole light bar through the EC, like the Fn key (models with an RGB light bar in the EC) |
+| `calibrate keyboard\|single\|lightbar start` → `show RRGGBB` → `apply r=… g=… b=… [w=…]` → `end`; `reset` | colour calibration: the colours you saw for pure red, green, blue (and white) — see [FEATURES](FEATURES.md#colour-calibration) |
 | `lb [hinge\|base\|logo\|front] on\|off` | light bar zone (default: the bar's first zone — `hinge`, or `front` on the `048D:7001` bar) |
 | `lb [ZONE] color RRGGBB [EFFECT]` | colour |
 | `lb [ZONE] effect static\|breathing\|breathing_multi\|wave\|cycle\|rainbow\|colorbreath\|colorwave` | effect |

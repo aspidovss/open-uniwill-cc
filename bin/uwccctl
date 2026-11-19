@@ -17,6 +17,7 @@ Overview
   kb [on|off|effects|effect|level] ...   keyboard backlight
   lb [hinge|base|logo|front] on|off|color|effect|light ...   light bar
   lb ec on|off                                        light bar power (EC)
+  calibrate keyboard|single|lightbar start|show|apply|end|reset ...   colour calibration (uwccctl help calibrate)
   clevo ...                      Control Center 3.0 / Clevo (experimental, separate module): see uwccctl help clevo
   leishen ...                    Leishen / Thunderobot (experimental, separate module): see uwccctl help leishen
   detect [run|close]             which platform this is, vendor control programs running (close: end them)
@@ -244,6 +245,14 @@ HELP = {
         "uwccctl leishen touchpad on|off\n"
         "uwccctl leishen light ZONE MODE LEVEL RRGGBB   RGB keyboards only: ZONE all|keyboard|zone1|zone2|zone3|rear|logo,\n"
         "                                           MODE static|breathing|cycle|ambilight, LEVEL 0 off, 1 low, 2 high"),
+    "calibrate": (
+        "uwccctl calibrate <device> status\n"
+        "uwccctl calibrate <device> start                   the device shows pure red as it is sent\n"
+        "uwccctl calibrate <device> show RRGGBB [corrected]  show a colour raw (or with the calibration)\n"
+        "uwccctl calibrate <device> apply r=RRGGBB [g=RRGGBB] [b=RRGGBB] [w=RRGGBB]\n"
+        "                                                   the colours you saw for red, green, blue, white\n"
+        "uwccctl calibrate <device> end|cancel|reset         back to the effect from before | forget it\n"
+        "  device: keyboard (ITE RGB), single (one-zone RGB on the EC), lightbar"),
     "lb": (
         "uwccctl lb ec on|off                   (whole bar through the EC, like the Fn key)\n"
         "uwccctl lb [hinge|base|logo|front] on|off\n"
@@ -1047,6 +1056,33 @@ def cmd_kb(a):
     out(call("state")["keyboard"], kb_text)
 
 
+def cmd_calibrate(a):
+    if not a:
+        usage("calibrate")
+    dev, op, rest = a[0], (a[1] if a[1:] else "status"), a[2:]
+    if op == "status":
+        r = call("state")["keyboard"].get("calibration") or {}
+    elif op == "show" and rest:
+        r = call("lighting/calibrate", {"device": dev, "action": "show", "colour": rgb(rest[0], "calibrate"),
+                                        "raw": rest[1:2] != ["corrected"]})
+    elif op == "apply" and rest:
+        obs = {}
+        for x in rest:
+            k, _, v = x.partition("=")
+            if k not in ("r", "g", "b", "w") or not v:
+                usage("calibrate")
+            obs[k] = rgb(v, "calibrate")
+        r = call("lighting/calibrate", {"device": dev, "action": "apply", "observed": obs})
+    elif op in ("start", "end", "cancel", "reset"):
+        r = call("lighting/calibrate", {"device": dev, "action": op})
+    else:
+        usage("calibrate")
+    out(r, lambda d: [f"{k:9} {'calibrated' if v.get('set') else 'not calibrated'}"
+                      + (" " + " ".join(f"{c}={hexrgb(x)}" for c, x in (v.get("observed") or {}).items()) if v.get("set") else "")
+                      for k, v in (d.get("devices") or {}).items()]
+        + ([f"running: {d['active']}"] if d.get("active") else []))
+
+
 def cmd_lb(a):
     zones = ("hinge", "base", "logo", "front")
     rest = list(a)
@@ -1803,6 +1839,7 @@ def main(a):
         "battery": lambda: cmd_battery(rest),
         "kb": lambda: cmd_kb(rest),
         "lb": lambda: cmd_lb(rest),
+        "calibrate": lambda: cmd_calibrate(rest),
         "clevo": lambda: cmd_clevo(rest),
         "leishen": lambda: cmd_leishen(rest),
         "afterburner": lambda: cmd_afterburner(rest),

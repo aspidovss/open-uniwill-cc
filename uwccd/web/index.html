@@ -471,6 +471,7 @@
           </div>
           <p class="muted tiny" data-i>Effects from BetterRGB ITE8291 Adaptive (MIT) by TheYamo and ZavierChen, rewritten for this program.</p>
         </div>
+        <div class="card cal-card hidden" data-cal-dev="keyboard"><div class="row between wrap"><div><h3 data-i data-help="features#colour-calibration|калибровка-цвета">Colour calibration</h3><p class="muted tiny cal-state"></p></div><div class="row"><button class="btn ghost cal-open" data-i>Calibrate…</button><button class="btn ghost cal-reset" data-i>Reset</button></div></div></div>
       </div>
       <div id="single-ui" class="card hidden">
         <h3 data-i>Backlight brightness</h3>
@@ -480,6 +481,7 @@
           <div class="row wrap"><div id="single-swatches" class="row wrap"></div>
             <label class="row"><span class="muted tiny" data-i>Any colour</span> <input type="color" id="kb-single-colour"></label></div>
           <p class="muted tiny" data-i>One colour for the whole keyboard, set by the embedded controller (51 steps per channel).</p>
+          <div class="cal-card hidden" data-cal-dev="single"><div class="row between wrap"><div><h4 data-i data-help="features#colour-calibration|калибровка-цвета">Colour calibration</h4><p class="muted tiny cal-state"></p></div><div class="row"><button class="btn ghost cal-open" data-i>Calibrate…</button><button class="btn ghost cal-reset" data-i>Reset</button></div></div></div>
         </div>
       </div>
       <div id="none-ui" class="card hidden"><p data-i>No controllable keyboard backlight found.</p></div>
@@ -504,6 +506,7 @@
           </div>
         </div>
       </div>
+      <div class="card cal-card hidden" data-cal-dev="lightbar"><div class="row between wrap"><div><h3 data-i data-help="features#colour-calibration|калибровка-цвета">Colour calibration</h3><p class="muted tiny cal-state"></p></div><div class="row"><button class="btn ghost cal-open" data-i>Calibrate…</button><button class="btn ghost cal-reset" data-i>Reset</button></div></div></div>
       <div id="lb-none" class="card hidden"><p data-i>No light bar found on this laptop.</p></div>
     </section>
 
@@ -645,6 +648,19 @@
   </main>
 </div>
 <div id="svc-down" class="svc-down hidden"></div>
+<div id="cal-dlg" class="cal-dlg hidden" role="dialog" aria-modal="true">
+  <div class="cal-box card">
+    <h3 id="cal-title"></h3>
+    <p id="cal-text"></p>
+    <div id="cal-picks" class="row wrap cal-picks"></div>
+    <div id="cal-custom-row" class="row"><span class="muted tiny" data-i>Exact colour:</span> <input type="color" id="cal-custom" value="#ffffff"></div>
+    <div id="cal-steps" class="row cal-steps"></div>
+    <div class="row between wrap cal-btns">
+      <button class="btn ghost" id="cal-cancel" data-i>Cancel</button>
+      <div class="row"><button class="btn ghost" id="cal-back" data-i>Back</button><button class="btn ghost" id="cal-skip" data-i>Skip</button><button class="btn" id="cal-next" data-i>Next</button></div>
+    </div>
+  </div>
+</div>
 <div class="eula hidden" id="busy-overlay" role="alertdialog" aria-modal="true" aria-live="polite">
   <div class="eula-card narrow busy-card"><h2 id="busy-title"></h2><p class="muted" id="busy-sub"></p>
     <p class="busy-backup hidden" id="busy-backup"></p>

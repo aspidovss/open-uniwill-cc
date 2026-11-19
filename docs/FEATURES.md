@@ -177,6 +177,23 @@ GitHub issue form *New laptop* opens with the laptop, the platform and the funct
 hand, nothing is sent by itself. Serial numbers, the system UUID, MAC addresses, the computer and user names stay out of
 the report unless ticked. *Information → Check the platform*, `uwccctl detect`.
 
+## Colour calibration
+
+*Keyboard backlight* and *Laptop light bar* → **Colour calibration → Calibrate…** (1.8.2.5). The LEDs do not always
+show the colour that is sent: the channels can be wired in another order (the front bar of XMG NEO 16 E25 shows some
+colours swapped — in the OEM program too), one colour can bleed into another, white can be tinted.
+
+The device shows pure **red**, **green** and **blue** as they are sent, and you pick the colour you see for each
+(the closest button or an exact colour); then, optionally, **white** for its tint. From these the program works out
+how the device mixes the channels and corrects every colour before it is sent: swapped channels are swapped back, a
+colour that bleeds is subtracted, the strong channels of a tinted white are lowered. At the end the device shows test
+colours with the correction. *Reset* forgets it.
+
+Each device has its own calibration: the RGB keyboard (static colours, effects, per-key modes, BetterRGB), the
+one-zone RGB keyboard on the EC and the light bar. BetterRGB's *Calibrate white* is the white step of the keyboard's
+calibration; white gains set in an older version are kept. `uwccctl calibrate …`. The accuracy is that of the
+colours picked by eye: swapped channels and a visible tint are fixed well, fine shades only roughly.
+
 ## Diagnostic report
 
 *Information → Diagnostic report* or `uwccctl report` makes a zip file with everything needed to add support for

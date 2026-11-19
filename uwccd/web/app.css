@@ -461,3 +461,16 @@ svg.lc-curve text.draglbl{font-size:16px}
 .feat-off:not([data-feat-text])::after,.feat-off[data-feat-text=""]::after{display:none}
 /* 1.8.2.2: a battery card this laptop does not have */
 .cap-off{opacity:.42;filter:grayscale(.7)}
+/* 1.8.2.5: colour calibration */
+.cal-dlg{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.55);padding:16px}
+.cal-dlg.hidden{display:none}
+.cal-box{max-width:560px;width:100%;margin:0}
+.cal-picks{gap:8px;margin:10px 0}
+.cal-pick{width:40px;height:40px;border-radius:10px;border:2px solid var(--line);cursor:pointer;padding:0}
+.cal-pick.on{outline:3px solid var(--acc);outline-offset:2px}
+.cal-steps{gap:6px;margin:10px 0;flex-wrap:wrap}
+.cal-step{font-size:12px;padding:3px 10px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+.cal-step.on{border-color:var(--acc);color:var(--fg)}
+.cal-step.done{color:var(--acc)}
+.cal-btns{margin-top:12px}
+.cal-card .cal-state{margin:2px 0 0}

@@ -1,4 +1,5 @@
 """Keyboard backlight manager: ITE RGB (KeyboardType '1') or EC single colour ('2')."""
+import copy
 import logging
 import sys
 import threading
@@ -6,7 +7,7 @@ import time
 
 from .. import regs as R
 from ..hw import SINGLE_COLOR_EC_IDS
-from . import fx, ite
+from . import calib, fx, ite
 
 log = logging.getLogger("uwccd.kb")
 SCREEN_FX = 115                 # BetterRGB "Screen ambient"
@@ -43,7 +44,11 @@ class SingleColor:
         """[r, g, b] 0..255 (the EC keeps 0..50)."""
         return [round(self.ec.read(R.KB_RGB_R + i) * 255 / R.KB_RGB_MAX) for i in range(3)]
 
-    def set_colour(self, rgb):
+    calib = None           # the user's colour calibration (1.8.2.5)
+
+    def set_colour(self, rgb, raw=False):
+        if self.calib is not None and not raw:
+            rgb = self.calib.apply(*[int(c) for c in rgb[:3]])
         for i, c in enumerate(rgb[:3]):
             self.ec.write(R.KB_RGB_R + i, max(0, min(R.KB_RGB_MAX, round(int(c) * R.KB_RGB_MAX / 255))))
         self.ec.write(R.KB_SINGLE, self.ec.read(R.KB_SINGLE) | 0x10)          # apply the level
@@ -58,6 +63,7 @@ class KeyboardManager:
         self.mock = mock
         self.rgb = None
         self.lb = None             # chassis light bar (separate ITE device)
+        self._cal_session = None   # colour calibration in progress (1.8.2.5)
         self.single = None
         self.kind = "none"
         self.lock = threading.RLock()
@@ -120,29 +126,178 @@ class KeyboardManager:
         return {"needs": e.needs() if e else []}
 
     def fx_calibrate(self, action, observed=None):
-        """white calibration: start (raw white on the keys) -> apply (the colour seen) | cancel | reset"""
+        """BetterRGB's white calibration: start (raw white on the keys) -> apply (the colour seen) | cancel | reset.
+        Since 1.8.2.5 it is the white step of the keyboard's colour calibration (calibrate() below)."""
         e = self.engine()
         if action == "start":
             if not e:
                 raise ValueError("start a BetterRGB effect first — the calibration shows raw white through it")
+            if self.rgb:
+                self.rgb.calib_raw = True
             e.calibrate(True)
         elif action == "cancel":
             if e:
                 e.calibrate(False)
+            if self.rgb:
+                self.rgb.calib_raw = False
         elif action == "apply":
-            gains = fx.white_gains(observed or [])
-            if not gains:
+            if not fx.white_gains(observed or []):
                 raise ValueError("the colour is too dark to calibrate")
-            self.set_fx_config({"gains": gains})
+            obs = dict((self._calib_store().get("keyboard") or {}).get("observed") or {})
+            obs["w"] = [int(x) for x in observed[:3]]
+            self._calib_save("keyboard", obs)
             if e:
                 e.calibrate(False)
+            if self.rgb:
+                self.rgb.calib_raw = False
         elif action == "reset":
-            self.set_fx_config({"gains": [1000, 1000, 1000]})
+            self._calib_save("keyboard", None)
             if e:
                 e.calibrate(False)
+            if self.rgb:
+                self.rgb.calib_raw = False
         else:
             raise ValueError("action: start | apply | cancel | reset")
-        return {"gains": self.fx_config()["gains"], "calibrating": bool(e and e.calibrating)}
+        return {"gains": self.fx_config()["gains"], "calibrating": bool(e and e.calibrating),
+                "calibration": self.calib_status()}
+
+    # -- colour calibration of every lighting device (1.8.2.5, uwccd/lighting/calib.py) ---------------------
+    def calib_devices(self):
+        out = []
+        if self.kind == "rgb" and self.rgb:
+            out.append("keyboard")
+        if self.kind == "single" and self.single.has_colour():
+            out.append("single")
+        if self.lb:
+            out.append("lightbar")
+        return out
+
+    def _calib_target(self, dev):
+        return {"keyboard": self.rgb, "single": self.single, "lightbar": self.lb}.get(dev)
+
+    def _calib_store(self):
+        return dict(self.st.get("colour_calib") or {})
+
+    def _calib_save(self, dev, observed):
+        allc = self._calib_store()
+        if observed:
+            allc[dev] = {"observed": observed, "matrix": calib.matrix(observed), "t": int(time.time())}
+        else:
+            allc.pop(dev, None)
+        self.st.set("colour_calib", allc)
+        t = self._calib_target(dev)
+        if t is not None:
+            t.calib = calib.from_store(allc.get(dev))
+        log.info("colour calibration of the %s: %s", dev, "set" if observed else "reset")
+
+    def _load_calib(self):
+        allc = self._calib_store()
+        g = self.fx_config().get("gains") or [1000, 1000, 1000]
+        if "keyboard" not in allc and any(x != 1000 for x in g):
+            # BetterRGB white gains of an older version: the same correction as a white-only calibration
+            allc["keyboard"] = {"observed": {}, "matrix": [[g[0] / 1000, 0, 0], [0, g[1] / 1000, 0], [0, 0, g[2] / 1000]],
+                                "t": int(time.time()), "from": "betterrgb gains"}
+            self.st.set("colour_calib", allc)
+            self.set_fx_config({"gains": [1000, 1000, 1000]})
+            log.info("BetterRGB white calibration moved to the keyboard's colour calibration")
+        for dev in ("keyboard", "single", "lightbar"):
+            t = self._calib_target(dev)
+            if t is not None:
+                t.calib = calib.from_store(allc.get(dev))
+
+    def calib_status(self):
+        allc = self._calib_store()
+        return {"devices": {d: {"set": d in allc, "observed": (allc.get(d) or {}).get("observed") or {},
+                                "t": (allc.get(d) or {}).get("t")} for d in self.calib_devices()},
+                "active": (self._cal_session or {}).get("dev")}
+
+    def _calib_show(self, dev, colour, raw):
+        t = self._calib_target(dev)
+        t.calib_raw = bool(raw)
+        rgb = [max(0, min(255, int(c))) for c in colour[:3]]
+        if dev == "keyboard":
+            self.rgb.set_effect(idx=0, light=4, colors=[tuple(rgb)], force=True)
+        elif dev == "single":
+            self.single.set_power(True)
+            self.single.set_colour(rgb, raw=raw)
+        else:
+            for z in self.lb.zones:
+                self.lb.set_zone(z, "static", light=4, colors=[rgb])
+
+    def _calib_restore(self, snap):
+        dev = snap["dev"]
+        t = self._calib_target(dev)
+        if t is not None:
+            t.calib_raw = False
+        try:
+            if dev == "keyboard":
+                if snap.get("effect"):
+                    self.set_effect(**snap["effect"], force=True)
+                if snap.get("power") is False:
+                    self.set_power(False)
+            elif dev == "single":
+                if snap.get("colour"):
+                    self.single.set_colour(snap["colour"])
+                if snap.get("power") is False:
+                    self.single.set_power(False)
+            else:
+                for z, cfg in (snap.get("zones") or {}).items():
+                    if cfg.get("effect"):
+                        self.lb.set_zone(z, **{k: cfg[k] for k in ("effect", "light", "speed", "colors") if k in cfg})
+                    if cfg.get("power") is False:
+                        self.lb.set_zone_power(z, False)
+                self.lb.saved = copy.deepcopy(snap.get("zones") or {})
+        except (OSError, ValueError, NotImplementedError) as e:
+            log.warning("colour calibration: restoring the %s: %s", dev, e)
+
+    def calibrate(self, dev, action, colour=None, observed=None, raw=True):
+        """start -> show {colour, raw} (as often as needed) -> apply {observed: {r,g,b[,w]}} -> end | cancel;
+        reset forgets the calibration. While it runs the device shows the test colours; end/cancel put back what was
+        on before."""
+        if dev not in self.calib_devices():
+            raise ValueError("no such lighting device here: " + " | ".join(self.calib_devices()))
+        with self.lock:
+            ses = self._cal_session
+            if action == "start":
+                if ses and ses["dev"] != dev:
+                    self._calib_restore(ses)
+                if not ses or ses["dev"] != dev:
+                    snap = {"dev": dev}
+                    if dev == "keyboard":
+                        snap["effect"] = copy.deepcopy(self.st.get("kb_effect"))
+                        snap["power"] = self.st.get("kb_power", True)
+                    elif dev == "single":
+                        snap["colour"] = self.st.get("kb_single_colour")
+                        snap["power"] = self.st.get("kb_power", True)
+                    else:
+                        snap["zones"] = copy.deepcopy(self.lb.saved)
+                    self._cal_session = snap
+                self._calib_show(dev, calib.PRIMARIES["r"], True)
+            elif action == "show":
+                if not ses or ses["dev"] != dev:
+                    raise ValueError("start the calibration first")
+                if not colour or len(colour) < 3:
+                    raise ValueError("colour: [r, g, b]")
+                self._calib_show(dev, colour, raw)
+            elif action == "apply":
+                if not observed:
+                    raise ValueError("observed: {r, g, b, w}")
+                obs = {k: [max(0, min(255, int(x))) for x in v[:3]] for k, v in observed.items()
+                       if k in calib.PRIMARIES and v}
+                self._calib_save(dev, obs)
+                if ses and ses["dev"] == dev:
+                    self._calib_show(dev, calib.PRIMARIES["w"], False)
+            elif action in ("end", "cancel"):
+                if ses:
+                    self._calib_restore(ses)
+                self._cal_session = None
+            elif action == "reset":
+                self._calib_save(dev, None)
+                if ses and ses["dev"] == dev:
+                    self._calib_show(dev, calib.PRIMARIES["w"], False)
+            else:
+                raise ValueError("action: start | show | apply | end | cancel | reset")
+            return self.calib_status()
 
     def needs_keys(self):
         e = self.engine()
@@ -170,6 +325,7 @@ class KeyboardManager:
                 wkdcolor.set_vendor(vendor)
             except Exception as e:  # noqa: BLE001
                 log.debug("LED vendor: %s", e)
+            self._load_calib()
             saved = self.st.get("kb_effect")
             power = self.st.get("kb_power", True)
             self.rgb.pictures_ok = not self.picture_modes_blocked()
@@ -184,6 +340,7 @@ class KeyboardManager:
                 or self._ec_rgb_keyboard():
             self.single = SingleColor(self.ec)
             self.kind = "single"
+            self._load_calib()
             lvl = self.st.get("kb_single_level")
             if lvl is not None:
                 self.single.set_level(lvl)
@@ -201,6 +358,7 @@ class KeyboardManager:
         except OSError as e:
             log.warning("light bar: %s", e)
         if self.lb:
+            self._load_calib()
             for zone, cfg in (self.st.get("lightbar") or {}).items():
                 if zone not in self.lb.zones:
                     continue
@@ -375,6 +533,7 @@ class KeyboardManager:
              "fx_effects": fx.catalog(), "fx_config": self.fx_config(), "fx_transitions": fx.TRANSITIONS,
              "fx_bar_modes": fx.BAR_MODES, "fx_bar_directions": fx.BAR_DIRECTIONS,
              "fx": self.engine().info() if self.engine() else None}
+        d["calibration"] = self.calib_status()
         d["untested_effects"] = self.untested_effects(d["unsupported_effects"]) if self.kind == "rgb" else []
         if self.lb:
             d["lightbar"] = {"device": self.lb.info(), "effects": list(getattr(self.lb, "effects", ite.LB_EFFECTS)),

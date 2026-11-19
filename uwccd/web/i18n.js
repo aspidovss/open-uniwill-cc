@@ -1221,3 +1221,23 @@ Object.assign(RU, { "RAM load": "Загрузка ОЗУ", "RAM used": "Заня
 
 // 1.8.2.4
 Object.assign(RU, { "Front": "Спереди", "(experimental)": "(экспериментально)" });
+
+// 1.8.2.5: colour calibration
+Object.assign(RU, {
+  "Colour calibration": "Калибровка цвета", "Calibrate…": "Откалибровать…", "Reset": "Сбросить",
+  "Calibrated {0}": "Откалибровано {0}", "Not calibrated: colours are sent as they are.": "Не откалибровано: цвета отправляются как есть.",
+  "Colour calibration — {0}": "Калибровка цвета — {0}", "keyboard": "клавиатура", "light bar": "световая полоса",
+  "red": "красный", "green": "зелёный", "blue": "синий", "white": "белый", "check": "проверка",
+  "yellow": "жёлтый", "cyan": "голубой", "magenta": "пурпурный", "orange": "оранжевый", "pink": "розовый",
+  "light blue": "светло-синий", "light green": "светло-зелёный", "purple": "фиолетовый",
+  "The {0} now shows pure {1} as it is sent. Which colour do you see? Pick the closest one.":
+    "Сейчас {0} показывает чистый {1} так, как он отправлен. Какой цвет вы видите? Выберите ближайший.",
+  "The {0} now shows white as it is sent. Pick the tint you see (optional: it balances white).":
+    "Сейчас {0} показывает белый так, как он отправлен. Выберите оттенок, который видите (необязательно: это баланс белого).",
+  "Calibration saved. Click a colour to check it on the {0}: it should look like the button.":
+    "Калибровка сохранена. Нажмите цвет, чтобы проверить его: {0} должна выглядеть как кнопка.",
+  "Exact colour:": "Точный цвет:", "Back": "Назад", "Skip": "Пропустить", "Next": "Далее", "Apply": "Применить", "Done": "Готово",
+  "Cancel": "Отмена", "Calibration saved": "Калибровка сохранена", "Calibration reset": "Калибровка сброшена",
+  "Forget the colour calibration of the {0}?": "Забыть калибровку цвета ({0})?",
+  "Calibration: set (see Colour calibration below)": "Калибровка: задана (см. «Калибровка цвета» ниже)",
+});

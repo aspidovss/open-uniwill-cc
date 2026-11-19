@@ -626,6 +626,11 @@ class Handler(BaseHTTPRequestHandler):
                 cfg = s.keyboard.set_fx_config(b)
                 s.emit("keyboard", s.keyboard.status())
                 return self._json(200, cfg)
+            elif path == "/api/lighting/calibrate":      # 1.8.2.5: {device, action, colour?, observed?, raw?}
+                r = s.keyboard.calibrate(str(b.get("device", "")), str(b.get("action", "")), b.get("colour"),
+                                         b.get("observed"), b.get("raw", True))
+                s.emit("keyboard", s.keyboard.status())
+                return self._json(200, r)
             elif path == "/api/keyboard/fx/calibrate":
                 r = s.keyboard.fx_calibrate(str(b.get("action", "")), b.get("observed"))
                 s.emit("keyboard", s.keyboard.status())

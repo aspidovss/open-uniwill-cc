@@ -3447,3 +3447,60 @@ class Lightbar7001(unittest.TestCase):
         self.assertRaises(ValueError, lb.set_zone, "hinge")
         self.assertRaises(ValueError, lb.set_zone, "front", "wave")
         self.assertEqual(lb.info()["protocol"], "7001")
+
+
+class ColourCalibration(unittest.TestCase):
+    """1.8.2.5: colour calibration by the three primaries (+ white) for every lighting device."""
+    def test_matrix(self):
+        from uwccd.lighting.calib import matrix, Calibration
+        from uwccd.lighting import fx
+        c = Calibration(matrix({"r": [0, 255, 0], "g": [255, 0, 0]}))          # red and green swapped
+        self.assertEqual(c.apply(255, 0, 0), (0, 255, 0))
+        self.assertEqual(c.apply(0, 255, 0), (255, 0, 0))
+        self.assertEqual(c.apply(255, 255, 255), (255, 255, 255))
+        m = matrix({"w": [255, 200, 255]})                                      # white only = BetterRGB gains
+        self.assertEqual([round(m[i][i] * 1000) for i in range(3)], fx.white_gains([255, 200, 255]))
+        c = Calibration(matrix({"b": [128, 0, 255]}))                          # blue bleeds into red
+        r, g, b = c.apply(0, 0, 255)
+        self.assertEqual((g, b), (0, 255))
+        self.assertLess(r, 255)
+        self.assertRaises(ValueError, matrix, {"r": [255, 0, 0], "g": [255, 0, 0]})
+        self.assertRaises(ValueError, matrix, {"r": [0, 0, 0]})
+        self.assertTrue(Calibration(matrix({"r": [255, 0, 0], "g": [0, 255, 0], "b": [0, 0, 255]})).identity)
+
+    def test_devices(self):
+        from uwccd.lighting.keyboard import KeyboardManager
+        from uwccd.ec import MockEC
+
+        class St(dict):
+            def get(self, k, d=None):
+                return dict.get(self, k, d)
+
+            def set(self, k, v):
+                self[k] = v
+        pf = type("P", (), {"project_id": 0x18, "rgb_lightbar": False})()
+        st = St(kb_fx={"gains": [1000, 800, 1000]})
+        km = KeyboardManager(MockEC(), pf, st, mock=True)
+        km.start()
+        self.assertIn("keyboard", km.calib_devices())
+        self.assertIn("lightbar", km.calib_devices())
+        # the old BetterRGB white gains became the keyboard's calibration
+        self.assertEqual(km.fx_config()["gains"], [1000, 1000, 1000])
+        self.assertEqual(km.rgb.calib.apply(255, 255, 255)[1] < 255, True)
+        lb = km.lb
+        zone = lb.zones[0]
+        km.lightbar(zone, effect="static", colors=[[0, 0, 255]])
+        km.calibrate("lightbar", "start")
+        self.assertIn("ff0000", "".join(x[1] for x in lb.log))                # raw red shown
+        km.calibrate("lightbar", "apply", observed={"r": [0, 255, 0], "g": [255, 0, 0]})
+        lb.log.clear()
+        km.calibrate("lightbar", "show", colour=[255, 0, 0], raw=False)
+        self.assertTrue(any(x[1].startswith("0014") and "00ff00" in x[1] for x in lb.log))   # sent as green
+        km.calibrate("lightbar", "end")
+        self.assertEqual(lb.saved[zone]["colors"], [[0, 0, 255]])           # the effect from before is back
+        self.assertIsNone(km.calib_status()["active"])
+        self.assertTrue(km.calib_status()["devices"]["lightbar"]["set"])
+        km.calibrate("lightbar", "reset")
+        self.assertIsNone(lb.calib)
+        self.assertRaises(ValueError, km.calibrate, "lightbar", "show", colour=[1, 2, 3])
+        self.assertRaises(ValueError, km.calibrate, "nothing", "start")
