@@ -49,6 +49,7 @@
 | `POST /api/module` | `{name, enabled}` — включить/выключить модуль службы; отвечает `{modules: [...]}` |
 | `POST /api/battery` | `{limit_up?, limit_down?, health_mode?}` |
 | `POST /api/lc/...` | СЖО: `scan`, `connect`, `disconnect`, `config` |
+| `POST /api/flydigi/...` | кулер Flydigi BS (1.8.2.7): `config` `{mode: curve/rpm/gear/stop/device, rpm, gear, level, curve, temp_source, hysteresis, min_change, ramp_up, ramp_down}`, `device` `{gear_light, power_on_start, smart_start_stop}`, `search` (BS1 по Bluetooth LE), `forget`, `refresh`; состояние — в `state.flydigi` |
 | `POST /api/afterburner` | `{action: "apply", slot}` и остальные действия карточки |
 
 Окно использует больше точек, чем в таблице; они работают, но в обещание пока не входят.
@@ -105,6 +106,7 @@ Server-sent events: каждая строка — `data: {"type": "<вид>", "d
 | `ac` | сменился источник питания `{online}` |
 | `overheat`, `overheat_boost` | температура держится выше предела / включён Fan Boost |
 | `lc` | СЖО `{event: connected / disconnected / flow_fault / hwoc, ...}` |
+| `flydigi` | кулер Flydigi BS `{event: connected / disconnected / state}` (1.8.2.7) |
 | `keyboard`, `kb_level` | состояние / уровень подсветки клавиатуры |
 | `load_rule` | сработало правило автоматики `{rule, mode, slot}` |
 | `update` | доступно обновление `{version, url, optional}` |
@@ -124,7 +126,7 @@ Server-sent events: каждая строка — `data: {"type": "<вид>", "d
 |---|---|
 | Разрешить внешний API | выкл.: внешний ключ отклоняется везде |
 | Доступ: **только чтение** | `GET /api/version`, `/api/state`, `/api/monitor`, `/api/history`, `/api/events`, `/api/langs`, `/api/lang/<код>` |
-| Доступ: **полный** | чтение + `POST /api/mode`, `/api/profile`, `/api/fanboost`, `/api/setting`, `/api/module`, `/api/battery`, `/api/lightbar`, `/api/keyboard/power`, `/level`, `/colour`, `/effect`, `/api/lc/...`, `/api/afterburner` |
+| Доступ: **полный** | чтение + `POST /api/mode`, `/api/profile`, `/api/fanboost`, `/api/setting`, `/api/module`, `/api/battery`, `/api/lightbar`, `/api/keyboard/power`, `/level`, `/colour`, `/effect`, `/api/lc/...`, `/api/flydigi/...`, `/api/afterburner` |
 | Ключ | `uwx_…`, показывается **один раз** при создании; служба хранит только его SHA-256. «Создать новый ключ» отзывает старый |
 | Доступ из локальной сети | второй приёмник на `0.0.0.0:<порт>` (по умолчанию **47322**) |
 | Разрешённые адреса | IPv4-адреса или сети (`192.168.1.0/24`, `192.168.1.20`); остальным — `403` |

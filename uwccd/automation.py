@@ -293,7 +293,15 @@ class Sampler(threading.Thread):
                 "cf": m["fans"].get("cpu_rpm"), "gf": m["fans"].get("gpu_rpm"),
                 "cm": m["cpu"].get("mhz"), "gm": g.get("core_mhz"),
                 "lf": lc.get("fan") if lc.get("connected") else None,
-                "lp": lc.get("pump") if lc.get("connected") else None}
+                "lp": lc.get("pump") if lc.get("connected") else None,
+                "fr": self._fd_rpm()}
+
+    def _fd_rpm(self):
+        fd = getattr(self.svc, "flydigi", None)
+        try:
+            return fd.rpm() if fd is not None else None
+        except Exception:  # noqa: BLE001
+            return None
 
     def _overheat(self, m):
         st = self.svc.settings_store
@@ -346,7 +354,8 @@ EXPORT_COLUMNS = [("t", "time"), ("ct", "cpu_temp_c"), ("gt", "gpu_temp_c"), ("c
                   ("gl", "gpu_load_pct"), ("cp", "cpu_power_w"), ("gp", "gpu_power_w"), ("tp", "cpu_gpu_power_w"),
                   ("bp", "battery_discharge_w"), ("pl1", "cpu_pl1_w"), ("pl2", "cpu_pl2_w"), ("pl4", "cpu_pl4_w"),
                   ("gpl", "gpu_power_limit_w"), ("cm", "cpu_clock_mhz"), ("gm", "gpu_clock_mhz"), ("cf", "cpu_fan_rpm"),
-                  ("gf", "gpu_fan_rpm"), ("lf", "cooler_fan_pct"), ("lp", "cooler_pump_v")]
+                  ("gf", "gpu_fan_rpm"), ("lf", "cooler_fan_pct"), ("lp", "cooler_pump_v"),
+                  ("fr", "flydigi_fan_rpm")]
 
 
 def export_history(points, fmt="csv"):
@@ -493,9 +502,11 @@ LOAD_METRICS = {                     # key -> (unit, max value)
     "saver": ("", 1),                # Windows battery saver: op "=", 1 on / 0 off
     "mode": ("", 3),                 # the laptop's mode: op "=" / "!=", 0 office / 1 gaming / 2 turbo / 3 custom
     "lc_profile": ("", 0),           # the liquid cooler profile in use: op "=" / "!=", its id (text)
+    "fd_rpm": ("rpm", 6000),         # Flydigi BS cooler: its fan speed (1.8.2.7); unknown while not connected
+    "fd_connected": ("", 1),         # Flydigi BS cooler connected: op "=", 1 yes / 0 no
     "rule": ("", 12),                # another rule is on (its conditions held long enough, or it is active):
 }                                    #   op "=" on / "!=" not on, value its number 1..12, 0 = any other rule
-EQ_METRICS = ("ac", "sys_profile", "saver")
+EQ_METRICS = ("ac", "sys_profile", "saver", "fd_connected")
 STATE_METRICS = ("mode", "lc_profile", "rule")
 LOAD_LOG_LEN = 100                  # what the rules did: the last 100 events
 MAX_RULE_S = 86400                  # hold / return times up to 24 h
@@ -511,6 +522,7 @@ def rule_avg(rule):
     return rule.get("avg", True) is not False and rule.get("hold_unit", "s") != "s"
 BACK_MODES = ("never", "while", "after")    # never return / while the conditions hold / N after they stop
 LC_RULE_MODES = ("auto", "laptop", "ec", "manual", "high", "medium", "low", "off")
+FD_RULE_MODES = ("curve", "rpm", "gear", "stop", "device")      # Flydigi BS cooler (1.8.2.7)
 MAX_LOAD_RULES = 12
 
 
@@ -548,7 +560,7 @@ def load_metric(m, key):
         return SYS_PROFILES.index(p) if p in SYS_PROFILES else None
     if key == "saver":
         return None if m.get("saver") is None else (1 if m.get("saver") else 0)
-    if key in ("mode", "lc_profile"):
+    if key in ("mode", "lc_profile", "fd_rpm", "fd_connected"):
         return m.get(key)
     return None
 
@@ -624,11 +636,25 @@ def check_load_rules(rules):
         fb = "on" if fb is True else "keep" if fb in (False, None, "") else str(fb)
         if fb not in ("keep", "on", "off"):
             raise ValueError(f"rule {i + 1}: fan_boost keep | on | off")
-        if mode is None and lcp is None and lcm is None and fb == "keep":
-            raise ValueError(f"rule {i + 1}: nothing to switch (mode, Fan Boost or the liquid cooler)")
+        fdm = r.get("fd_mode")
+        fdm = None if fdm in (None, "", "keep") else str(fdm)
+        if fdm is not None and fdm not in FD_RULE_MODES:
+            raise ValueError(f"rule {i + 1}: Flydigi mode {' | '.join(FD_RULE_MODES)}")
+        fd_rpm = fd_gear = fd_level = None
+        if fdm == "rpm":
+            fd_rpm = int(r.get("fd_rpm", 2000))
+            if not 0 <= fd_rpm <= 5000:
+                raise ValueError(f"rule {i + 1}: Flydigi RPM 0..5000")
+        if fdm == "gear":
+            fd_gear, fd_level = int(r.get("fd_gear", 2)), str(r.get("fd_level") or "mid")
+            if not 1 <= fd_gear <= 4 or fd_level not in ("low", "mid", "high"):
+                raise ValueError(f"rule {i + 1}: Flydigi gear 1..4, level low | mid | high")
+        if mode is None and lcp is None and lcm is None and fb == "keep" and fdm is None:
+            raise ValueError(f"rule {i + 1}: nothing to switch (mode, Fan Boost, the liquid cooler or the Flydigi cooler)")
         out.append({"enabled": bool(r.get("enabled", True)), "name": str(r.get("name") or "")[:40],
                     "conditions": cc, "join": join, "hold": hold, "mode": mode, "slot": slot if mode is not None else None,
                     "fan_boost": fb, "lc_mode": lcm, "lc_profile": lcp, "avg": r.get("avg", True) is not False,
+                    "fd_mode": fdm, "fd_rpm": fd_rpm, "fd_gear": fd_gear, "fd_level": fd_level,
                     "back": back, "back_after": back_after, **units})
     return out
 
@@ -665,7 +691,7 @@ class LoadRules:
     def _note(self, what, r, now=None, **kw):
         self.log.append({"t": round(now or time.time()), "what": what, "rule": r.get("name") or "",
                          "mode": kw.get("mode"), "slot": kw.get("slot"), "lc_profile": kw.get("lc_profile"),
-                         "lc_mode": kw.get("lc_mode"), "fan_boost": kw.get("fan_boost")})
+                         "lc_mode": kw.get("lc_mode"), "fan_boost": kw.get("fan_boost"), "fd_mode": kw.get("fd_mode")})
 
     def clear_log(self):
         with self.lock:
@@ -705,7 +731,19 @@ class LoadRules:
             out["mode"] = None
         lc = self._lc()
         out["lc_profile"] = lc.cfg.get("profile") if lc is not None else None
+        fd = self._fd()
+        fs = fd.status() if fd is not None else {}
+        out["fd_connected"] = 1 if fs.get("connected") else 0
+        out["fd_rpm"] = fs.get("current_rpm") if fs.get("connected") else None
         return out
+
+    def _fd(self):
+        """The Flydigi BS cooler, None when its module is off (1.8.2.7)."""
+        fd = getattr(self.svc, "flydigi", None)
+        mods = getattr(self.svc, "modules", None)
+        if fd is None or (mods is not None and not mods.enabled("flydigi")):
+            return None
+        return fd
 
     # -- what a rule can change ----------------------------------------------------------------------
     def _current(self):
@@ -733,6 +771,9 @@ class LoadRules:
             snap["lc_mode"] = lc.cfg.get("mode")
             if hasattr(lc, "curves_snapshot"):
                 snap["lc_curves"] = lc.curves_snapshot()
+        fd = self._fd()
+        if fd is not None:
+            snap["fd"] = fd.snapshot()
         return snap
 
     def _apply(self, mode, slot, why):
@@ -795,6 +836,33 @@ class LoadRules:
             log.warning("load rule: liquid cooler: %s", e)
         return out
 
+    @staticmethod
+    def _fd_want(r):
+        """What a rule sets on the Flydigi cooler: {mode, rpm / gear, level}."""
+        m = r.get("fd_mode")
+        if not m:
+            return {}
+        want = {"mode": m}
+        if m == "rpm":
+            want["rpm"] = r.get("fd_rpm") if r.get("fd_rpm") is not None else 2000
+        if m == "gear":
+            want["gear"], want["level"] = r.get("fd_gear") or 2, r.get("fd_level") or "mid"
+        return want
+
+    def _apply_fd(self, r):
+        """The Flydigi BS cooler's mode with the rule (1.8.2.7); returns what was set."""
+        fd, want = self._fd(), self._fd_want(r)
+        if fd is None or not want:
+            return {}
+        try:
+            if any(fd.cfg.get(k) != v for k, v in want.items()):
+                fd.configure(want)
+                log.info("load rule: Flydigi cooler %s", want)
+        except (KeyError, ValueError) as e:
+            log.warning("load rule: Flydigi cooler: %s", e)
+            return {}
+        return {"fd_mode": want["mode"], "fd": want}
+
     def _activate(self, i, r, now):
         if self.active is None:
             self.saved = self._snapshot()
@@ -810,10 +878,11 @@ class LoadRules:
             self._fan_boost(fb == "on")
             did["fan_boost"] = fb == "on"
         did.update(self._apply_lc(r))
+        did.update(self._apply_fd(r))
         self.did.update(did)
         self.active, self.false_since = i, None
         self._note("on", r, now, mode=r.get("mode"), slot=r.get("slot"), lc_profile=did.get("lc_profile"),
-                   lc_mode=did.get("lc_mode"), fan_boost=did.get("fan_boost"))
+                   lc_mode=did.get("lc_mode"), fan_boost=did.get("fan_boost"), fd_mode=did.get("fd_mode"))
 
     def _return(self, r, now):
         """Put back what the rules changed — each part only if it is still what the rule set."""
@@ -839,6 +908,14 @@ class LoadRules:
                     back["lc_mode"] = sv["lc_mode"]
             except (KeyError, ValueError) as e:
                 log.warning("load rule: liquid cooler back: %s", e)
+        fd = self._fd()
+        if fd is not None and did.get("fd") and sv.get("fd"):
+            try:
+                if all(fd.cfg.get(k) == v for k, v in did["fd"].items()):       # nobody changed it meanwhile
+                    fd.restore(sv["fd"])
+                    back["fd_mode"] = sv["fd"].get("mode")
+            except (KeyError, ValueError) as e:
+                log.warning("load rule: Flydigi cooler back: %s", e)
         self._note("back" if back else "end", r, now, **back)
         self.active, self.saved, self.did = None, None, {}
 
@@ -913,4 +990,4 @@ class LoadRules:
                     "back_in": (round(self.rules()[self.active]["back_after"] - (now - self.false_since))
                                 if self.active is not None and self.false_since and self.active < len(self.rules())
                                 and self.rules()[self.active].get("back") in ("after", True) else None),
-                    "lc_modes": list(LC_RULE_MODES)}
+                    "lc_modes": list(LC_RULE_MODES), "fd_modes": list(FD_RULE_MODES)}

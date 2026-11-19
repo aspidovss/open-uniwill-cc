@@ -158,16 +158,17 @@ log of what the rules did) — see `uwccctl help rules`.
 
 | Rule field (JSON) | Values |
 |---|---|
-| `conditions` | 1..3 of `{"metric", "op", "value"}`; `metric`: `cpu_power` `gpu_power` `total_power` (W), `cpu_temp` `gpu_temp` (°C), `cpu_load` `gpu_load` `ram_load` `battery` (%), `ram_used` (GB, memory in use), `ac` (1 mains / 0 battery), `sys_profile` (0 power saver / 1 balanced / 2 performance), `saver` (Windows battery saver 1 / 0), `mode` (0..3, the laptop's mode), `lc_profile` (a cooler profile id), `rule` (1..12: that rule is on — its conditions held long enough or it is active; 0 = any other rule); `op` `>` / `<` (`=` for `ac`, `sys_profile`, `saver`; `=` / `!=` for `mode`, `lc_profile`, `rule`) |
+| `conditions` | 1..3 of `{"metric", "op", "value"}`; `metric`: `cpu_power` `gpu_power` `total_power` (W), `cpu_temp` `gpu_temp` (°C), `cpu_load` `gpu_load` `ram_load` `battery` (%), `ram_used` (GB, memory in use), `ac` (1 mains / 0 battery), `sys_profile` (0 power saver / 1 balanced / 2 performance), `saver` (Windows battery saver 1 / 0), `mode` (0..3, the laptop's mode), `lc_profile` (a cooler profile id), `fd_rpm` (Flydigi fan speed, rpm), `fd_connected` (Flydigi cooler 1 connected / 0 not), `rule` (1..12: that rule is on — its conditions held long enough or it is active; 0 = any other rule); `op` `>` / `<` (`=` for `ac`, `sys_profile`, `saver`, `fd_connected`; `=` / `!=` for `mode`, `lc_profile`, `rule`) |
 | `join` | `and` / `or` |
 | `hold`, `hold_unit` | seconds 0..86400 (0 = at once); `s` / `min` / `h` — only how the window shows it |
 | `mode`, `slot` | 0 office, 1 gaming, 2 turbo, 3 custom, or `null` = keep the mode; slot 0..4 or `null` = the current one. Clevo: 0 silent, 1 entertainment, 2 performance, 3 power saving; Leishen: 0 office, 1 gaming, 2 high performance (no slots) |
 | `fan_boost` | `keep` / `on` / `off` |
 | `lc_mode` | `auto` `laptop` `ec` `manual` `high` `medium` `low` `off`, or `null` = keep |
 | `lc_profile` | cooler profile ID, or `null` = keep |
+| `fd_mode`, `fd_rpm`, `fd_gear`, `fd_level` | Flydigi BS cooler (1.8.2.7): `curve` `rpm` `gear` `stop` `device`, or `null` = keep; `rpm` 0..5000 for `rpm`; gear 1..4 and `low` / `mid` / `high` for `gear` |
 | `back`, `back_after`, `back_unit` | `never` (stay), `while` (return as soon as the conditions stop), `after` (return when they have not held for `back_after` s) |
 
-A rule must change at least one of mode, Fan Boost, cooler mode or cooler profile. Older files (`back: true/false`,
+A rule must change at least one of mode, Fan Boost, cooler mode, cooler profile or the Flydigi cooler's mode. Older files (`back: true/false`,
 `fan_boost: true/false`) are still read.
 
 ## Liquid cooler
@@ -189,6 +190,18 @@ A rule must change at least one of mode, Fan Boost, cooler mode or cooler profil
 | `lc idle on\|off [off_below= off_after= on_above= on_after= min_run=]` | stop the pump when cool |
 | `lc rgb RRGGBB [MODE]` / `lc rgb off` | static, breathe, rainbow, breathe_rainbow, spiral, rotating_rainbow, color_wave |
 | `lc prime [stop]` / `lc suspend` | filling cycle (~68 s) / sleep |
+
+## Flydigi BS cooler
+
+| Command | |
+|---|---|
+| `flydigi [status]` | state: model, connection, mode, fan speed and target |
+| `flydigi mode curve\|rpm\|gear\|stop\|device` | temperature curve / fixed speed / gear / 0 rpm / the cooler's own buttons |
+| `flydigi rpm N` / `flydigi gear 1-4 [low\|mid\|high]` | fixed speed 0..5000 / a gear with THRM's preset speed |
+| `flydigi curve [T:RPM ...\|reset]` | show / set the curve (2..20 points) |
+| `flydigi set KEY VALUE` | `temp_source max\|cpu\|gpu`, `hysteresis` 0..8, `min_change` 20..400, `ramp_up` / `ramp_down` 50..1200 |
+| `flydigi light on\|off` / `power-on-start on\|off` / `smart-stop off\|immediate\|delayed` | settings stored in the cooler (BS2 and later) |
+| `flydigi search` / `flydigi forget` | BS1: find it by Bluetooth LE / forget it |
 
 ## Service
 

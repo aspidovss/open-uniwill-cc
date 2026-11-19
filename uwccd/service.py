@@ -111,6 +111,8 @@ class Service:
         self.liquid = LiquidCooler(self.ec, self.hottest_temp, self.emit, mock=mock,
                                    mode_fn=lambda: self.power.option.get("OperatingMode") if self.fan_control else None)
         self.liquid.no_temps = lambda: self.monitor_level() == "off"
+        from .flydigi.cooler import FlydigiCooler
+        self.flydigi = FlydigiCooler(self.hottest_temp, self.emit, mock=mock)     # Flydigi BS coolers (1.8.2.7)
         self.sampler = Sampler(self)
         from .selfcheck import SelfCheck
         self.selfcheck = SelfCheck(self)
@@ -147,6 +149,10 @@ class Service:
         m.register("lighting", "Keyboard and light bar", available=True, live=False,
                    running=lambda: self.keyboard.kind not in (None, "none"),
                    note="backlight, RGB effects; off: the keyboard keeps its firmware lighting")
+        fd = self.flydigi
+        m.register("flydigi", "Flydigi BS cooler", start=fd.start, stop=fd.stop, running=fd.thread_running,
+                   available=True,
+                   note="BS1 / BS2 / BS2 Pro / BS3 / BS3 Pro; control logic from THRM (MIT)")
         m.register("clevo", "Control Center 3.0 / Clevo", available=self.clevo.present, live=False,
                    running=lambda: self.clevo.present)
         m.register("leishen", "Leishen / Thunderobot", available=self.leishen.present, live=False,
@@ -270,6 +276,8 @@ class Service:
             t.start()
         if self.modules.enabled("liquid"):
             self.liquid.start()
+        if self.modules.enabled("flydigi"):
+            self.flydigi.start()
         from .detect import Detector
         self.detect = Detector(self)             # which platform: shown once, at the first start
         self.detect.start()
@@ -304,6 +312,7 @@ class Service:
         t._pending = None
         t.wait_idle(20)                    # a fan curve still being written in the background
         self.liquid.stop()
+        self.flydigi.stop()
         self.sampler.save_day()
         for t in self.threads:
             getattr(t, "stop").set()
@@ -378,6 +387,8 @@ class Service:
             self.settings.start()
             self.battery.start()
             self.liquid.resume()
+            if self.modules.enabled("flydigi"):
+                self.flydigi.resume()
             lb = getattr(self.keyboard, "lb", None)
             if lb:                                         # 1.8.2.4: the 7001 bar needs its "on" again
                 try:
@@ -445,6 +456,7 @@ class Service:
             "keyboard": self.keyboard.status(),
             "app_binding": self.settings_store.get("app_binding", []),
             "liquid": self.liquid.status(),
+            "flydigi": self.flydigi.status(),
             "hwoc": self.hwoc.status() if getattr(self, "hwoc", None) else None,
             "automation": {k: auto_setting(self.settings_store, k) for k in AUTO_DEFAULTS},
             "sysprofile": self.sysprof.status(),

@@ -27,6 +27,7 @@ Overview
   rules [list|export FILE|import FILE|clear|enable N|disable N]   mode by power / temperature / load
   restore --yes                  factory profiles and fan tables
   lc ...                         liquid cooler (Bluetooth): status, scan, connect, mode, manual, tiers, ...
+  flydigi ...                    Flydigi BS cooler: status, mode, rpm, gear, curve, light, ... (uwccctl help flydigi)
   history [csv|csv-excel|json] [1m|5m|15m|1h|24h] [FILE]
   export fans|all FILE  /  import FILE [fans,profiles,settings] [--force]
   report [FILE] [--private serial,uuid,mac,names,apps] [--sections ...] [--full]
@@ -324,6 +325,22 @@ HELP = {
         "uwccctl lc rgb off\n"
         "uwccctl lc prime [stop]                  coolant filling cycle (~68 s)\n"
         "uwccctl lc suspend                       put the cooler to sleep (system-sleep hook)"),
+    "flydigi": (
+        "uwccctl flydigi [status]                 state of the Flydigi BS cooler (BS1 / BS2 / BS2 Pro / BS3 / BS3 Pro)\n"
+        "uwccctl flydigi mode curve|rpm|gear|stop|device\n"
+        "      curve   RPM from the temperature curve      rpm   a fixed RPM      gear   a gear with its preset\n"
+        "      stop    0 RPM                               device  the program sends nothing (cooler's own buttons)\n"
+        "uwccctl flydigi rpm N                    fixed RPM 0..5000 (switches to mode rpm)\n"
+        "uwccctl flydigi gear 1-4 [low|mid|high]  quiet / standard / performance / extreme (switches to mode gear)\n"
+        "uwccctl flydigi curve [T:RPM ...|reset]  show / set the temperature curve, e.g. 40:1400 60:2300 80:3500 90:4000\n"
+        "uwccctl flydigi set KEY VALUE            temp_source max|cpu|gpu, hysteresis 0..8, min_change 20..400,\n"
+        "                                         ramp_up / ramp_down 50..1200 RPM per step\n"
+        "uwccctl flydigi light on|off             gear light (stored in the cooler)\n"
+        "uwccctl flydigi power-on-start on|off    start with power (stored in the cooler)\n"
+        "uwccctl flydigi smart-stop off|immediate|delayed   smart start/stop (stored in the cooler)\n"
+        "uwccctl flydigi search | forget          BS1: find it by Bluetooth LE / forget it\n"
+        "  BS2 / BS2 Pro / BS3 / BS3 Pro: pair the cooler in the system's Bluetooth settings (or plug it in by USB);\n"
+        "  the service finds it by itself. The service module \"flydigi\" must be on (uwccctl modules flydigi on)."),
     "caps": "uwccctl caps [--json]\n  What this laptop has, one line per function: available, source (ec / profile /\n"
             "  driver / os / none) and a detail. The same list as Information -> Functions on this laptop.",
     "modules": "uwccctl modules [NAME on|off]\n  Switchable parts of the service (liquid, afterburner, automation, lighting, ...).\n"
@@ -1584,6 +1601,70 @@ def cmd_lc(a):
     out(lc, lambda d: T("lc") + " " + lc_line(d))
 
 
+# -- Flydigi BS cooler (1.8.2.7) -------------------------------------------------------------------
+def fd_line(f):
+    c = f["config"]
+    if not f["connected"]:
+        return "not connected" + (f" ({f['error']})" if f.get("error") else "") + \
+            (f", BS1 remembered: {c['ble_address']}" if c.get("ble_address") else "")
+    mode = c["mode"] + (f" {c['rpm']} RPM" if c["mode"] == "rpm" else
+                        f" {c['gear']} {c['level']}" if c["mode"] == "gear" else "")
+    fw = (f.get("settings") or {}).get("firmware")
+    return (f"{f['model']} ({f['transport']}{', fw ' + fw if fw else ''}) · mode {mode} · "
+            f"fan {f['current_rpm'] if f['current_rpm'] is not None else '—'} RPM"
+            f" (target {f['target_rpm'] if f['target_rpm'] is not None else '—'})"
+            + (f" · {f['temp']}°C" if f.get("temp") is not None else ""))
+
+
+def cmd_flydigi(a):
+    op = a[0] if a else "status"
+    if op == "status":
+        return out(call("state")["flydigi"], lambda d: "Flydigi: " + fd_line(d))
+    if op == "mode" and a[1:]:
+        call("flydigi/config", {"mode": a[1]})
+    elif op == "rpm" and a[1:]:
+        call("flydigi/config", {"mode": "rpm", "rpm": num(a[1], "flydigi")})
+    elif op == "gear" and a[1:]:
+        body = {"mode": "gear", "gear": num(a[1], "flydigi")}
+        if a[2:]:
+            body["level"] = a[2]
+        call("flydigi/config", body)
+    elif op == "curve":
+        if not a[1:]:
+            f = call("state")["flydigi"]
+            return out(f["config"]["curve"], lambda d: "  ".join(f"{t:g}°C {r}" for t, r in d))
+        if a[1] == "reset":
+            call("flydigi/config", {"curve": None})
+        else:
+            try:
+                pts = [[float(x.split(":")[0]), int(x.split(":")[1])] for x in a[1:]]
+            except (ValueError, IndexError):
+                usage("flydigi")
+            call("flydigi/config", {"curve": pts})
+    elif op == "set" and len(a) == 3:
+        k, v = a[1], a[2]
+        if k == "temp_source":
+            call("flydigi/config", {k: v})
+        elif k in ("hysteresis", "min_change", "ramp_up", "ramp_down"):
+            call("flydigi/config", {k: num(v, "flydigi")})
+        else:
+            usage("flydigi")
+    elif op == "light" and a[1:]:
+        call("flydigi/device", {"gear_light": onoff(a[1], "flydigi")})
+    elif op == "power-on-start" and a[1:]:
+        call("flydigi/device", {"power_on_start": onoff(a[1], "flydigi")})
+    elif op == "smart-stop" and a[1:]:
+        call("flydigi/device", {"smart_start_stop": a[1]})
+    elif op == "search":
+        r = call("flydigi/search", {}, timeout=60)
+        return out(r, lambda d: "Flydigi: " + fd_line(d["status"]))
+    elif op == "forget":
+        call("flydigi/forget", {})
+    else:
+        usage("flydigi")
+    out(call("state")["flydigi"], lambda d: "Flydigi: " + fd_line(d))
+
+
 CURVE_KEYS = ("common", "office", "gaming", "turbo", "custom")
 
 
@@ -1852,6 +1933,7 @@ def main(a):
         "apps": lambda: cmd_apps(rest),
         "restore": lambda: cmd_restore(rest),
         "lc": lambda: cmd_lc(rest),
+        "flydigi": lambda: cmd_flydigi(rest),
         "history": lambda: cmd_history(rest),
         "version": lambda: cmd_version(cmd, rest),
         "update": lambda: cmd_version(cmd, rest),

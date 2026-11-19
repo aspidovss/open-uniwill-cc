@@ -426,6 +426,28 @@ mode_on_battery
 .TP
 .B lc suspend
 Перевести систему охлаждения в сон (используется при засыпании системы).
+.SS Кулер Flydigi BS
+.TP
+.BR "flydigi " [ status ]
+Состояние кулера Flydigi BS1 / BS2 / BS2 Pro / BS3 / BS3 Pro.
+.TP
+.BR "flydigi mode " curve | rpm | gear | stop | device
+Кривая по температуре, постоянные обороты, передача, 0 об/мин или кнопки самого кулера.
+.TP
+\fBflydigi rpm\fR \fIN\fR | \fBflydigi gear\fR \fI1\-4\fR [low|mid|high]
+Постоянные обороты 0..5000 об/мин или передача с заданными оборотами.
+.TP
+\fBflydigi curve\fR [\fIT:RPM\fR ...|reset]
+Показать или задать кривую по температуре.
+.TP
+\fBflydigi set\fR \fIKEY VALUE\fR
+temp_source max|cpu|gpu, hysteresis, min_change, ramp_up, ramp_down.
+.TP
+\fBflydigi light\fR on|off | \fBpower\-on\-start\fR on|off | \fBsmart\-stop\fR off|immediate|delayed
+Настройки в памяти кулера.
+.TP
+.BR "flydigi search" " | " "flydigi forget"
+BS1: найти по Bluetooth LE / забыть.
 .SS Служба
 .TP
 .BR "export fans" | all " [\fIФАЙЛ\fR]"

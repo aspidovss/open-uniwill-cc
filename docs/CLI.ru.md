@@ -159,16 +159,17 @@ Control Center 3.0 / Clevo (экспериментально): `uwccctl clevo �
 
 | Поле правила (JSON) | Значения |
 |---|---|
-| `conditions` | 1..3 условия `{"metric", "op", "value"}`; `metric`: `cpu_power` `gpu_power` `total_power` (Вт), `cpu_temp` `gpu_temp` (°C), `cpu_load` `gpu_load` `ram_load` `battery` (%), `ram_used` (ГБ, занятая память), `ac` (1 сеть / 0 батарея), `sys_profile` (0 энергосбережение / 1 сбалансированный / 2 производительность), `saver` (экономия заряда Windows 1 / 0), `mode` (0..3, режим ноутбука), `lc_profile` (ID профиля СЖО), `rule` (1..12: правило сработало — его условия держатся нужное время или оно активно; 0 = любое другое правило); `op` `>` / `<` (`=` для `ac`, `sys_profile`, `saver`; `=` / `!=` для `mode`, `lc_profile`, `rule`) |
+| `conditions` | 1..3 условия `{"metric", "op", "value"}`; `metric`: `cpu_power` `gpu_power` `total_power` (Вт), `cpu_temp` `gpu_temp` (°C), `cpu_load` `gpu_load` `ram_load` `battery` (%), `ram_used` (ГБ, занятая память), `ac` (1 сеть / 0 батарея), `sys_profile` (0 энергосбережение / 1 сбалансированный / 2 производительность), `saver` (экономия заряда Windows 1 / 0), `mode` (0..3, режим ноутбука), `lc_profile` (ID профиля СЖО), `fd_rpm` (обороты Flydigi, об/мин), `fd_connected` (кулер Flydigi: 1 подключён / 0 нет), `rule` (1..12: правило сработало — его условия держатся нужное время или оно активно; 0 = любое другое правило); `op` `>` / `<` (`=` для `ac`, `sys_profile`, `saver`, `fd_connected`; `=` / `!=` для `mode`, `lc_profile`, `rule`) |
 | `join` | `and` / `or` |
 | `hold`, `hold_unit` | секунды 0..86400 (0 = сразу); `s` / `min` / `h` — только то, как время показывает окно |
 | `mode`, `slot` | 0 office, 1 gaming, 2 turbo, 3 custom или `null` = не менять режим; слот 0..4 или `null` = текущий. Clevo: 0 тихий, 1 развлечения, 2 производительность, 3 энергосбережение; Leishen: 0 офисный, 1 игровой, 2 высокая производительность (без слотов) |
 | `fan_boost` | `keep` / `on` / `off` (не менять / включить / выключить) |
 | `lc_mode` | `auto` `laptop` `ec` `manual` `high` `medium` `low` `off` или `null` = не менять |
 | `lc_profile` | ID профиля охладителя или `null` = не менять |
+| `fd_mode`, `fd_rpm`, `fd_gear`, `fd_level` | кулер Flydigi BS (1.8.2.7): `curve` `rpm` `gear` `stop` `device` или `null` = не менять; `rpm` 0..5000 для `rpm`; передача 1..4 и `low` / `mid` / `high` для `gear` |
 | `back`, `back_after`, `back_unit` | `never` (не возвращать), `while` (вернуть, как только условие перестанет выполняться), `after` (вернуть, когда условие не выполняется `back_after` с) |
 
-Правило должно менять хотя бы что-то одно: режим, Fan Boost, режим или профиль охладителя. Старые файлы
+Правило должно менять хотя бы что-то одно: режим, Fan Boost, режим или профиль охладителя, режим кулера Flydigi. Старые файлы
 (`back: true/false`, `fan_boost: true/false`) по-прежнему читаются.
 
 ## Водяное охлаждение
@@ -190,6 +191,18 @@ Control Center 3.0 / Clevo (экспериментально): `uwccctl clevo �
 | `lc idle on\|off [off_below= off_after= on_above= on_after= min_run=]` | останавливать помпу при низкой температуре |
 | `lc rgb RRGGBB [РЕЖИМ]` / `lc rgb off` | static, breathe, rainbow, breathe_rainbow, spiral, rotating_rainbow, color_wave |
 | `lc prime [stop]` / `lc suspend` | заполнение (~68 с) / сон |
+
+## Кулер Flydigi BS
+
+| Команда | |
+|---|---|
+| `flydigi [status]` | состояние: модель, подключение, режим, обороты и цель |
+| `flydigi mode curve\|rpm\|gear\|stop\|device` | кривая по температуре / постоянные обороты / передача / 0 об/мин / кнопки кулера |
+| `flydigi rpm N` / `flydigi gear 1-4 [low\|mid\|high]` | постоянные обороты 0..5000 / передача с оборотами THRM |
+| `flydigi curve [T:RPM ...\|reset]` | показать / задать кривую (2..20 точек) |
+| `flydigi set KEY VALUE` | `temp_source max\|cpu\|gpu`, `hysteresis` 0..8, `min_change` 20..400, `ramp_up` / `ramp_down` 50..1200 |
+| `flydigi light on\|off` / `power-on-start on\|off` / `smart-stop off\|immediate\|delayed` | настройки в памяти кулера (BS2 и новее) |
+| `flydigi search` / `flydigi forget` | BS1: найти по Bluetooth LE / забыть |
 
 ## Служба
 

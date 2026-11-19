@@ -13,6 +13,7 @@ here only to describe what the software works with.
 | [`kernel/`](kernel/) (Linux kernel module `uwcc`) | [GPL-2.0](kernel/LICENSE) — required for Linux kernel modules |
 | [`proprietary/`](proprietary/) (OEM ACPI driver, factory fan tables) | [proprietary, all rights reserved by their owners](proprietary/LICENSE) |
 | [`uwccd/lighting/oem/`](uwccd/lighting/oem/) (LED colour correction, software keyboard effects) | [proprietary, all rights reserved by their owners](uwccd/lighting/oem/LICENSE) |
+| [`uwccd/flydigi/`](uwccd/flydigi/) (Flydigi BS coolers) | MIT — ported from THRM, Copyright (c) 2025 Tianli ([notice](THIRD_PARTY_LICENSES.txt)) |
 | [`uwccd/lighting/fx.py`](uwccd/lighting/fx.py) (BetterRGB keyboard effects) | MIT — derived from BetterRGB ITE8291 Adaptive / Better RGB, Copyright (c) 2026 TheYamo, Copyright (c) 2026 ZavierChen and BetterRGB Adaptive contributors ([notice](THIRD_PARTY_LICENSES.txt)) |
 
 Third-party libraries bundled with the Windows build: [THIRD_PARTY_LICENSES.txt](THIRD_PARTY_LICENSES.txt).
@@ -36,6 +37,8 @@ Third-party libraries bundled with the Windows build: [THIRD_PARTY_LICENSES.txt]
 | [Liddo-kun/MechControl-RE](https://github.com/Liddo-kun/MechControl-RE) | not specified | Facts from its research notes, retold in our own words: further EC registers of MECHREVO Yaoshi X6AR55xY (project `0x1A`) and the list of Uniwill project numbers ([docs/EC/Registers.md](docs/EC/Registers.md) §10, [docs/EC/Platforms.md](docs/EC/Platforms.md)). No code, profiles, fan tables or other files copied. |
 | [faintonce/open-revo](https://github.com/faintonce/open-revo) | MIT | Ideas: custom performance mode, monitoring history, automation rules. No code copied. |
 | [ZavierChen/BetterRGB-ITE8291-Adaptive](https://github.com/ZavierChen/BetterRGB-ITE8291-Adaptive) (from [EpicYamo/Better-RGB-for-Tongfang-ITE8291](https://github.com/EpicYamo/Better-RGB-for-Tongfang-ITE8291)) | MIT | The BetterRGB keyboard effects, transitions, white calibration, top-row bar and frame pacing — rewritten in Python in `uwccd/lighting/fx.py`. Copyright (c) 2026 TheYamo, (c) 2026 ZavierChen and contributors; their MIT notice is kept in [THIRD_PARTY_LICENSES.txt](THIRD_PARTY_LICENSES.txt). |
+
+| [TIANLI0/THRM](https://github.com/TIANLI0/THRM) | MIT | The Flydigi BS cooler protocol and its control and pairing logic — ported from Go to Python in `uwccd/flydigi/` with the same commands, sequences, timings and safety checks (each function names the THRM function it comes from). Copyright (c) 2025 Tianli; the MIT notice is kept in [THIRD_PARTY_LICENSES.txt](THIRD_PARTY_LICENSES.txt). |
 
 Thank you to all of them — and to everyone who contributed code or sent reports: [CONTRIBUTORS.md](CONTRIBUTORS.md).
 

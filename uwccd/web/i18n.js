@@ -1241,3 +1241,42 @@ Object.assign(RU, {
   "Forget the colour calibration of the {0}?": "Забыть калибровку цвета ({0})?",
   "Calibration: set (see Colour calibration below)": "Калибровка: задана (см. «Калибровка цвета» ниже)",
 });
+
+// 1.8.2.7: Flydigi BS cooler
+Object.assign(RU, {
+  "Flydigi BS": "Flydigi BS", "Flydigi BS cooler": "Кулер Flydigi BS",
+  "Flydigi BS1, BS2, BS2 Pro, BS3 and BS3 Pro laptop coolers": "Охлаждающие подставки Flydigi BS1, BS2, BS2 Pro, BS3 и BS3 Pro",
+  "Search BS1 (Bluetooth LE)": "Найти BS1 (Bluetooth LE)", "Forget BS1": "Забыть BS1",
+  "BS2, BS2 Pro, BS3, BS3 Pro: pair the cooler once in the system's Bluetooth settings or connect it by USB — the program finds it by itself. BS1: connect it by USB, or press Search BS1 with the cooler switched on.":
+    "BS2, BS2 Pro, BS3, BS3 Pro: один раз выполните сопряжение кулера в настройках Bluetooth системы или подключите его по USB — программа найдёт его сама. BS1: подключите по USB или нажмите «Найти BS1», включив кулер.",
+  "Cooler mode": "Режим кулера", "Temperature curve": "Кривая по температуре",
+  "The fan speed follows the temperature (curve below).": "Обороты следуют за температурой (кривая ниже).",
+"One fan speed of your choice.": "Обороты, которые вы выберете.",
+  "Gear": "Передача", "One of the cooler's four gears with a preset speed.": "Одна из четырёх передач кулера с заданными оборотами.",
+  "Stop": "Стоп", "The fan stands still (0 rpm).": "Вентилятор стоит (0 об/мин).",
+  "Cooler's buttons": "Кнопки кулера", "The program sends nothing: the cooler's own buttons rule.": "Программа ничего не отправляет: работают кнопки самого кулера.",
+  "Standard": "Стандартная", "Strong": "Мощная", "Overclock": "Разгон",
+  "Immediate": "Сразу", "Delayed": "С задержкой",
+  "Target": "Цель", "Cooler runs": "Кулер работает",
+  "speed set by the program": "обороты задаёт программа", "gear {0}": "передача {0}",
+  "BS1 remembered: {0}": "Запомнен BS1: {0}",
+  "BS1 has fixed gear speeds: the level does not change them.": "У BS1 обороты передач фиксированы: уровень их не меняет.",
+  "This cooler can select gears up to {0} (its power supply / capability).": "Этот кулер может включить передачи только до {0} (питание / возможности контроллера).",
+  "hotter of CPU and GPU": "более горячий из ЦП и ГП", "Hysteresis": "Гистерезис", "Smallest change": "Наименьшее изменение",
+  "Faster by at most": "Быстрее не более чем на", "Slower by at most": "Медленнее не более чем на", "rpm per second": "об/мин в секунду",
+  "Settings stored in the cooler": "Настройки в памяти кулера", "Gear light": "Индикатор передачи",
+  "Start when powered": "Запуск при подаче питания", "Smart start/stop": "Умный старт/стоп",
+  "These settings are written to the cooler's own memory and stay there; change them only when needed.":
+    "Эти настройки записываются в собственную память кулера и сохраняются в ней; меняйте их только при необходимости.",
+  "Device ID": "ID устройства", "Capability tier": "Уровень возможностей",
+  "Gear speeds in the cooler": "Обороты передач в кулере", "Highest gear": "Старшая передача",
+  "Control and pairing logic: THRM by Tianli (MIT licence), github.com/TIANLI0/THRM":
+    "Логика управления и сопряжения: THRM, автор Tianli (лицензия MIT), github.com/TIANLI0/THRM",
+  "Searching for a BS1 for up to 10 seconds…": "Поиск BS1 — до 10 секунд…", "BS1 connected": "BS1 подключён",
+  "Saved in the cooler": "Сохранено в кулере", "Flydigi cooler connected": "Кулер Flydigi подключён",
+  "Flydigi cooler": "Кулер Flydigi", "Flydigi fan speed": "Обороты Flydigi", "connected": "подключён", "not connected": "не подключён",
+  "On": "Вкл",
+  "Hot → Flydigi cooler at 4000 rpm": "Жарко → кулер Flydigi на 4000 об/мин", "Flydigi boost": "Flydigi на максимум",
+  "Flydigi BS1 / BS2 / BS2 Pro / BS3 / BS3 Pro coolers: its own page, the curve and the automation rules. Off: the page is hidden and the program leaves the cooler alone.":
+    "Кулеры Flydigi BS1 / BS2 / BS2 Pro / BS3 / BS3 Pro: отдельная вкладка, кривая и правила автоматизации. Выкл.: вкладка скрыта, программа не управляет кулером.",
+});

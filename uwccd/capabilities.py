@@ -155,6 +155,12 @@ def capabilities(svc):
     caps["liquid_cooler"] = module_gate(
         _cap(svc.liquid.available, "os" if svc.liquid.available else "none", svc.liquid.reason or "",
              reason=None if svc.liquid.available else "no_hardware"), "liquid")
+    fd = getattr(svc, "flydigi", None)
+    if fd is not None:                       # 1.8.2.7: found by itself, so "available" = connected now
+        fs = fd.status()
+        caps["flydigi_cooler"] = module_gate(
+            _cap(fs["connected"], "os", f"{fs['model']} ({fs['transport']})" if fs["connected"] else "not connected",
+                 reason=None if fs["connected"] else "no_hardware"), "flydigi")
     ab = svc.afterburner.status()
     caps["afterburner"] = module_gate(
         _cap(ab.get("available") and ab.get("found"), "os",

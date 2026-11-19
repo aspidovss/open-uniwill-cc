@@ -26,6 +26,7 @@ EVENTS = {
     "kb_level": "keyboard backlight level for the OSD {level}",
     "lightbar": "light bar state",
     "lc": "liquid cooler: connection, config, flow, hwoc {event, ...}",
+    "flydigi": "Flydigi BS cooler: connected / disconnected / state {event}",
     "ac": "power source changed {online}",
     "overheat": "temperature held over the limit {sensor, temp, limit, boost}",
     "overheat_boost": "Fan Boost turned on because of overheating {sensor, temp}",

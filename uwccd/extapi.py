@@ -46,7 +46,7 @@ READ_GET_PREFIX = ("/api/lang/",)
 FULL_POST = ("/api/mode", "/api/profile", "/api/fanboost", "/api/setting", "/api/module", "/api/battery",
              "/api/lightbar", "/api/keyboard/power", "/api/keyboard/level", "/api/keyboard/colour",
              "/api/keyboard/effect", "/api/afterburner")
-FULL_POST_PREFIX = ("/api/lc/",)
+FULL_POST_PREFIX = ("/api/lc/", "/api/flydigi/")
 # switches an external program must not flip: consents, warnings and the program's own housekeeping
 SETTING_DENY = ("eula_accepted", "clevo_writes", "leishen_writes", "kb_unlock_effects", "kb_untested_no_ask",
                 "tcc_extended", "super_performance", "mem_oc", "lc_hwoc", "debug", "fan_manager", "monitoring",

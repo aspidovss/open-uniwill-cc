@@ -425,6 +425,28 @@ Coolant filling cycle (about 68 s).
 .TP
 .B lc suspend
 Put the cooler to sleep (used by the system\-sleep hook).
+.SS Flydigi BS cooler
+.TP
+.BR "flydigi " [ status ]
+State of the Flydigi BS1 / BS2 / BS2 Pro / BS3 / BS3 Pro cooler.
+.TP
+.BR "flydigi mode " curve | rpm | gear | stop | device
+Temperature curve, fixed speed, gear, 0 rpm, or the cooler's own buttons.
+.TP
+\fBflydigi rpm\fR \fIN\fR | \fBflydigi gear\fR \fI1\-4\fR [low|mid|high]
+Fixed speed 0..5000 rpm, or a gear with its preset speed.
+.TP
+\fBflydigi curve\fR [\fIT:RPM\fR ...|reset]
+Show or set the temperature curve.
+.TP
+\fBflydigi set\fR \fIKEY VALUE\fR
+temp_source max|cpu|gpu, hysteresis, min_change, ramp_up, ramp_down.
+.TP
+\fBflydigi light\fR on|off | \fBpower\-on\-start\fR on|off | \fBsmart\-stop\fR off|immediate|delayed
+Settings stored in the cooler.
+.TP
+.BR "flydigi search" " | " "flydigi forget"
+BS1: find it by Bluetooth LE / forget it.
 .SS Service
 .TP
 .BR "export fans" | all " [\fIFILE\fR]"

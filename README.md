@@ -106,6 +106,9 @@ Super / XMG NEO 16 (E23); on other models every function stays off until the sel
   undervolt in Office, overclock in Turbo — [docs/AFTERBURNER.md](docs/AFTERBURNER.md)
 - **Liquid cooler** XMG Oasis (LCT21001 Mk1 / LCT22002 Mk2), Eluktronics Liquid Pad Pro, PCS Liquid Series,
   TUXEDO Aquaris: fan and pump curves (common and per laptop mode), cooler profiles, lighting, coolant flow guard, filling cycle
+- **Flydigi BS coolers** (new in 1.8.2.7) BS1, BS2, BS2 Pro, BS3, BS3 Pro: own page, temperature curve, fixed speed,
+  gears, automation rules; control and pairing logic from [THRM](https://github.com/TIANLI0/THRM) by Tianli (MIT) —
+  [docs/FEATURES.md](docs/FEATURES.md#flydigi-bs-coolers)
 - **English and Russian** interface; tray app with notifications on Windows; desktop notifications on Linux
 - **Backup and transfer**: export / import of fan curves (one or all), full backup, import from the original Control Center
 - **API for scripts and integrations**: plain HTTP + JSON on 127.0.0.1 with a stable contract

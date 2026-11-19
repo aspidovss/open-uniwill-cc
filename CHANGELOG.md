@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.8.2.7
+
+- **Flydigi BS coolers: BS1, BS2, BS2 Pro, BS3, BS3 Pro** — a new page *Performance → Flydigi BS*, a switchable
+  service module (`flydigi`; off: the page is hidden and the cooler is left alone). The protocol and the control and
+  pairing logic are ported from [THRM](https://github.com/TIANLI0/THRM) by Tianli (MIT) to Python without changing
+  them (`uwccd/flydigi/`): HID for BS2 and later after pairing in the system's Bluetooth settings or by USB, BS1 by USB
+  HID or Bluetooth LE (*Search BS1*); realtime speed with THRM's wake-from-0 start path and its 3 s check, the write
+  error probe, flash writes spaced 150 ms and skipped when unchanged, gear selection checked against the capability
+  tier and confirmed by the status report.
+- Modes: temperature curve (THRM's default curve and smoothing), fixed speed, gear with THRM's low / medium / high
+  presets, stop, the cooler's own buttons. Settings stored in the cooler: gear light, start when powered, smart
+  start/stop; device information (firmware, ID, capability tier, gear speeds).
+- **Automation:** rules can set the Flydigi cooler's mode, speed or gear and put it back; new conditions *Flydigi fan
+  speed* and *Flydigi cooler connected*; template *Hot → Flydigi cooler at 4000 rpm*. The speed is in the history
+  (*Fans*) and the CSV export (`flydigi_fan_rpm`).
+- `POST /api/flydigi/config|device|search|forget|refresh`, `state.flydigi`, event `flydigi`, capability
+  `flydigi_cooler`; `uwccctl flydigi`; [docs/FEATURES.md](docs/FEATURES.md#flydigi-bs-coolers).
+
 ## 1.8.2.6
 
 - **The program is called OUCC (Open Uniwill Control Center)** in Windows — setup, *Start* menu, *Settings → Apps*,

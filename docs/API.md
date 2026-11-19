@@ -49,6 +49,7 @@ computers use the **external token** — see [External access](#external-access-
 | `POST /api/module` | `{name, enabled}` — switch a service module; answers `{modules: [...]}` |
 | `POST /api/battery` | `{limit_up?, limit_down?, health_mode?}` |
 | `POST /api/lc/...` | liquid cooler: `scan`, `connect`, `disconnect`, `config` |
+| `POST /api/flydigi/...` | Flydigi BS cooler (1.8.2.7): `config` `{mode: curve/rpm/gear/stop/device, rpm, gear, level, curve, temp_source, hysteresis, min_change, ramp_up, ramp_down}`, `device` `{gear_light, power_on_start, smart_start_stop}`, `search` (BS1 by Bluetooth LE), `forget`, `refresh`; state in `state.flydigi` |
 | `POST /api/afterburner` | `{action: "apply", slot}` and the other actions of the card |
 
 The window uses more endpoints than this table; they work but are not part of the promise yet.
@@ -105,6 +106,7 @@ Inside the service the same bus carries them (`uwccd/bus.py`); modules subscribe
 | `ac` | power source changed `{online}` |
 | `overheat`, `overheat_boost` | temperature held over the limit / Fan Boost forced |
 | `lc` | liquid cooler `{event: connected / disconnected / flow_fault / hwoc, ...}` |
+| `flydigi` | Flydigi BS cooler `{event: connected / disconnected / state}` (1.8.2.7) |
 | `keyboard`, `kb_level` | keyboard backlight state / level |
 | `load_rule` | an automation rule fired `{rule, mode, slot}` |
 | `update` | an update is available `{version, url, optional}` |
@@ -123,7 +125,7 @@ the like, and optionally a listener in the local network. Changing these setting
 |---|---|
 | Allow the external API | off: the external token is refused everywhere |
 | Access: **read only** | `GET /api/version`, `/api/state`, `/api/monitor`, `/api/history`, `/api/events`, `/api/langs`, `/api/lang/<code>` |
-| Access: **full** | read + `POST /api/mode`, `/api/profile`, `/api/fanboost`, `/api/setting`, `/api/module`, `/api/battery`, `/api/lightbar`, `/api/keyboard/power`, `/level`, `/colour`, `/effect`, `/api/lc/...`, `/api/afterburner` |
+| Access: **full** | read + `POST /api/mode`, `/api/profile`, `/api/fanboost`, `/api/setting`, `/api/module`, `/api/battery`, `/api/lightbar`, `/api/keyboard/power`, `/level`, `/colour`, `/effect`, `/api/lc/...`, `/api/flydigi/...`, `/api/afterburner` |
 | Token | `uwx_…`, shown **once** when it is made; the service keeps only its SHA-256. *Make a new token* revokes the old one |
 | Access from the local network | a second listener on `0.0.0.0:<port>` (default **47322**) |
 | Allowed addresses | IPv4 addresses or networks (`192.168.1.0/24`, `192.168.1.20`); others get `403` |

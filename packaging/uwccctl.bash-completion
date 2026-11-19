@@ -10,7 +10,7 @@ _uwccctl() {
     local w=() i
     for ((i = 1; i < cword; i++)); do [[ ${words[i]} == --json ]] || w+=("${words[i]}"); done
     local cmd=${w[0]} sub=${w[1]} n=${#w[@]}
-    local commands="status monitor mode profile boost super ramoc fan battery kb lb clevo leishen detect afterburner rules get set apps restore lc
+    local commands="status monitor mode profile boost super ramoc fan battery kb lb clevo leishen detect afterburner rules get set apps restore lc flydigi
         history export import report lang debug version update restart resume lighting nvram ec ec-direct release help driver"
     local onoff="on off"
     local modes="office gaming turbo custom quiet entertainment performance powersave"   # Uniwill, Clevo, Leishen
@@ -136,6 +136,20 @@ _uwccctl() {
         apps)
             if ((n == 1)); then COMPREPLY=($(compgen -W "add remove enable disable" -- "$cur"))
             elif ((n == 3)) && [[ $sub == add ]]; then COMPREPLY=($(compgen -W "$modes" -- "$cur"))
+            fi ;;
+        flydigi)
+            if ((n == 1)); then
+                COMPREPLY=($(compgen -W "status mode rpm gear curve set light power-on-start smart-stop search forget" -- "$cur"))
+            elif ((n == 2)); then
+                case $sub in
+                    mode) COMPREPLY=($(compgen -W "curve rpm gear stop device" -- "$cur")) ;;
+                    gear) COMPREPLY=($(compgen -W "1 2 3 4" -- "$cur")) ;;
+                    curve) COMPREPLY=($(compgen -W "reset" -- "$cur")) ;;
+                    set) COMPREPLY=($(compgen -W "temp_source hysteresis min_change ramp_up ramp_down" -- "$cur")) ;;
+                    light|power-on-start) COMPREPLY=($(compgen -W "$onoff" -- "$cur")) ;;
+                    smart-stop) COMPREPLY=($(compgen -W "off immediate delayed" -- "$cur")) ;;
+                esac
+            elif ((n == 3)) && [[ $sub == gear ]]; then COMPREPLY=($(compgen -W "low mid high" -- "$cur"))
             fi ;;
         lc)
             if ((n == 1)); then

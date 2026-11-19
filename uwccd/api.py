@@ -715,6 +715,10 @@ class Handler(BaseHTTPRequestHandler):
                 r = self._liquid(path[8:], b)
                 if r is not None:
                     return self._json(200, r)
+            elif path.startswith("/api/flydigi/"):
+                r = self._flydigi(path[13:], b)
+                if r is not None:
+                    return self._json(200, r)
             else:
                 return self._json(404, {"error": "not found"})
             s.emit("status", {})
@@ -745,6 +749,23 @@ class Handler(BaseHTTPRequestHandler):
             lc.suspend()
         elif op == "profile":                      # cooler profiles: apply / save / copy / remove / rename
             return {"id": lc.profile(b), "status": lc.status()}
+        else:
+            raise KeyError(op)
+        return None
+
+    def _flydigi(self, op, b):
+        """Flydigi BS cooler (1.8.2.7): config | device | search | forget | refresh"""
+        fd = self.svc.flydigi
+        if op == "config":
+            fd.configure(b)
+        elif op == "device":                       # settings kept in the cooler's flash
+            fd.device_setting(b)
+        elif op == "search":                       # BS1 by Bluetooth LE
+            return {"info": fd.search_ble(), "status": fd.status()}
+        elif op == "forget":
+            fd.forget_ble()
+        elif op == "refresh":
+            fd.refresh_settings()
         else:
             raise KeyError(op)
         return None

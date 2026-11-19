@@ -142,6 +142,56 @@ those modes. A new install starts with the Default profile and no per-mode curve
 **Cooler firmware.** open-uniwill-cc shows the cooler firmware version but does not flash it: a failed DFU update can
 leave the cooler unusable. Use the vendor tool or nRF Connect with the right package if you really need an update.
 
+## Flydigi BS coolers
+
+Page **Performance → Flydigi BS** (or `uwccctl flydigi …`), new in 1.8.2.7. Coolers: **BS1, BS2, BS2 Pro, BS3,
+BS3 Pro**. The page is a service module: *Switches → Service modules → Flydigi BS cooler*; off, the page is hidden and
+the program leaves the cooler alone.
+
+The protocol and the control and pairing logic are ported from [THRM](https://github.com/TIANLI0/THRM) by Tianli
+(MIT) with the same commands, sequences and timings — `uwccd/flydigi/`, each function names the THRM function it
+comes from.
+
+**Connecting.** BS2 / BS2 Pro / BS3 / BS3 Pro: pair the cooler **once in the system's Bluetooth settings** (or plug
+it in by USB); it then appears as an HID device (VID `37D7`) and the service finds it by itself — also after sleep or
+when it comes back. BS1: plug it in by USB (found by itself), or switch it on and press **Search BS1** (Bluetooth LE,
+up to 10 s, needs `python3-bleak`); a BS1 found this way is remembered and connected again by itself. The service
+does not scan Bluetooth LE in the background for a BS1 it has never seen.
+
+| Mode | What the cooler does |
+|---|---|
+| **Temperature curve** | the fan speed follows the hotter of CPU and GPU (or one of them) by the curve; THRM's default curve and smoothing: hysteresis 2 °C, smallest change 50 rpm, at most +220 / −160 rpm per second |
+| **Fixed speed** | one speed, 0–5000 rpm |
+| **Gear** | one of the four gears — Quiet / Standard / Strong / Overclock — with THRM's low / medium / high speeds (1300…4000 rpm); the speed is written to the gear only when the cooler does not hold it yet |
+| **Stop** | 0 rpm |
+| **Cooler's buttons** | the program sends nothing |
+
+How the speed is set (THRM): realtime mode is entered once and the same speed is not sent again; after 0 rpm the fan
+is started through the cooler's own start path (gear, 450 ms, then at least 1700 rpm, then the target) and checked
+3 s later; three failed writes are followed by a read-only check before the connection is dropped. A physical gear
+button puts the cooler back in gear mode, and the next speed enters realtime mode again.
+
+**Settings stored in the cooler** (BS2 and later): gear light, start when powered, smart start/stop. They are written
+to the cooler's memory, at least 150 ms apart and only when they change; the page also shows the firmware, the device
+ID, the capability tier and the gear speeds stored in the cooler. A cooler with capability tier 1 or 2 (e.g. not
+enough power) cannot select every gear — the page says so.
+
+**Automation.** A rule can set the Flydigi cooler's mode (with its speed or gear) and put it back when the rule is
+over; conditions *Flydigi fan speed* (rpm) and *Flydigi cooler* (connected / not connected). Template *Hot → Flydigi
+cooler at 4000 rpm*. The fan speed is also in the history (*Fans*) and its CSV export (`flydigi_fan_rpm`).
+
+```bash
+uwccctl flydigi                      # state
+uwccctl flydigi mode curve           # curve | rpm | gear | stop | device
+uwccctl flydigi rpm 3000
+uwccctl flydigi gear 3 high          # gear 1-4, low | mid | high
+uwccctl flydigi curve 40:1400 60:2300 80:3500 90:4000   # or: curve reset
+uwccctl flydigi light off            # gear light; power-on-start on|off; smart-stop off|immediate|delayed
+uwccctl flydigi search               # BS1 by Bluetooth LE
+```
+
+On Linux the service runs as root and reads `/dev/hidraw*` directly; no udev rule is needed.
+
 ## Control Center 3.0 / Clevo (experimental, separate module)
 
 Laptops with Control Center 3.x have no Uniwill EC; the module `uwccd/clevo/` drives them with Clevo DCHU commands
