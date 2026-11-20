@@ -168,8 +168,7 @@ table.bind td,table.bind th{padding:8px;border-bottom:1px solid var(--line);text
 .tst.err{border-color:var(--bad)}
 #osd{position:fixed;left:50%;bottom:70px;transform:translateX(-50%);background:rgba(8,10,12,.92);border:1px solid var(--acc);color:#fff;border-radius:14px;padding:14px 24px;font-size:18px;font-weight:650;opacity:0;transition:opacity .25s;pointer-events:none}
 #osd.show{opacity:1}
-.seg.lang{padding:2px;flex-wrap:nowrap;flex:none}
-.conn{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.conn .dot{flex:none}.seg.lang button{padding:3px 8px;font-size:11px}
+.conn{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.conn .dot{flex:none}
 .lc-pill{padding:6px 10px;border-radius:10px;background:var(--bg2);border:1px solid var(--line);font-size:12px;color:var(--muted);text-align:center}
 .lc-pill.ok{color:var(--acc)}#fd-pill{cursor:pointer}.bar.fd.off{opacity:.6}.lc-pill.bad{color:var(--bad);border-color:var(--bad)}
 .lc-state .dot{display:block;width:14px;height:14px}
@@ -496,3 +495,7 @@ svg.lc-curve text.draglbl{font-size:16px}
 /* 1.9.0.0: Flydigi BS — five own curves */
 .fd-slot-head{gap:10px}.fd-slot-head h3{margin:0}
 #fd-slots button{max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* 1.9.1.0: Information → About: the update switches (the same settings as in Switches) */
+.upd-sw{display:flex;flex-direction:column;gap:10px;margin-top:10px;padding-top:12px;border-top:1px solid var(--line)}
+.upd-sw .row{gap:12px;align-items:flex-start}.upd-sw .row.sub{margin-left:28px;padding-left:12px;border-left:3px solid var(--acc)}
+.upd-sw b{font-size:13px;font-weight:600}.upd-sw p{margin:2px 0 0}

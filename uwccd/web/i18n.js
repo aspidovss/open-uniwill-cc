@@ -1327,8 +1327,7 @@ Object.assign(RU, {
 // 1.9.0.0: search by Bluetooth for every Flydigi BS model; credits
 Object.assign(RU, {
   "Search by Bluetooth": "Найти по Bluetooth",
-  "Every Flydigi BS model is found by Bluetooth LE. BS1 connects at once with Search by Bluetooth. BS2, BS2 Pro, BS3 and BS3 Pro are paired once in the system's Bluetooth settings (or connected by USB) — then the program finds them by itself.":
-    "Все модели Flydigi BS находятся по Bluetooth LE. BS1 подключается сразу кнопкой «Найти по Bluetooth». BS2, BS2 Pro, BS3 и BS3 Pro один раз сопрягаются в настройках Bluetooth системы (или подключаются по USB) — дальше программа находит их сама.",
+  "BS1: Search by Bluetooth. BS2 / BS3 (Pro): pair once in the Bluetooth settings or plug in by USB.": "BS1: «Найти по Bluetooth». BS2 / BS3 (Pro): один раз создайте пару в настройках Bluetooth или подключите по USB.",
   "Found {0} by Bluetooth. Pair it once in the system's Bluetooth settings — the program then connects to it by itself.":
     "Найден {0} по Bluetooth. Выполните сопряжение один раз в настройках Bluetooth системы — дальше программа подключится к нему сама.",
   "Open Bluetooth settings": "Открыть настройки Bluetooth",

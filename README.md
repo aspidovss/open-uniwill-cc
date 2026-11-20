@@ -225,7 +225,7 @@ nothing else. *Check for updates automatically* (*Switches*) turns the daily che
 | only the 4th number | **Intermediate update**, marked as optional: *Intermediate update X: only settings for particular laptops, you can skip it* |
 | nothing newer | *You have the latest version* |
 
-**Check intermediate updates** (*Switches*, under *Check for updates automatically*; on by default): turn it off and intermediate updates are not
+**Check intermediate updates** (*Switches* under *Check for updates automatically*, also in *Information → About*; on by default): turn it off and intermediate updates are not
 offered at all — no notification, no tray item; the card only says *Intermediate update X is not offered*. Updates
 that change one of the first three numbers are always shown. The switch works at once, without a new check.
 
@@ -302,7 +302,7 @@ The installer builds the `uwcc` kernel module with DKMS (falls back to `acpi_cal
 
 ## Usage
 
-- **Window** — all settings; the language is asked at the first start and can be changed at any time in *Switches → Interface language* or with EN / RU / ZH at the bottom of the side bar.
+- **Window** — all settings; the language is asked at the first start and can be changed at any time in *Switches → Interface language*.
 - **Tray (Windows)** — right click: mode, Fan Boost, keyboard backlight, liquid cooler, language, updates, *Start with Windows*.
 - **Tray (Linux)** — *Show the configuration window* and *Close the window (free memory)*; needs
   `gir1.2-ayatanaappindicator3-0.1` (the installer adds it) and a desktop that shows AppIndicator icons (Ubuntu does).

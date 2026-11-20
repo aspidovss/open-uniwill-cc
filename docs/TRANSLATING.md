@@ -28,9 +28,8 @@ translate stays English, key by key, so a partial translation is fine.
    | installed copy | Linux `/var/lib/uwcc/langs/de.json` · Windows `%ProgramData%\UWCC\data\langs\de.json` | trying it on your laptop |
    | repository | `uwccd/web/lang/de.json` | sending it to the project |
 
-4. Reload the window (F5). The new language appears in the language switch (bottom of the side bar), in
-   *Switches → Interface language*, in the first-start language question, in the Windows tray menu and in
-   `GET /api/langs`; mistakes are written to the service log.
+4. Reload the window (F5). The new language appears in *Switches → Interface language*, in the first-start
+   language question, in the Windows tray menu and in `GET /api/langs`; mistakes are written to the service log.
 
 The user agreement is shown in English for other languages (translations of a legal text need review), and the
 console tool `uwccctl` and the Linux agent notifications stay English/Russian for now (English for other languages).

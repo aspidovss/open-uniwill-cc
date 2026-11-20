@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.9.1.0
+
+- **The language switch at the foot of the side bar is gone:** with three languages (EN / RU / ZH) it pushed the
+  connection status out of place and broke the layout. The language is chosen at the first start and changed in
+  **Switches → Interface language** (also in the Windows tray menu and with `uwccctl lang`).
+- **Information → About** has the update switches again — *Check for updates automatically* and, under it, *Check
+  intermediate updates*: the same settings as in Switches, so changing one place changes the other.
+- **Flydigi BS:** the connection hint is one short line (BS1: Search by Bluetooth; BS2 / BS3 (Pro): pair once in the
+  Bluetooth settings or plug in by USB).
+
 ## 1.9.0.0
 
 The feature release for the Flydigi BS coolers: everything of 1.8.2.7 and 1.8.2.8 (intermediate releases, not offered

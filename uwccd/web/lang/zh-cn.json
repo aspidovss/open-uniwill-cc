@@ -1655,7 +1655,6 @@
   "limit of {0}: {1} rpm": "{0} 上限：{1} 转/分",
   "These settings are written to the cooler's own memory and stay there; change them only when needed. The cooler does not report the current value of the gear light and the start when powered — press to set them.": "这些设置会写入散热器自身的存储器并保留在那里；请仅在需要时更改。散热器不报告档位灯和通电时启动的当前值 — 按下即可设置。",
   "Search by Bluetooth": "通过蓝牙搜索",
-  "Every Flydigi BS model is found by Bluetooth LE. BS1 connects at once with Search by Bluetooth. BS2, BS2 Pro, BS3 and BS3 Pro are paired once in the system's Bluetooth settings (or connected by USB) — then the program finds them by itself.": "所有 Flydigi BS 型号都可通过蓝牙 LE 找到。BS1 通过“通过蓝牙搜索”立即连接。BS2、BS2 Pro、BS3 和 BS3 Pro 需在系统蓝牙设置中配对一次（或通过 USB 连接）— 之后程序会自动找到它们。",
   "Found {0} by Bluetooth. Pair it once in the system's Bluetooth settings — the program then connects to it by itself.": "已通过蓝牙找到 {0}。请在系统蓝牙设置中配对一次 — 之后程序会自动连接。",
   "Open Bluetooth settings": "打开蓝牙设置",
   "Searching for a Flydigi BS for up to 10 seconds…": "正在搜索 Flydigi BS，最长 10 秒…",
@@ -1667,7 +1666,8 @@
   "Five own curves: pick one to use it and edit it here. Automation rules can switch between them.": "五条自定义曲线：选择一条即可使用并在此编辑。自动化规则可以在它们之间切换。",
   "Curve {0}": "曲线 {0}",
   "Name of curve {0} (empty: “{1}”)": "曲线 {0} 的名称（留空：“{1}”）",
-  "the curve in use": "当前曲线"
+  "the curve in use": "当前曲线",
+  "BS1: Search by Bluetooth. BS2 / BS3 (Pro): pair once in the Bluetooth settings or plug in by USB.": "BS1：点击“通过蓝牙搜索”。BS2 / BS3（Pro）：在蓝牙设置中配对一次，或通过 USB 连接。"
  },
  "service": {
   "mode0": "办公模式",

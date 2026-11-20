@@ -100,20 +100,17 @@ function setLang(l, save) {
   try { localStorage.setItem("uwcc-lang", LANG); } catch (_) {}
   document.documentElement.lang = LANG;
   i18nStatic();
-  $$("#lang-seg button, #lang-set button").forEach(b => b.classList.toggle("on", b.dataset.lang === LANG));
+  $$("#lang-set button").forEach(b => b.classList.toggle("on", b.dataset.lang === LANG));
   if (save) api("setting", { key: "lang", value: LANG }).catch(() => {});
   if (S) render();
   if (lastMonitor) onMonitor(lastMonitor);
   paintConn();
   if (typeof helpCur !== "undefined" && helpCur && $("#page-help").classList.contains("active")) openHelp(helpCur.id);
 }
-function buildLangPickers() {
-  const seg = $("#lang-seg"), full = $("#lang-set"); seg.innerHTML = ""; if (full) full.innerHTML = "";
-  for (const { code, name } of AVAILABLE_LANGS) {
-    seg.append(h("button", { "data-lang": code, title: name, class: code === LANG ? "on" : "",
-                             onclick: () => setLang(code, true) }, code.split("-")[0].toUpperCase()));   // zh-cn → ZH: the title has the full name
-    if (full) full.append(h("button", { "data-lang": code, class: code === LANG ? "on" : "", onclick: () => setLang(code, true) }, name));
-  }
+function buildLangPickers() {         // Switches → Interface language (1.9.1.0: no switch at the foot of the side bar)
+  const full = $("#lang-set"); if (!full) return; full.innerHTML = "";
+  for (const { code, name } of AVAILABLE_LANGS)
+    full.append(h("button", { "data-lang": code, class: code === LANG ? "on" : "", onclick: () => setLang(code, true) }, name));
 }
 // 1.9.0.0: the first start asks for the language (before the agreement); Switches → Interface language changes it later
 function suggestedLang() {
@@ -1923,6 +1920,8 @@ $("#fd-search").addEventListener("click", () => {
     else if (r && r.info) toast(t("BS1 connected"));
   }).finally(() => refresh().catch(() => {}));
 });
+$("#upd-auto").addEventListener("change", e => act(() => api("setting", { key: "update_check", value: e.target.checked })));
+$("#upd-minor").addEventListener("change", e => setUpdateMinor(e.target.checked));
 $("#fd-forget").addEventListener("click", () => fdPost("forget", {}));
 $("#fd-slot-rename").addEventListener("click", () => {
   const c = S.flydigi.config, i = c.slot || 0;
@@ -2602,6 +2601,8 @@ document.addEventListener("click", () => $("#hist-export-menu").classList.add("h
 // ---------------------------------------------------------------- about / updates
 function renderAbout() {
   const u = S.update || {};
+  $("#upd-auto").checked = !!(S.settings && S.settings.update_check);
+  $("#upd-minor").checked = !S.settings || S.settings.update_minor !== false;
   const a = (href, text) => h("a", { href, target: "_blank", rel: "noopener" }, text);
   const dl = $("#about-kv"); dl.innerHTML = "";
   const b = u.build || {};
