@@ -27,13 +27,24 @@
 </p>
 
 An open replacement for the **Uniwill "Control Center"** (5.52.x) of Uniwill-based gaming laptops, for
-**Linux** and **Windows**: performance modes, fan curves, CPU/GPU power limits, RGB keyboard, battery care,
-hardware switches — plus Bluetooth control of the **XMG Oasis** liquid cooler and its twins.
+**Linux** and **Windows**: performance modes, fan curves, CPU/GPU power limits, RGB keyboard and light bar, battery
+care, hardware switches — plus:
+
+- **XMG Oasis** liquid cooler and its twins (LCT21001 / LCT22002) over Bluetooth: curves, pump limits, lighting;
+- **Flydigi BS1 / BS2 / BS2 Pro / BS3 / BS3 Pro** laptop coolers over Bluetooth LE or USB: five own temperature
+  curves, fixed speed, gears, lighting (a port of [THRM](https://github.com/TIANLI0/THRM) by Tianli);
+- laptops with **Control Center 3.x (Clevo, Tongfang)** and **Leishen ControlCenter (Thunderobot)** — experimental
+  modules on the same pages: modes, fans and keyboard backlight;
+- **automation**: rules that switch the mode, profiles and both coolers by power, temperature, load or battery;
+  bindings to running programs; MSI Afterburner profiles per mode;
+- **BetterRGB** keyboard effects drawn by the service, colour calibration of the keyboard and the light bar;
+- **sensor history**, a diagnostic report, built-in help, an external API for scripts and Home Assistant;
+- the interface in **English, Russian and Simplified Chinese** (any other language is one JSON file).
 
 **Everything runs in a standalone background service** (`uwccd`, systemd on Linux, a Windows service): it applies
-your settings at boot and after sleep and keeps the fan curves, power limits and the liquid cooler working with no
-window open — without the original OEM service and its Microsoft Store app. The window, the tray app and
-the `uwccctl` command line are only remote controls for it.
+your settings at boot and after sleep and keeps the fan curves, power limits, the liquid cooler, the Flydigi cooler
+and the automation rules working with no window open — without the original OEM service and its Microsoft Store
+app. The window, the tray app and the `uwccctl` command line are only remote controls for it.
 
 ## 100 % open, no third-party drivers
 
