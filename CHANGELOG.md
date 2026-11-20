@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.9.2.1
+
+An intermediate (optional) update: the service no longer gets stuck "without connection"; battery protection on
+MECHREVO Aurora X / Jiguang B2.
+
+- **A hung part no longer blocks the whole state.** Seen on Windows under memory pressure (nvidia-smi failing,
+  PowerShell timing out): one part of `/api/state` blocked for good, the window showed *Connecting…* and the tray
+  *no connection to the service* while the rest of the service still ran; only a restart helped. Now every part of
+  the state is built with a 5 s limit — a part that does not answer is sent with its last value (named in
+  `state.stale`) and is not waited for again while it is stuck.
+- **Watchdog:** when a part of the state or a `/api/state` request hangs for 30 s, the service writes the stacks of all
+  its threads to the log (`uwccd.log`, once per hang) — so the cause can be found; after 3 minutes it restarts itself.
+- **nvidia-smi printing an error** instead of its data line (GPU driver trouble) no longer breaks the sensor sampler
+  (`IndexError`); the GPU values are just missing for that moment.
+- **Battery — protection mode and charge limit exclude each other** (issue #7, MECHREVO Aurora X / Jiguang B2,
+  `0x1A`): 1.8.2.2 kept *balanced* (`0x7A6` bits 4..5) **and** 90/85 % (`0x7B9`) at once — the EC never set its
+  "limit reached" flag and charged to 100 %. Now choosing *Balanced* or *Stationary* resets the limit to 100 %, and
+  applying a limit below 100 % sets the mode to *Full capacity*; only the chosen one is written again on AC change
+  and after resume. A configuration with both (saved by 1.8.2.2) keeps the mode and clears the limit, with a line in
+  the log. The *Battery* page says so; `state.battery.active` = `mode` / `limit` / `null`.
+- **Diagnostic report (Linux):** the battery's sysfs values (`status`, `capacity`, `current_now`, `charge_types`,
+  `charge_control_end_threshold` …) and the loaded `uniwill` / `uwcc` / `tuxedo` modules — which charge control the
+  kernel offers and what the battery really does.
+- **RAM used** is in the sensor history (Monitor → History → *Load*, export column `ram_used_pct`), so a memory leak
+  shows on the 24-hour chart.
+
 ## 1.9.2.0
 
 - **Flydigi BS — curve edits are a draft now:** dragging, adding or removing points changes only the chart

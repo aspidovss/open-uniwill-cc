@@ -294,7 +294,8 @@ class Sampler(threading.Thread):
                 "cm": m["cpu"].get("mhz"), "gm": g.get("core_mhz"),
                 "lf": lc.get("fan") if lc.get("connected") else None,
                 "lp": lc.get("pump") if lc.get("connected") else None,
-                "fr": self._fd_rpm()}
+                "fr": self._fd_rpm(),
+                "mu": (m.get("memory") or {}).get("usage")}        # 1.9.2.1: RAM used, %
 
     def _fd_rpm(self):
         fd = getattr(self.svc, "flydigi", None)
@@ -355,7 +356,7 @@ EXPORT_COLUMNS = [("t", "time"), ("ct", "cpu_temp_c"), ("gt", "gpu_temp_c"), ("c
                   ("bp", "battery_discharge_w"), ("pl1", "cpu_pl1_w"), ("pl2", "cpu_pl2_w"), ("pl4", "cpu_pl4_w"),
                   ("gpl", "gpu_power_limit_w"), ("cm", "cpu_clock_mhz"), ("gm", "gpu_clock_mhz"), ("cf", "cpu_fan_rpm"),
                   ("gf", "gpu_fan_rpm"), ("lf", "cooler_fan_pct"), ("lp", "cooler_pump_v"),
-                  ("fr", "flydigi_fan_rpm")]
+                  ("fr", "flydigi_fan_rpm"), ("mu", "ram_used_pct")]
 
 
 def export_history(points, fmt="csv"):

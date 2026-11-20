@@ -3378,17 +3378,37 @@ class BatteryProtection1822(unittest.TestCase):
         bm.set_limits(90, 85)
         self.assertEqual(ec.read(R.CHARGE_LIMIT_UP), 90)    # bit7 is not written back
         self.assertEqual(ec.read(R.CHARGE_LIMIT_DOWN), 85)
-        bm.set_health(1)
-        self.assertEqual((ec.read(R.TOUCHPAD) >> 4) & 3, 1)
-        # the EC drops the mode and the limit when the charger is plugged in -> written again
-        ec.update(R.TOUCHPAD, 0x30, 0)
+        self.assertEqual(bm.active(), "limit")
+        # the EC drops the limit when the charger is plugged in -> written again
         ec.write(R.CHARGE_LIMIT_UP, 0)
         bm.on_ac_change(True)
-        self.assertEqual((ec.read(R.TOUCHPAD) >> 4) & 3, 1)
         self.assertEqual(ec.read(R.CHARGE_LIMIT_UP), 90)
+        # 1.9.2.1: a protection mode clears the limit (they exclude each other)
+        bm.set_health(1)
+        self.assertEqual((ec.read(R.TOUCHPAD) >> 4) & 3, 1)
+        self.assertEqual((bm.limit_up(), bm.st["battery_limits"], bm.active()), (100, {}, "mode"))
+        ec.update(R.TOUCHPAD, 0x30, 0)                      # the EC drops the mode -> written again
+        bm.on_ac_change(True)
+        self.assertEqual(((ec.read(R.TOUCHPAD) >> 4) & 3, bm.limit_up()), (1, 100))
+        # ... and a limit below 100 % switches the mode to full capacity
+        bm.set_limits(80, 75)
+        self.assertEqual(((ec.read(R.TOUCHPAD) >> 4) & 3, bm.st["battery_health"], bm.limit_up()), (0, 0, 80))
         bm.set_limits(100)
         self.assertEqual(ec.read(R.CHARGE_LIMIT_UP), 0)
         self.assertEqual(bm.limit_up(), 100)
+
+    def test_both_saved_by_1822(self):
+        """1.9.2.1: issue #7 — 1.8.2.2 kept balanced AND 90/85 %; the EC charged to 100 %. The mode wins."""
+        from uwccd import regs as R
+        bm, ec = self.make()
+        bm.st.update({"battery_health": 1, "battery_limits": {"up": 90, "down": 85}})
+        ec.write(R.CHARGE_LIMIT_UP, 90)
+        with self.assertLogs("uwccd.settings", "WARNING"):
+            bm.reapply("start")
+        self.assertEqual(((ec.read(R.TOUCHPAD) >> 4) & 3, ec.read(R.CHARGE_LIMIT_UP)), (1, 0))
+        self.assertEqual(bm.st["battery_limits"], {})
+        bm.reapply("AC online")                             # settled: no warning, nothing changes
+        self.assertEqual(((ec.read(R.TOUCHPAD) >> 4) & 3, ec.read(R.CHARGE_LIMIT_UP)), (1, 0))
 
     def test_seed_from_ec(self):
         from uwccd import regs as R

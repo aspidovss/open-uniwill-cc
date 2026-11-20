@@ -2344,7 +2344,7 @@ for (const [id, key] of [["lc-guard", "flow_guard"], ["lc-notify", "notify_flow"
 // ---------------------------------------------------------------- history (last hour)
 const HIST = {
   temp: { name: "Temperature", unit: "°C", max: 100, lines: [["ct", "CPU", "var(--cpu)"], ["gt", "GPU", "var(--gpu)"]] },
-  load: { name: "Load", unit: "%", max: 100, lines: [["cl", "CPU", "var(--cpu)"], ["gl", "GPU", "var(--gpu)"]] },
+  load: { name: "Load", unit: "%", max: 100, lines: [["cl", "CPU", "var(--cpu)"], ["gl", "GPU", "var(--gpu)"], ["mu", "RAM used", "var(--acc)"]] },
   cpow: { name: "CPU power", unit: "W", max: 0, lines: [["cp", "CPU package", "var(--cpu)"]], nodata: "CPU package power is not available on this computer",
     marks: [["pl1", "PL1", "#f5a524"], ["pl2", "PL2", "#ff6b6b"], ["pl4", "PL4", "#c084fc"]] },
   gpow: { name: "GPU power", unit: "W", max: 0, lines: [["gp", "NVIDIA GPU", "var(--gpu)"]], nodata: "GPU power is not available (no NVIDIA GPU, or it is asleep)",

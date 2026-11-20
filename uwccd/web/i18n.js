@@ -1359,3 +1359,9 @@ Object.assign(RU, {
   "Applied — not saved": "Применено — не сохранено",
   "Discard the curve changes that are not saved?": "Отменить несохранённые изменения кривой?",
 });
+
+// 1.9.2.1: battery — mode and limit exclude each other
+Object.assign(RU, {
+  "The protection mode and the custom limit exclude each other: a mode other than Full capacity resets the limit to 100 %, applying a limit below 100 % switches the mode to Full capacity.":
+    "Режим защиты и свой предел взаимоисключающие: любой режим, кроме «Режима большей ёмкости», сбрасывает предел на 100 %, а предел ниже 100 % включает «Режим большей ёмкости».",
+});

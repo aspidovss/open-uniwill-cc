@@ -17,6 +17,7 @@ from .lighting.keyboard import KeyboardManager
 from .monitor import Monitor
 from .nvram import MockNvram, Nvram
 from .settings import BatteryManager, SettingsManager
+from .stateguard import PartGuard, Watchdog
 from .watercooler import LiquidCooler
 
 IS_WIN = sys.platform == "win32"
@@ -131,6 +132,7 @@ class Service:
         self.modules = Modules(self.settings_store, self.emit)
         self._register_modules()
         self.threads = []
+        self.state_guard = PartGuard()
         self.fan_control = False
 
     def _register_modules(self):
@@ -266,6 +268,8 @@ class Service:
                 self.oem_driver = oem_driver_info()
             threading.Thread(target=driver_info, daemon=True, name="oem-driver-info").start()
         self.threads.append(self.sampler)
+        # 1.9.2.1: a hung /api/state is dumped to the log after 30 s and the service restarts itself after 3 min
+        self.threads.append(Watchdog(self.state_guard, None if self.mock else self.restart_service))
         from .hwoc import LiquidHWOC
         self.hwoc = LiquidHWOC(self)
         self.threads.append(self.hwoc)
@@ -440,39 +444,45 @@ class Service:
 
     # -- aggregated state for the UI ----------------------------------------------------------------
     def state(self):
+        """1.9.2.1: every part is built with a time limit (stateguard.PartGuard): a part that hangs is sent with its
+        last value and named in "stale", instead of the whole state never coming (the window: "no connection")."""
         p = self.power
-        return {
-            "platform": {**self.pf.as_dict(), "ec_backend": self.ec.name, "nvram": self.nvram.verified,
-                         "fan_control": self.fan_control,
-                         "hotkeys": any(t.name == "hotkeys" and getattr(t, "available", False) for t in self.threads),
-                         "os": "windows" if IS_WIN else "linux"},
-            "update": self.updater.status(),
-            "power": p.status(),
-            "profiles": p.profiles,
-            "tables": {n: p.tables.tables.get(n) for n in p.TABLE_NAMES},
-            "default_tables": p.tables.defaults,
-            "settings": self.settings.status(),
-            "battery": self.battery.status(),
-            "keyboard": self.keyboard.status(),
-            "app_binding": self.settings_store.get("app_binding", []),
-            "liquid": self.liquid.status(),
-            "flydigi": self.flydigi.status(),
-            "hwoc": self.hwoc.status() if getattr(self, "hwoc", None) else None,
-            "automation": {k: auto_setting(self.settings_store, k) for k in AUTO_DEFAULTS},
-            "sysprofile": self.sysprof.status(),
-            "load_rules": self.load_rules.status(),
-            "info": self.monitor.info(),
-            "ec_access": self.ec_access(),
-            "clevo": self.clevo.status() if self.clevo.present else {"present": False},
-            "leishen": self.leishen.status() if self.leishen.present else {"present": False},
-            "detect": self.detect.status() if getattr(self, "detect", None) else {"pending": True},
-            "alt": self.alt.status() if self.alt is not None else None,
-            "afterburner": self.afterburner.status(),
-            "busy": self.busy.state(),
-            "monitoring": self.monitor_level(),
-            "modules": self.modules.status(),
-            "capabilities": self.capabilities(),
+        parts = {
+            "platform": lambda: {**self.pf.as_dict(), "ec_backend": self.ec.name, "nvram": self.nvram.verified,
+                                 "fan_control": self.fan_control,
+                                 "hotkeys": any(t.name == "hotkeys" and getattr(t, "available", False)
+                                                for t in self.threads),
+                                 "os": "windows" if IS_WIN else "linux"},
+            "update": self.updater.status,
+            "power": p.status,
+            "profiles": lambda: p.profiles,
+            "tables": lambda: {n: p.tables.tables.get(n) for n in p.TABLE_NAMES},
+            "default_tables": lambda: p.tables.defaults,
+            "settings": self.settings.status,
+            "battery": self.battery.status,
+            "keyboard": self.keyboard.status,
+            "app_binding": lambda: self.settings_store.get("app_binding", []),
+            "liquid": self.liquid.status,
+            "flydigi": self.flydigi.status,
+            "hwoc": lambda: self.hwoc.status() if getattr(self, "hwoc", None) else None,
+            "automation": lambda: {k: auto_setting(self.settings_store, k) for k in AUTO_DEFAULTS},
+            "sysprofile": self.sysprof.status,
+            "load_rules": self.load_rules.status,
+            "info": self.monitor.info,
+            "ec_access": self.ec_access,
+            "clevo": lambda: self.clevo.status() if self.clevo.present else {"present": False},
+            "leishen": lambda: self.leishen.status() if self.leishen.present else {"present": False},
+            "detect": lambda: self.detect.status() if getattr(self, "detect", None) else {"pending": True},
+            "alt": lambda: self.alt.status() if self.alt is not None else None,
+            "afterburner": self.afterburner.status,
+            "busy": self.busy.state,
+            "monitoring": self.monitor_level,
+            "modules": self.modules.status,
+            "capabilities": self.capabilities,
         }
+        out, stale = self.state_guard.build(parts)
+        out["stale"] = stale
+        return out
 
     def capabilities(self):
         from .capabilities import capabilities

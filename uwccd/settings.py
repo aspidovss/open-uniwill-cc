@@ -276,6 +276,11 @@ class BatteryManager:
         when the kernel driver is loaded it knows which one (charge_control_end_threshold vs charge_types in the
         battery's sysfs folder): the other one is reported unavailable, and changes go through the driver's file so
         that its own copy (restored by the driver on AC change and resume) matches ours.
+
+    1.9.2.1 (the same Aurora X with 1.8.2.2: 0x7A6 = balanced AND 0x7B9 = 90 — the EC never set "limit reached" and
+    charged to 100 %): the two exclude each other here too. Choosing a protection mode other than full capacity
+    clears the limit (0x7B9 = 0, i.e. 100 %); applying a limit below 100 % sets the mode to full capacity. Only the
+    chosen one is kept and written again; a configuration with both (saved by 1.8.2.2) keeps the mode.
     """
 
     HEALTH = {0: (0, 0), 1: (1, 0), 2: (0, 1)}   # high(full) / middle / low -> bits 4,5 of 0x7A6
@@ -336,15 +341,30 @@ class BatteryManager:
     def set_health(self, mode, save=True):
         mode = int(mode)
         b4, b5 = self.HEALTH[mode]
+        if mode and self.limit_up() != 100:              # 1.9.2.1: a mode and a limit exclude each other
+            self._write_limits(100, None)
+            if save:
+                self.st.set("battery_limits", {})
         self._kernel_write("charge_types", self.KERNEL_TYPES[mode])       # keeps the driver's own copy in step
         self.ec.update(R.TOUCHPAD, 0x30, (b4 << 4) | (b5 << 5))
         if save:
             self.st.set("battery_health", mode)
 
+    def active(self):
+        """What protects the battery now: "mode" (balanced / stationary), "limit" (below 100 %) or None."""
+        if self.health():
+            return "mode"
+        return "limit" if self.limit_up() != 100 else None
+
     def reapply(self, why=""):
         """Write the saved protection mode and charge limits again (start, resume, AC change)."""
         h = self.st.get("battery_health")
         lim = self.st.get("battery_limits")
+        if h and lim and lim.get("up") not in (None, 100):         # both saved (1.8.2.2): the mode wins (1.9.2.1)
+            log.warning("battery: protection mode %s and limit %s %% exclude each other — the limit is cleared",
+                        h, lim.get("up"))
+            lim = {"up": 100, "down": lim.get("down")} if lim.get("down") is not None else {"up": 100}
+            self.st.set("battery_limits", {})
         try:
             if h is not None:
                 self.set_health(h, save=False)
@@ -390,6 +410,8 @@ class BatteryManager:
             down = int(down)
             if not 1 <= down <= 95:
                 down = None
+        if up is not None and up != 100 and self.health():          # 1.9.2.1: a limit replaces the protection mode
+            self.set_health(0)
         self._write_limits(up, down)
         if up is not None or down is not None:
             lim = dict(self.st.get("battery_limits") or {})
@@ -414,6 +436,7 @@ class BatteryManager:
     def status(self):
         return {
             "health_mode": self.health(),
+            "active": self.active(),
             "limit_up": self.limit_up(),
             "limit_down": self.limit_down(),
             "cycle_count": self.ec.read16(R.BAT_CYCLE_L, R.BAT_CYCLE_L + 1),

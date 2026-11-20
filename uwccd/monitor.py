@@ -173,8 +173,8 @@ class Monitor:
                     ["nvidia-smi", "--query-gpu=name,temperature.gpu,utilization.gpu,clocks.gr,clocks.mem,"
                      "pstate,memory.total,power.draw,power.limit", "--format=csv,noheader,nounits"],
                     capture_output=True, text=True, timeout=3, check=False).stdout.strip().splitlines()
-                if out:
-                    p = [x.strip() for x in out[0].split(",")]
+                p = [x.strip() for x in out[0].split(",")] if out else []
+                if len(p) >= 8:             # 1.9.2.1: nvidia-smi may print an error line instead (driver trouble)
                     val = {"name": p[0], "temp": _num(p[1]), "usage": _num(p[2]), "core_mhz": _num(p[3]),
                            "mem_mhz": _num(p[4]), "pstate": p[5], "vram_mb": _num(p[6]), "power_w": _num(p[7]),
                            "power_limit_w": _num(p[8]) if len(p) > 8 else None}

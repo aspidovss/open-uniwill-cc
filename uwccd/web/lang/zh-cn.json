@@ -1671,7 +1671,8 @@
   "Apply changes at once": "立即应用更改",
   "Changed — not applied yet": "已更改 — 尚未应用",
   "Applied — not saved": "已应用 — 未保存",
-  "Discard the curve changes that are not saved?": "放弃未保存的曲线更改？"
+  "Discard the curve changes that are not saved?": "放弃未保存的曲线更改？",
+  "The protection mode and the custom limit exclude each other: a mode other than Full capacity resets the limit to 100 %, applying a limit below 100 % switches the mode to Full capacity.": "保护模式与自定义充电上限互斥：选择“满容量模式”以外的模式会把上限重置为 100 %，应用低于 100 % 的上限会切换到“满容量模式”。"
  },
  "service": {
   "mode0": "办公模式",

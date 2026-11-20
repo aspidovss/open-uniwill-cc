@@ -314,7 +314,7 @@ to the hardware differs (see the last section).
 | Webcam switch | ✅ | ✅ | Linux: USB de-authorisation; Windows: `Disable-PnpDevice` |
 | Wi-Fi / Bluetooth switches | ✅ | ❌ | rfkill |
 | Battery protection modes (full / balanced / stationary) | ✅ | ✅ | EC `0x7A6` bits 4–5 |
-| Custom charge limits | ✅ | ✅ | EC `0x7B9`, `0x7D0`, NVRAM `Charge*Limit` |
+| Custom charge limits | ✅ | ✅ | EC `0x7B9`, `0x7D0`, NVRAM `Charge*Limit`. Since 1.9.2.1 the mode and the limit exclude each other: a mode other than full capacity resets the limit to 100 %, a limit below 100 % sets the mode to full capacity |
 | Type-C charging priority | ✅ | ✅ | EC `0x7CC` bit 7 |
 | Automation: mode per power source, overheating alerts, follow the power profile (both ways) | ✅ | ✅ | power-profiles-daemon (Linux) / Windows power mode |
 | *Not in the original:* automatic profile switching by power, temperature, load, battery, power source, system profile | ✅ | ✅ | `uwccd/automation.py`, needs full monitoring |

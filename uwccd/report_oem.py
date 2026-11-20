@@ -371,7 +371,14 @@ def power_info():
             "governor": _readf(cpu0 + "scaling_governor"), "driver": _readf(cpu0 + "scaling_driver"),
             "epp": _readf(cpu0 + "energy_performance_preference"),
             "platform_profile": _readf("/sys/firmware/acpi/platform_profile"),
-            "platform_profile_choices": _readf("/sys/firmware/acpi/platform_profile_choices")}
+            "platform_profile_choices": _readf("/sys/firmware/acpi/platform_profile_choices"),
+            # 1.9.2.1: which charge control the kernel offers and what the battery really does (issue #7)
+            "battery_sysfs": {os.path.basename(d): {k: _readf(os.path.join(d, k)) for k in (
+                "status", "capacity", "current_now", "power_now", "charge_types", "charge_control_end_threshold",
+                "charge_control_start_threshold", "health") if os.path.exists(os.path.join(d, k))}
+                for d in sorted(glob.glob("/sys/class/power_supply/BAT*"))},
+            "modules": [ln.split()[0] for ln in (_readf("/proc/modules") or "").splitlines()
+                        if ln.split() and re.search(r"uniwill|uwcc|tuxedo|clevo|acpi_call", ln.split()[0])]}
 
 
 def board_hint(board_name):

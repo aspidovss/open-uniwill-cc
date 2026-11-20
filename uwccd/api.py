@@ -299,7 +299,11 @@ class Handler(BaseHTTPRequestHandler):
         s = self.svc
         try:
             if u.path == "/api/state":
-                return self._json(200, {"api": API, **s.state()})
+                key = s.state_guard.enter()                 # 1.9.2.1: the watchdog sees a request that hangs
+                try:
+                    return self._json(200, {"api": API, **s.state()})
+                finally:
+                    s.state_guard.leave(key)
             if u.path == "/api/langs":
                 from . import i18n
                 return self._json(200, {"languages": i18n.available()})
