@@ -68,11 +68,14 @@ Super / XMG NEO 16 (E23); on other models every function stays off until the sel
 > laptop (see *Tested on*). Review the code before relying on it.
 
 <p align="center">
+  <img src="docs/screenshots/monitor.png" width="49%" alt="System monitor with the liquid cooler and the Flydigi BS cooler">
+  <img src="docs/screenshots/flydigi.png" width="49%" alt="Flydigi BS cooler: five own temperature curves">
   <img src="docs/screenshots/modes.png" width="49%" alt="Modes and power limits">
   <img src="docs/screenshots/fans.png" width="49%" alt="Fan curves">
   <img src="docs/screenshots/liquid.png" width="49%" alt="Liquid cooler">
   <img src="docs/screenshots/automation.png" width="49%" alt="Automatic profile switching">
   <img src="docs/screenshots/betterrgb.png" width="49%" alt="Keyboard lighting with the BetterRGB effects">
+  <img src="docs/screenshots/calibration.png" width="49%" alt="Colour calibration of the keyboard">
   <img src="docs/screenshots/battery.png" width="49%" alt="Battery care">
   <img src="docs/screenshots/info-windows.png" width="49%" alt="System information on Windows">
   <img src="docs/screenshots/ec-manager.png" width="49%" alt="EC Manager: free build, WMI path">

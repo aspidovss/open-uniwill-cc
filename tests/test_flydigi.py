@@ -371,6 +371,9 @@ class ModelLimit(unittest.TestCase):
         self.assertEqual(fc.cfg["curves"][2]["curve"], [[30, 1000], [90, 4500]])
         self.assertEqual(fc.cfg["curve"], [[30, 1000], [90, 4500]])
         self.assertEqual(fc.cfg["curves"][0]["curve"], [list(p) for p in P.DEFAULT_FAN_CURVE])   # others untouched
+        fc.configure({"curve": [[30, 900], [90, 4000]], "save": False})     # 1.9.2.0: Apply without Save
+        self.assertEqual(fc.cfg["curve"], [[30, 900], [90, 4000]])
+        self.assertEqual(fc.cfg["curves"][2]["curve"], [[30, 1000], [90, 4500]])
         fc.configure({"slot": 0})
         self.assertEqual(fc.cfg["curve"], [list(p) for p in P.DEFAULT_FAN_CURVE])
         with self.assertRaises(ValueError):
@@ -380,12 +383,12 @@ class ModelLimit(unittest.TestCase):
     def test_shortfall(self):
         fc = self.make("BS1")
         fc._track_shortfall(3400, now=0)
-        fc._track_shortfall(3400, now=10)
-        self.assertIsNone(fc.shortfall)
-        fc._track_shortfall(3400, now=16)
+        fc._track_shortfall(3400, now=20)
+        self.assertIsNone(fc.shortfall)                          # 1.9.2.0: 25 s, not 15
+        fc._track_shortfall(3400, now=26)
         self.assertEqual(fc.shortfall, {"target": 3400, "rpm": 2000})
         fc.dev.status = {"current_rpm": 3300}                    # caught up (>= 90 %)
-        fc._track_shortfall(3400, now=17)
+        fc._track_shortfall(3400, now=27)
         self.assertIsNone(fc.shortfall)
 
 
@@ -420,8 +423,10 @@ class Automation(unittest.TestCase):
             def restore(fd, s):
                 fd.cfg.update(s)
 
+            connected = True
+
             def status(fd):
-                return {"connected": True, "current_rpm": 4100 if fd.cfg["mode"] == "rpm" else 1500}
+                return {"connected": fd.connected, "current_rpm": 4100 if fd.cfg["mode"] == "rpm" else 1500}
 
         class Store(dict):
             def set(s, k, v):
@@ -455,12 +460,21 @@ class Automation(unittest.TestCase):
         lr.tick({**m, "cpu": {"temp": 50, "power_w": 10, "usage": 5}}, now=3)
         self.assertEqual((svc.flydigi.cfg["mode"], svc.flydigi.cfg["rpm"]), ("curve", 2000))
         self.assertEqual(lr.log[-1]["what"], "back")
-        # 1.8.2.8: not added to the automation rules (the default) -> the rules neither change nor see the cooler
+        # not added to the automation rules (turned off) -> the rules neither change nor see the cooler
         off = Svc(auto=False)
         lr = A.LoadRules(off)
         lr.tick(m, now=1)
         self.assertEqual(off.flydigi.cfg["mode"], "curve")
         self.assertEqual((lr._state(m)["fd_rpm"], lr._state(m)["fd_connected"]), (None, 0))
+        # 1.9.2.0: added to the rules but no cooler found -> the rule still runs, the Flydigi part is skipped
+        gone = Svc()
+        gone.flydigi.connected = False
+        lr = A.LoadRules(gone)
+        lr.tick(m, now=1)
+        self.assertEqual(lr.active, 0)
+        self.assertEqual(gone.flydigi.cfg["mode"], "curve")
+        self.assertIsNone(lr.log[-1]["fd_mode"])
+        self.assertEqual(lr._state(m)["fd_connected"], 0)
 
 
 if __name__ == "__main__":

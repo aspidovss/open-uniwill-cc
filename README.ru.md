@@ -70,10 +70,14 @@ OEM-драйвером — уровень мощности с СЖО (`PWUP`) и
 > (см. «Проверено на»). Прежде чем полагаться на неё, просмотрите код.
 
 <p align="center">
+  <img src="docs/screenshots/monitor.png" width="49%" alt="Монитор системы с СЖО и кулером Flydigi BS">
+  <img src="docs/screenshots/flydigi.png" width="49%" alt="Кулер Flydigi BS: пять своих кривых">
   <img src="docs/screenshots/ru/modes.png" width="49%" alt="Режимы и лимиты мощности">
   <img src="docs/screenshots/ru/fans.png" width="49%" alt="Кривые вентиляторов">
   <img src="docs/screenshots/ru/liquid.png" width="49%" alt="Жидкостное охлаждение">
+  <img src="docs/screenshots/automation.png" width="49%" alt="Автоматическое переключение профилей">
   <img src="docs/screenshots/ru/betterrgb.png" width="49%" alt="Подсветка клавиатуры с эффектами BetterRGB">
+  <img src="docs/screenshots/calibration.png" width="49%" alt="Калибровка цвета клавиатуры">
   <img src="docs/screenshots/ru/battery.png" width="49%" alt="Защита аккумулятора">
   <img src="docs/screenshots/info-windows.png" width="49%" alt="Информация о системе в Windows">
   <img src="docs/screenshots/ru/ec-manager.png" width="49%" alt="Менеджер EC: свободная сборка, путь WMI">

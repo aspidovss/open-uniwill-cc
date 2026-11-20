@@ -499,3 +499,6 @@ svg.lc-curve text.draglbl{font-size:16px}
 .upd-sw{display:flex;flex-direction:column;gap:10px;margin-top:10px;padding-top:12px;border-top:1px solid var(--line)}
 .upd-sw .row{gap:12px;align-items:flex-start}.upd-sw .row.sub{margin-left:28px;padding-left:12px;border-left:3px solid var(--acc)}
 .upd-sw b{font-size:13px;font-weight:600}.upd-sw p{margin:2px 0 0}
+/* 1.9.2.0: Flydigi BS curve — Apply / Save */
+.fd-curve-actions{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 14px;margin:0 0 12px}
+.fd-curve-actions .chk{margin:0}#fd-curve-state{flex:1;color:var(--warn)}

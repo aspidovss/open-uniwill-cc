@@ -1351,3 +1351,11 @@ Object.assign(RU, {
   "Name of curve {0} (empty: “{1}”)": "Название кривой {0} (пусто: «{1}»)",
   "the curve in use": "текущая кривая",
 });
+
+// 1.9.2.0: Flydigi BS — Apply / Save for the curve
+Object.assign(RU, {
+  "Apply changes at once": "Применять изменения сразу",
+  "Changed — not applied yet": "Изменено — ещё не применено",
+  "Applied — not saved": "Применено — не сохранено",
+  "Discard the curve changes that are not saved?": "Отменить несохранённые изменения кривой?",
+});

@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.9.2.0
+
+- **Flydigi BS — curve edits are a draft now:** dragging, adding or removing points changes only the chart
+  (*Changed — not applied yet*). **Apply** makes the cooler use the edited curve without keeping it (*Applied — not
+  saved*; switching to another curve or a restart goes back to the saved one), **Save** keeps it in the curve in use,
+  **Cancel** drops the edits. The checkbox **Apply changes at once** brings back the old way (every edit is applied
+  and saved at once); it is off by default and kept in the cooler settings (`instant_apply`). Switching to another
+  curve with unsaved edits asks first. `POST /api/flydigi/config {curve, save: false}` applies without saving.
+- **Flydigi BS — add to the automation rules** is **on by default** now: with the Flydigi BS component on, rules can
+  use the cooler at once (a choice made before is kept; it still works only while *Enable Flydigi BS* is on).
+- **Automation without the cooler:** when the Flydigi BS cooler is not connected (not found by Bluetooth / USB), a rule
+  still does everything else (mode, profile, Fan Boost, liquid cooler) and only skips the Flydigi part; an error
+  from the cooler never stops a rule. Conditions on the cooler (*Flydigi cooler connected*, *Flydigi fan speed*) see
+  it as not connected.
+- **Flydigi BS — "does not reach the set speed"** waits 25 s instead of 15 s: a steep step of the curve (e.g. 1000 →
+  3400 rpm) takes about 11 s of ramp plus the fan's spin-up, and the warning came up for nothing.
+
 ## 1.9.1.0
 
 - **The language switch at the foot of the side bar is gone:** with three languages (EN / RU / ZH) it pushed the

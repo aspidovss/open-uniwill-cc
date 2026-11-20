@@ -744,12 +744,12 @@ class LoadRules:
 
     def _fd(self):
         """The Flydigi BS cooler, None when its module is off (1.8.2.7) or when it is not added to the automation
-        rules (setting flydigi_automation, off by default — 1.8.2.8): then rules neither see nor change it."""
+        rules (setting flydigi_automation; off by default in 1.8.2.8, on since 1.9.2.0): then rules neither see nor change it."""
         fd = getattr(self.svc, "flydigi", None)
         mods = getattr(self.svc, "modules", None)
         if fd is None or (mods is not None and not mods.enabled("flydigi")):
             return None
-        if not self.svc.settings_store.get("flydigi_automation", False):
+        if not self.svc.settings_store.get("flydigi_automation", True):     # 1.9.2.0: on by default with the module
             return None
         return fd
 
@@ -865,10 +865,13 @@ class LoadRules:
         if fd is None or not want:
             return {}
         try:
+            if not fd.status().get("connected"):            # 1.9.2.0: no cooler found -> the rule runs without it
+                log.info("load rule %s: Flydigi cooler not connected — skipped", r.get("name") or "")
+                return {}
             if any(fd.cfg.get(k) != v for k, v in want.items()):
                 fd.configure(want)
                 log.info("load rule: Flydigi cooler %s", want)
-        except (KeyError, ValueError) as e:
+        except Exception as e:  # noqa: BLE001 — the cooler never stops the rest of the rule
             log.warning("load rule: Flydigi cooler: %s", e)
             return {}
         return {"fd_mode": want["mode"], "fd_slot": want.get("slot"), "fd": want}
@@ -927,7 +930,7 @@ class LoadRules:
                     back["fd_mode"] = sv["fd"].get("mode")
                     if "slot" in did["fd"]:
                         back["fd_slot"] = sv["fd"].get("slot")
-            except (KeyError, ValueError) as e:
+            except Exception as e:  # noqa: BLE001
                 log.warning("load rule: Flydigi cooler back: %s", e)
         self._note("back" if back else "end", r, now, **back)
         self.active, self.saved, self.did = None, None, {}

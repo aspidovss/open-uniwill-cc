@@ -204,7 +204,7 @@ A rule must change at least one of mode, Fan Boost, cooler mode, cooler profile 
 | `flydigi rgb on\|off` | the cooler's lighting (all models; stored in the cooler) |
 | `flydigi light on\|off` / `power-on-start on\|off` / `smart-stop off\|immediate\|delayed` | settings stored in the cooler (BS2 and later) |
 | `flydigi search` / `flydigi forget` | search by Bluetooth LE: a BS1 connects, a BS2 / BS3 (Pro) is reported for pairing in the system / forget the BS1 |
-| `flydigi automation on\|off` | use the cooler in the automation rules (off by default; same as `set flydigi_automation`) |
+| `flydigi automation on\|off` | use the cooler in the automation rules (on by default since 1.9.2.0; same as `set flydigi_automation`) |
 
 ## Service
 

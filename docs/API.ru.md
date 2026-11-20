@@ -49,7 +49,7 @@
 | `POST /api/module` | `{name, enabled}` — включить/выключить модуль службы; отвечает `{modules: [...]}` |
 | `POST /api/battery` | `{limit_up?, limit_down?, health_mode?}` |
 | `POST /api/lc/...` | СЖО: `scan`, `connect`, `disconnect`, `config` |
-| `POST /api/flydigi/...` | кулер Flydigi BS (1.8.2.7): `config` `{mode: curve/rpm/gear/stop/device, rpm, gear, level, curve, temp_source, hysteresis, min_change, ramp_up, ramp_down, slot (0..4, 1.9.0.0), slot_name}`, `device` `{rgb, gear_light, power_on_start, smart_start_stop}`, `search` (BS1 по Bluetooth LE), `forget`, `refresh`; состояние — в `state.flydigi` |
+| `POST /api/flydigi/...` | кулер Flydigi BS (1.8.2.7): `config` `{mode: curve/rpm/gear/stop/device, rpm, gear, level, curve, temp_source, hysteresis, min_change, ramp_up, ramp_down, slot (0..4, 1.9.0.0), slot_name, save (false = apply without saving, 1.9.2.0), instant_apply}`, `device` `{rgb, gear_light, power_on_start, smart_start_stop}`, `search` (BS1 по Bluetooth LE), `forget`, `refresh`; состояние — в `state.flydigi` |
 | `POST /api/afterburner` | `{action: "apply", slot}` и остальные действия карточки |
 
 Окно использует больше точек, чем в таблице; они работают, но в обещание пока не входят.

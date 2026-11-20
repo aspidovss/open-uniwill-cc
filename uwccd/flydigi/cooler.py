@@ -38,7 +38,9 @@ SLOT_NAME_MAX = 32
 # fan stops at its own ceiling: BS1 is rated 3000 rpm on its top gear and was measured at 3400 rpm. Other models:
 # no data yet, so THRM's 5000. Targets above the limit are cut to it.
 MODEL_MAX_RPM = {"BS1": 3400}
-SHORTFALL_RATIO, SHORTFALL_S = 0.9, 15.0     # below 90 % of the target for 15 s: "does not reach the speed"
+# below 90 % of the target for 25 s: "does not reach the speed" (1.9.2.0: was 15 s — a steep curve step from
+# 1000 to 3400 rpm needs about 11 s of ramp plus the fan's own spin-up, which set the warning off for nothing)
+SHORTFALL_RATIO, SHORTFALL_S = 0.9, 25.0
 
 DEFAULTS = {
     "mode": "curve", "rpm": 2000, "gear": 2, "level": "mid",
@@ -49,6 +51,7 @@ DEFAULTS = {
     "model": None,                                                             # the last connected model
     "slot": 0,                                                                 # 1.9.0.0: the curve slot in use
     "curves": None,                                                            # [{name, curve}] × CURVE_SLOTS
+    "instant_apply": False,        # 1.9.2.0: the page applies and saves every curve edit at once (else Apply / Save)
 }
 
 
@@ -420,7 +423,7 @@ class FlydigiCooler:
         self._track_shortfall(self.ctl_rpm)
 
     def _track_shortfall(self, target, now=None):
-        """The fan stays below 90 % of the target for 15 s: the model's limit or a weak charger (the top speeds need a
+        """The fan stays below 90 % of the target for 25 s: the model's limit or a weak charger (the top speeds need a
         PD charger: 18-20 W for BS1 / BS2, 27 W for BS2 Pro). Cleared as soon as it catches up."""
         now = time.monotonic() if now is None else now
         st = self.dev.status if self.dev is not None and self.dev.connected else None
@@ -476,7 +479,10 @@ class FlydigiCooler:
         if "curve" in b:
             c["curve"] = clamp_curve(check_curve(b["curve"]) if b["curve"] else copy.deepcopy(DEFAULTS["curve"]),
                                      self.max_rpm())
-            c["curves"][c["slot"]]["curve"] = [list(p) for p in c["curve"]]    # edits the slot in use
+            if b.get("save", True) is not False:       # 1.9.2.0: save=false applies the curve without saving it
+                c["curves"][c["slot"]]["curve"] = [list(p) for p in c["curve"]]    # edits the slot in use
+        if "instant_apply" in b:
+            c["instant_apply"] = bool(b["instant_apply"])
         if "temp_source" in b:
             if b["temp_source"] not in TEMP_SOURCES:
                 raise ValueError("temp_source: max | cpu | gpu")

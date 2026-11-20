@@ -205,7 +205,7 @@ Control Center 3.0 / Clevo (экспериментально): `uwccctl clevo �
 | `flydigi rgb on\|off` | подсветка кулера (все модели; хранится в кулере) |
 | `flydigi light on\|off` / `power-on-start on\|off` / `smart-stop off\|immediate\|delayed` | настройки в памяти кулера (BS2 и новее) |
 | `flydigi search` / `flydigi forget` | поиск по Bluetooth LE: BS1 подключается, о BS2 / BS3 (Pro) сообщается для сопряжения в системе / забыть BS1 |
-| `flydigi automation on\|off` | кулер в правилах автоматизации (по умолчанию выкл.; то же, что `set flydigi_automation`) |
+| `flydigi automation on\|off` | кулер в правилах автоматизации (с 1.9.2.0 по умолчанию вкл.; то же, что `set flydigi_automation`) |
 
 ## Служба
 

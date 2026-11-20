@@ -1723,6 +1723,27 @@ const FD_LEVELS = ["low", "mid", "high"], FD_LEVEL_NAME = { low: "Low", mid: "Me
 const FD_SMART = { off: "Off", immediate: "Immediate", delayed: "Delayed" };
 const FDX0 = 20, FDX1 = 110;
 let fdDrag = null;
+let fdDraft = null;            // 1.9.2.0: {slot, pts} — curve edits not applied yet (unless "Apply changes at once")
+const fdEq = (a, b) => JSON.stringify((a || []).map(p => [+p[0], +p[1]])) === JSON.stringify((b || []).map(p => [+p[0], +p[1]]));
+function fdDraftPts(c) { return fdDraft && fdDraft.slot === (c.slot || 0) ? fdDraft.pts : null; }
+function fdEdited(pts) {
+  const c = S.flydigi.config;
+  if (c.instant_apply) { fdDraft = null; return fdPost("config", { curve: pts }); }
+  fdDraft = { slot: c.slot || 0, pts: pts.map(p => [p[0], p[1]]) };
+  fdDrawCurve(S.flydigi); fdCurveButtons(S.flydigi);
+}
+function fdCurveButtons(F) {
+  const c = F.config, saved = ((c.curves || [])[c.slot || 0] || {}).curve || c.curve, draft = fdDraftPts(c);
+  const changed = !!draft && !fdEq(draft, c.curve), unsaved = !fdEq(c.curve, saved);
+  const inst = !!c.instant_apply;
+  $("#fd-instant").checked = inst;
+  for (const id of ["#fd-curve-cancel", "#fd-curve-apply", "#fd-curve-save"]) $(id).classList.toggle("hidden", inst);
+  $("#fd-curve-apply").disabled = !changed;
+  $("#fd-curve-save").disabled = !(changed || unsaved || (draft && !fdEq(draft, saved)));
+  $("#fd-curve-cancel").disabled = !(draft || unsaved);
+  $("#fd-curve-state").textContent = inst ? "" : changed ? t("Changed — not applied yet") : unsaved ? t("Applied — not saved") : "";
+}
+function fdDirty() { const c = S.flydigi.config; return !!fdDraftPts(c) || !fdEq(c.curve, ((c.curves || [])[c.slot || 0] || {}).curve || c.curve); }
 function fdOn() { const m = (S && S.modules || []).find(x => x.name === "flydigi"); return !m || m.enabled; }
 // 1.8.2.8: the cooler takes part in the automation rules only when the user adds it (Switches → Flydigi BS)
 function fdAutoOn() { return fdOn() && !!(S && S.settings && S.settings.flydigi_automation); }
@@ -1801,9 +1822,12 @@ function renderFlydigi() {
   $("#fd-curve-card").classList.toggle("hidden", c.mode !== "curve");
   const slots = $("#fd-slots"); slots.innerHTML = "";
   for (let i = 0; i < (F.curve_slots || 5); i++)
-    slots.append(h("button", { class: (c.slot || 0) === i ? "on" : "", title: fdSlotName(c, i),
-                               onclick: () => fdPost("config", { mode: "curve", slot: i }) }, fdSlotName(c, i)));
+    slots.append(h("button", { class: (c.slot || 0) === i ? "on" : "", title: fdSlotName(c, i), onclick: () => {
+      if (i !== (c.slot || 0) && fdDirty() && !confirm(t("Discard the curve changes that are not saved?"))) return;
+      fdDraft = null; fdPost("config", { mode: "curve", slot: i });
+    } }, fdSlotName(c, i)));
   if (!fdDrag) fdDrawCurve(F);
+  fdCurveButtons(F);
   const pr = $("#fd-params");
   if (!pr.contains(document.activeElement)) {
     const numIn = (key, label, lo, hi, unit, tip) => {
@@ -1815,7 +1839,11 @@ function renderFlydigi() {
       const o = h("option", { value: v }, n); if (c.temp_source === v) o.selected = true; return o; }));
     src.addEventListener("change", () => fdPost("config", { temp_source: src.value }));
     const reset = h("button", { class: "btn ghost sm" }, t("Default"));
-    reset.addEventListener("click", () => fdPost("config", { curve: null, hysteresis: 2, min_change: 50, ramp_up: 220, ramp_down: 160 }));
+    reset.addEventListener("click", () => {
+      if (c.instant_apply) return fdPost("config", { curve: null, hysteresis: 2, min_change: 50, ramp_up: 220, ramp_down: 160 });
+      fdPost("config", { hysteresis: 2, min_change: 50, ramp_up: 220, ramp_down: 160 });     // the curve: as an edit
+      fdEdited((F.default_curve || []).map(p => [p[0], Math.min(p[1], F.rpm_max || p[1])]));
+    });
     pr.replaceChildren(h("label", {}, h("span", {}, t("Temperature")), src),
       numIn("hysteresis", "Hysteresis", 0, 8, "°C", "A falling temperature counts only when it fell by this much."),
       numIn("min_change", "Step", 20, 400, t("rpm"), "Smaller changes of the speed are not sent."),
@@ -1851,7 +1879,7 @@ function renderFlydigi() {
   if (!bs1) row("Highest gear", F.max_gear ? t({ standard: "Standard", performance: "Strong", extreme: "Overclock" }[F.max_gear] || F.max_gear) : null);
 }
 function fdDrawCurve(F) {
-  const c = F.config, pts = c.curve.map(p => [p[0], p[1]]);
+  const c = F.config, pts = (fdDraftPts(c) || c.curve).map(p => [p[0], p[1]]);
   const W = 1100, H = 280, ymax = F.rpm_axis || 5000, top = F.rpm_max || ymax;
   const P = { left: 64, right: W - 26, top: 18, bot: H - 30 };
   P.x = tc => P.left + (tc - FDX0) / (FDX1 - FDX0) * (P.right - P.left);
@@ -1880,7 +1908,7 @@ function fdDrawCurve(F) {
     if (fdDrag && pts[fdDrag.i]) { const p = pts[fdDrag.i]; lcDragLabel(dots, P, P.x(p[0]), P.y(p[1]), lbl(p)); }
   };
   redraw();
-  const save = () => fdPost("config", { curve: pts });
+  const save = () => fdEdited(pts);
   svg.addEventListener("pointerdown", ev => {
     const el = ev.target.closest && ev.target.closest(".pt"); if (!el) return;
     ev.preventDefault(); svg.setPointerCapture(ev.pointerId); fdDrag = { i: +el.dataset.i };
@@ -1923,6 +1951,19 @@ $("#fd-search").addEventListener("click", () => {
 $("#upd-auto").addEventListener("change", e => act(() => api("setting", { key: "update_check", value: e.target.checked })));
 $("#upd-minor").addEventListener("change", e => setUpdateMinor(e.target.checked));
 $("#fd-forget").addEventListener("click", () => fdPost("forget", {}));
+$("#fd-instant").addEventListener("change", e => {
+  const on = e.target.checked, d = fdDraftPts(S.flydigi.config); fdDraft = null;
+  fdPost("config", { instant_apply: on, ...(on && d ? { curve: d } : {}) });      // turning it on keeps the edits
+});
+$("#fd-curve-apply").addEventListener("click", () => {
+  const d = fdDraftPts(S.flydigi.config); if (!d) return;
+  act(async () => { await api("flydigi/config", { curve: d, save: false }); fdDraft = null; }, t("Applied"));   // kept on error
+});
+$("#fd-curve-save").addEventListener("click", () => {
+  const c = S.flydigi.config, d = fdDraftPts(c) || c.curve;
+  act(async () => { await api("flydigi/config", { curve: d }); fdDraft = null; }, t("Saved"));
+});
+$("#fd-curve-cancel").addEventListener("click", () => { fdDraft = null; fdPost("config", { slot: S.flydigi.config.slot || 0 }); });
 $("#fd-slot-rename").addEventListener("click", () => {
   const c = S.flydigi.config, i = c.slot || 0;
   const n = prompt(t("Name of curve {0} (empty: “{1}”)", i + 1, t("Curve {0}", i + 1)), ((c.curves || [])[i] || {}).name || "");

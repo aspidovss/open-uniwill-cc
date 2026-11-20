@@ -435,6 +435,13 @@
         <p class="muted tiny" data-i>Five own curves: pick one to use it and edit it here. Automation rules can switch between them.</p>
         <div id="fd-curve" class="fd-curve"></div>
         <p class="muted tiny fd-hint" data-i>Drag the points. Double-click on the chart: add a point; double-click on a point: remove it.</p>
+        <div class="fd-curve-actions">                <!-- 1.9.2.0: edit, then Apply (use it) / Save (keep it in the curve) -->
+          <label class="chk"><input type="checkbox" id="fd-instant"> <span data-i>Apply changes at once</span></label>
+          <span class="muted tiny" id="fd-curve-state"></span>
+          <div class="row"><button class="btn ghost sm" id="fd-curve-cancel" data-i>Cancel</button>
+            <button class="btn ghost sm" id="fd-curve-apply" data-i>Apply</button>
+            <button class="btn sm" id="fd-curve-save" data-i>Save</button></div>
+        </div>
         <div class="fd-params" id="fd-params"></div>
       </div>
 

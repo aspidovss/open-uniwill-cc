@@ -344,7 +344,7 @@ HELP = {
         "uwccctl flydigi smart-stop off|immediate|delayed   smart start/stop (stored in the cooler)\n"
         "uwccctl flydigi search | forget          search by Bluetooth LE (BS1 connects; BS2+ is reported for pairing)\n"
         "                                         / forget the BS1\n"
-        "uwccctl flydigi automation on|off        use the cooler in the automation rules (off by default)\n"
+        "uwccctl flydigi automation on|off        use the cooler in the automation rules (on by default)\n"
         "  Every model is found by Bluetooth LE. BS1 connects directly. BS2 / BS2 Pro / BS3 / BS3 Pro: pair the cooler\n"
         "  once in the system's Bluetooth settings (or plug it in by USB); the service then finds it by itself. The service module \"flydigi\" must be on (uwccctl modules flydigi on)."),
     "caps": "uwccctl caps [--json]\n  What this laptop has, one line per function: available, source (ec / profile /\n"

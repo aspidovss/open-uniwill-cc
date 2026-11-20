@@ -1667,7 +1667,11 @@
   "Curve {0}": "曲线 {0}",
   "Name of curve {0} (empty: “{1}”)": "曲线 {0} 的名称（留空：“{1}”）",
   "the curve in use": "当前曲线",
-  "BS1: Search by Bluetooth. BS2 / BS3 (Pro): pair once in the Bluetooth settings or plug in by USB.": "BS1：点击“通过蓝牙搜索”。BS2 / BS3（Pro）：在蓝牙设置中配对一次，或通过 USB 连接。"
+  "BS1: Search by Bluetooth. BS2 / BS3 (Pro): pair once in the Bluetooth settings or plug in by USB.": "BS1：点击“通过蓝牙搜索”。BS2 / BS3（Pro）：在蓝牙设置中配对一次，或通过 USB 连接。",
+  "Apply changes at once": "立即应用更改",
+  "Changed — not applied yet": "已更改 — 尚未应用",
+  "Applied — not saved": "已应用 — 未保存",
+  "Discard the curve changes that are not saved?": "放弃未保存的曲线更改？"
  },
  "service": {
   "mode0": "办公模式",
