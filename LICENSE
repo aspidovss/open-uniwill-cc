@@ -45,4 +45,12 @@ notices are kept):
                            The full MIT notice of BetterRGB is in
                            THIRD_PARTY_LICENSES.txt.
 
+  uwccd/flydigi/           Flydigi BS cooler support: the protocol and the
+                           control and pairing logic ported from Go to
+                           Python from THRM by Tianli:
+                             Copyright (c) 2025 Tianli
+                           https://github.com/TIANLI0/THRM
+                           The full MIT notice of THRM is in
+                           THIRD_PARTY_LICENSES.txt.
+
 See NOTICE.md for credits and third-party projects.

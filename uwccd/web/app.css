@@ -188,7 +188,10 @@ table.bind td,table.bind th{padding:8px;border-bottom:1px solid var(--line);text
 .fd-set > span{font-weight:500}.fd-set .seg{justify-self:end}.fd-set select{min-width:160px;justify-self:end}
 .fd-info{border-top:1px solid var(--line);padding-top:12px}
 svg.lc-curve .limit{stroke:#e0a040;stroke-width:1.5;stroke-dasharray:6 5}svg.lc-curve text.limitlbl{fill:#e0a040;font-size:13px}
-#fd-short{margin:8px 0 0}#fd-rpm-box output{white-space:nowrap;min-width:90px;text-align:right}
+#fd-short{margin:8px 0 0}.fd-found{margin:8px 0 0;color:var(--acc)}.fd-found a{color:var(--acc);text-decoration:underline}#fd-rpm-box{margin-top:10px}
+#fd-rpm-box .slider{grid-template-columns:160px 1fr 100px;margin:0}
+#fd-rpm-box output{white-space:nowrap}
+#fd-rpm-max{margin:4px 112px 0 172px}
 .lc-dev{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg1);margin-top:10px}
 .flow-ok{color:var(--acc)}.flow-fault{color:var(--bad)}.flow-starting,.flow-priming{color:var(--warn)}
 .chk+.chk{margin-top:8px}
@@ -203,6 +206,7 @@ svg.lc-curve .limit{stroke:#e0a040;stroke-width:1.5;stroke-dasharray:6 5}svg.lc-
 .pe-row output{color:var(--acc);font-weight:650;text-align:right}
 .gpu-proc{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);gap:12px}
 .gpu-proc code{color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media (max-width:700px){#fd-rpm-box .slider{grid-template-columns:1fr 90px}#fd-rpm-box .slider span{grid-column:1/-1}#fd-rpm-max{margin:4px 0 0}}
 @media (max-width:1000px){.g4{grid-template-columns:repeat(2,1fr)}.g3,.modes,.choices{grid-template-columns:1fr}.lc-modes,.modes.four,.fd-modes{grid-template-columns:repeat(2,1fr)}.pe-row{grid-template-columns:1fr}}
 @media (max-width:760px){#app{grid-template-columns:1fr}.nav{display:none}.g2,.g4{grid-template-columns:1fr}main{padding:16px}}
 #about-card a{color:var(--acc);text-decoration:none}#about-card a:hover{text-decoration:underline}
@@ -459,8 +463,6 @@ svg.lc-curve text.draglbl{font-size:16px}
 .detect-ok{margin-top:12px;color:var(--acc)}
 
 /* 1.7.6.0: About card — switch "Check intermediate updates" */
-.upd-minor{gap:12px;align-items:flex-start;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
-.upd-minor b{font-size:13px;font-weight:600}.upd-minor p{margin:2px 0 0}
 /* 1.8.2.0: unlock line under a greyed block; Settings -> API */
 .mod-chip{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 12px;padding:8px 12px;border:1px dashed var(--line);border-radius:10px;background:var(--bg2)}
 .ico-api{--m:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M8.6 7.4 4 12l4.6 4.6L7.2 18l-6-6 6-6zm6.8 0L16.8 6l6 6-6 6-1.4-1.4L20 12zM13.1 4l1.9.5-4.1 15.5-1.9-.5z"/></svg>')}
@@ -487,3 +489,10 @@ svg.lc-curve text.draglbl{font-size:16px}
 .cal-step.done{color:var(--acc)}
 .cal-btns{margin-top:12px}
 .cal-card .cal-state{margin:2px 0 0}
+/* 1.9.0.0: first-start language choice */
+.lang-choice{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+.lang-choice .btn{justify-content:center;padding:12px 14px;font-size:15px}
+#lang-set{flex-wrap:wrap}
+/* 1.9.0.0: Flydigi BS — five own curves */
+.fd-slot-head{gap:10px}.fd-slot-head h3{margin:0}
+#fd-slots button{max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

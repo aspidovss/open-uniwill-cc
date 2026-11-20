@@ -87,18 +87,20 @@ function errText(m) { return t(m); }
 
 // ---------------------------------------------------------------- language
 let AVAILABLE_LANGS = [{ code: "en", name: "English" }, { code: "ru", name: "Русский" }];
+let langLoading = null;                                // the fetch of an extra language's dictionary, while it runs
 function setLang(l, save) {
   l = (l || "en").toLowerCase();
   if (l !== "en" && l !== "ru" && !DICTS[l]) {        // an extra language: fetch its dictionary once (1.8.0.0)
-    api("lang/" + l).then(d => { registerLang(l, d.name, d.web || {}); setLang(l, save); })
-      .catch(() => { if (LANG !== l) setLang("en", save); });
-    return;
+    langLoading = api("lang/" + l).then(d => { registerLang(l, d.name, d.web || {}); setLang(l, save); })
+      .catch(() => { if (LANG !== l) setLang("en", save); })
+      .finally(() => { langLoading = null; });
+    return langLoading;
   }
   LANG = l === "en" || DICTS[l] ? l : "en";
   try { localStorage.setItem("uwcc-lang", LANG); } catch (_) {}
   document.documentElement.lang = LANG;
   i18nStatic();
-  $$("#lang-seg button").forEach(b => b.classList.toggle("on", b.dataset.lang === LANG));
+  $$("#lang-seg button, #lang-set button").forEach(b => b.classList.toggle("on", b.dataset.lang === LANG));
   if (save) api("setting", { key: "lang", value: LANG }).catch(() => {});
   if (S) render();
   if (lastMonitor) onMonitor(lastMonitor);
@@ -106,10 +108,47 @@ function setLang(l, save) {
   if (typeof helpCur !== "undefined" && helpCur && $("#page-help").classList.contains("active")) openHelp(helpCur.id);
 }
 function buildLangPickers() {
-  const seg = $("#lang-seg"); seg.innerHTML = "";
-  for (const { code, name } of AVAILABLE_LANGS)
+  const seg = $("#lang-seg"), full = $("#lang-set"); seg.innerHTML = ""; if (full) full.innerHTML = "";
+  for (const { code, name } of AVAILABLE_LANGS) {
     seg.append(h("button", { "data-lang": code, title: name, class: code === LANG ? "on" : "",
-                             onclick: () => setLang(code, true) }, code.toUpperCase()));
+                             onclick: () => setLang(code, true) }, code.split("-")[0].toUpperCase()));   // zh-cn → ZH: the title has the full name
+    if (full) full.append(h("button", { "data-lang": code, class: code === LANG ? "on" : "", onclick: () => setLang(code, true) }, name));
+  }
+}
+// 1.9.0.0: the first start asks for the language (before the agreement); Switches → Interface language changes it later
+function suggestedLang() {
+  const nav = ((navigator.languages && navigator.languages[0]) || navigator.language || "en").toLowerCase();
+  const codes = AVAILABLE_LANGS.map(l => l.code);
+  if (codes.includes(nav)) return nav;
+  if (nav.startsWith("zh")) return codes.find(c => c.startsWith("zh")) || "en";
+  const base = nav.split("-")[0];
+  return codes.find(c => c === base || c.split("-")[0] === base) || "en";
+}
+// the chooser comes before any dictionary is loaded, so its one line is here in each shipped language
+const LANG_HINT = {
+  en: "Choose the interface language. You can change it at any time in Switches → Interface language.",
+  ru: "Выберите язык интерфейса. Его можно сменить в любой момент: Переключатели → Язык интерфейса.",
+  "zh-cn": "请选择界面语言。您可以随时在“开关 → 界面语言”中更改。",
+};
+function showLangChooser() {
+  return new Promise(resolve => {
+    const pick = suggestedLang();
+    const list = h("div", { class: "lang-choice" });
+    const box = h("div", { class: "eula", role: "dialog", "aria-modal": "true" },
+      h("div", { class: "eula-card narrow" },
+        h("h2", {}, "Language · Язык · 语言"),
+        ...[...new Set([pick, "en"])].filter(c => LANG_HINT[c]).map(c => h("p", { class: "muted", lang: c }, LANG_HINT[c])),
+        list));
+    for (const { code, name } of AVAILABLE_LANGS)
+      list.append(h("button", { class: "btn" + (code === pick ? "" : " ghost"), "data-lang": code, onclick: async () => {
+        list.querySelectorAll("button").forEach(b => { b.disabled = true; });
+        try { await setLang(code, true); if (langLoading) await langLoading; } catch (_) {}
+        if (S && S.settings) S.settings.lang_chosen = true;
+        box.remove(); resolve();
+      } }, name));
+    document.body.append(box);
+    const b = list.querySelector(`[data-lang="${pick}"]`); if (b) b.focus();
+  });
 }
 buildLangPickers();
 
@@ -265,7 +304,7 @@ function fdMonitor(f, fb, bar) {
     const rpm = f.rpm ?? 0, tgt = f.target != null && f.target !== rpm ? ` · ${t("target")} ${f.target}` : "";
     const b = bar("fd", name, null, rpm);
     b.querySelector(".top .muted").textContent = `${rpm} ${t("rpm")}${tgt}`;
-    b.querySelector(".fill").style.width = `${Math.min(100, Math.round(rpm / 50))}%`;      // 5000 rpm = full
+    b.querySelector(".fill").style.width = `${Math.min(100, Math.round(rpm * 100 / (f.max || 5000)))}%`;   // the model's top = full
     b.style.cursor = "pointer"; b.title = t("Open"); b.addEventListener("click", () => $(`#nav a[data-page="flydigi"]`)?.click());
     fb.append(b);
     pill.textContent = `🌀 ${name.replace("Flydigi ", "")} · ${rpm} ${t("rpm")}`;
@@ -998,7 +1037,7 @@ function renderLightbar() {
   if (zones.length > 1) for (const k of zones) seg.append(h("button", { class: k === lbZone ? "on" : "", onclick: () => { lbZone = k; renderLightbar(); } }, t(LB_ZONE_NAME[k] || k)));
   $("#lb-power").checked = z.power !== false;
   const sel = $("#lb-effect"); sel.innerHTML = "";
-  const lbExp = (lb.device || {}).protocol === "7001" ? ["breathing"] : [];     // 1.8.2.4: not checked on that bar
+  const lbExp = [];        // effects not checked on this bar (the 7001 bar's breathing: confirmed on XMG NEO 16 E25, 1.9.0.0)
   for (const e of lb.effects) { const o = h("option", { value: e }, t(LB_EFFECT_NAME[e] || e) + (lbExp.includes(e) ? " " + t("(experimental)") : "")); if (e === z.effect) o.selected = true; sel.append(o); }
   for (const k of ["light", "speed"]) { $("#lb-" + k).value = z[k]; $("#lb-" + k).nextElementSibling.textContent = z[k]; }
   const sw = $("#lb-swatches"); sw.innerHTML = "";
@@ -1321,6 +1360,13 @@ function renderSwitches() {
   group("System switches");
   item("On-screen notifications", "Show a notification when the mode changes and hotkeys are pressed.", "osd", s.osd);
   item("Check for updates automatically", "Once a day the service asks GitHub for the latest release of open-uniwill-cc. Nothing else is sent.", "update_check", s.update_check);
+  {                                                    // its sub-item: intermediate updates (also for Check for updates by hand)
+    const mi = h("input", { type: "checkbox" }); mi.checked = s.update_minor !== false;
+    mi.addEventListener("change", () => setUpdateMinor(mi.checked));
+    L.append(h("div", { class: "item sub" }, h("div", {}, h("h4", {}, t("Check intermediate updates")),
+      h("p", {}, t("Releases that change only the last number of the version (1.7.6.1, 1.7.6.2 …): settings for particular laptops. They are optional."))),
+      h("label", { class: "sw" }, mi, h("span"))));
+  }
   if (S.power && S.power.limits && S.power.limits.tjmax && !S.platform.amd)
     item("Extended CPU temperature limit range", "Allow a CPU temperature limit down to 60 °C in the profiles (default: down to 85 °C).", "tcc_extended", s.tcc_extended);
   item("Record sensor history", HIST_REC_DESC, "history_record", s.history_record);
@@ -1698,6 +1744,8 @@ function fdIntroClose(off) {
 $("#fd-intro-keep").addEventListener("click", () => fdIntroClose(false));
 $("#fd-intro-off").addEventListener("click", () => fdIntroClose(true));
 function fdPost(op, body, ok) { return act(() => api("flydigi/" + op, body || {}), ok); }
+// 1.9.0.0: the five own temperature curves
+function fdSlotName(c, i) { const n = ((c.curves || [])[i] || {}).name; return n || t("Curve {0}", i + 1); }
 function renderFlydigi() {
   const F = S.flydigi, on = fdOn();
   $("#nav-flydigi").classList.toggle("hidden", !F || !on);
@@ -1717,6 +1765,12 @@ function renderFlydigi() {
   $("#fd-search").disabled = !!F.scanning;
   $("#fd-forget").classList.toggle("hidden", !c.ble_address);
   $("#fd-hint").classList.toggle("hidden", conn);
+  const fo = !conn && F.found_other;                                              // 1.9.0.0
+  $("#fd-found").classList.toggle("hidden", !fo);
+  if (fo) {
+    $("#fd-found").replaceChildren(t("Found {0} by Bluetooth. Pair it once in the system's Bluetooth settings — the program then connects to it by itself.", fo.name || "Flydigi " + fo.model),
+      ...(S.platform.os === "windows" ? [" ", h("a", { href: "ms-settings:bluetooth" }, t("Open Bluetooth settings"))] : []));
+  }
   const sf = F.shortfall;                                                         // 1.8.2.8
   $("#fd-short").classList.toggle("hidden", !sf);
   if (sf) $("#fd-short").textContent = t("The cooler does not reach the set speed ({0} of {1} rpm): the limit of this model, or a weak charger — the top speeds need a PD charger of 18–20 W (BS2 Pro: 27 W).", sf.rpm, sf.target);
@@ -1748,6 +1802,10 @@ function renderFlydigi() {
     : st.max_selectable_gear && st.max_selectable_gear < 4 ? t("This cooler can select gears up to {0} (its power supply / capability).", st.max_selectable_gear) : "";
   // curve
   $("#fd-curve-card").classList.toggle("hidden", c.mode !== "curve");
+  const slots = $("#fd-slots"); slots.innerHTML = "";
+  for (let i = 0; i < (F.curve_slots || 5); i++)
+    slots.append(h("button", { class: (c.slot || 0) === i ? "on" : "", title: fdSlotName(c, i),
+                               onclick: () => fdPost("config", { mode: "curve", slot: i }) }, fdSlotName(c, i)));
   if (!fdDrag) fdDrawCurve(F);
   const pr = $("#fd-params");
   if (!pr.contains(document.activeElement)) {
@@ -1858,9 +1916,19 @@ function fdDrawCurve(F) {
 }
 $("#fd-rpm").addEventListener("input", e => { e.target.nextElementSibling.textContent = `${e.target.value} ${t("rpm")}`; });
 $("#fd-rpm").addEventListener("change", e => fdPost("config", { mode: "rpm", rpm: +e.target.value }));
-$("#fd-search").addEventListener("click", () => { $("#fd-search").disabled = true; toast(t("Searching for a BS1 for up to 10 seconds…"));
-  fdPost("search", {}, t("BS1 connected")).finally(() => refresh().catch(() => {})); });
+$("#fd-search").addEventListener("click", () => {
+  $("#fd-search").disabled = true; toast(t("Searching for a Flydigi BS for up to 10 seconds…"));
+  act(() => api("flydigi/search", {})).then(r => {
+    if (r && r.found_other) toast(t("Found {0}: pair it in the system's Bluetooth settings", r.found_other.name || r.found_other.model));
+    else if (r && r.info) toast(t("BS1 connected"));
+  }).finally(() => refresh().catch(() => {}));
+});
 $("#fd-forget").addEventListener("click", () => fdPost("forget", {}));
+$("#fd-slot-rename").addEventListener("click", () => {
+  const c = S.flydigi.config, i = c.slot || 0;
+  const n = prompt(t("Name of curve {0} (empty: “{1}”)", i + 1, t("Curve {0}", i + 1)), ((c.curves || [])[i] || {}).name || "");
+  if (n !== null) fdPost("config", { slot_name: n.trim().slice(0, 32) }, t("Saved"));
+});
 // ---- curve editors: fan curve (points, linear) and pump steps (7 / 8 / 11 V)
 let lcPick = null;                                   // a profile picked in the list and shown before Apply
 const LCX0 = 20, LCX1 = 100;                                   // temperature axis, °C
@@ -2541,7 +2609,11 @@ function renderAbout() {
   const mail = u.contact || "OUCC@aspidov.ru";
   const rows = [[t("Program"), "open-uniwill-cc"], [t("Version"), ver],
     [t("Source code"), a(u.repo || "https://github.com/aspidovss/open-uniwill-cc", (u.repo || "").replace("https://", "") || "github.com/aspidovss/open-uniwill-cc")],
-    [t("License"), "MIT (kernel/: GPL-2.0)"], [t("Report a problem"), a((u.repo || "") + "/issues", t("GitHub issues"))],
+    [t("License"), "MIT (kernel/: GPL-2.0)"],
+    [t("Third-party code"), h("span", {}, a("https://github.com/TIANLI0/THRM", "THRM"), " by Tianli (MIT) — Flydigi BS · ",
+      a("https://github.com/ZavierChen/BetterRGB-ITE8291-Adaptive", "BetterRGB"), " (MIT) · ",
+      a((u.repo || "https://github.com/aspidovss/open-uniwill-cc") + "/blob/main/NOTICE.md", "NOTICE.md"))],
+    [t("Report a problem"), a((u.repo || "") + "/issues", t("GitHub issues"))],
     [t("Email"), h("a", { href: "mailto:" + mail }, mail)]];
   for (const [k, v] of rows) dl.append(h("dt", {}, k), h("dd", {}, v));
   let txt;
@@ -2571,18 +2643,19 @@ function renderAbout() {
     }[dlst.state];
     if (msg) $("#upd-text").append(h("br"), h("span", { class: dlst.state === "error" ? "warn-text" : "" }, msg));
   }
-  $("#upd-minor").checked = u.minor !== false;
   const ib = $("#upd-install");
   ib.classList.toggle("hidden", !(u.newer && u.can_install && u.setup));
   ib.disabled = busy;
 }
-$("#upd-minor").addEventListener("change", e => act(async () => {
-  const on = e.target.checked;
-  await api("setting", { key: "update_minor", value: on });
-  const u = S.update = { ...(S.update || {}), minor: on };      // the same rule as Updater._view in updates.py
-  if (u.level) { u.newer = u.level !== "platform" || on; u.skipped = u.level === "platform" && !on ? u.latest : null; }
-  renderAbout();
-}));
+// Switches → under "Check for updates automatically" (1.9.0.0; was in Information → About)
+function setUpdateMinor(on) {
+  return act(async () => {
+    await api("setting", { key: "update_minor", value: on }); S.settings.update_minor = on;
+    const u = S.update = { ...(S.update || {}), minor: on };      // the same rule as Updater._view in updates.py
+    if (u.level) { u.newer = u.level !== "platform" || on; u.skipped = u.level === "platform" && !on ? u.latest : null; }
+    renderAbout();
+  });
+}
 $("#upd-check").addEventListener("click", () => act(async () => { S.update = await api("update/check", {}); renderAbout(); },
   null));
 $("#upd-install").addEventListener("click", () => act(async () => {
@@ -2904,6 +2977,8 @@ function renderLoadRules(force) {                 // force: our own change, redr
           r.lc_profile ?? "", v => { r.lc_profile = v || null; })] : []),
       ...(fdAutoOn() || r.fd_mode ? [h("span", { class: "au-sep" }, t("Flydigi cooler")),       // 1.8.2.7
         sel([["", t("keep its mode")], ...FD_MODES.map(m => [m.id, t(m.name)])], r.fd_mode ?? "", v => { r.fd_mode = v || null; }),
+        ...(r.fd_mode === "curve" ? [sel([["", t("the curve in use")], ...[0, 1, 2, 3, 4].map(i => [i, fdSlotName((S.flydigi || {}).config || {}, i)])],
+          r.fd_slot ?? "", v => { r.fd_slot = v === "" ? null : +v; })] : []),     // 1.9.0.0: one of the own curves
         ...(r.fd_mode === "rpm" ? [num(r.fd_rpm ?? 2000, 0, 5000, v => { r.fd_rpm = Math.round(v); }), h("span", { class: "muted" }, t("rpm"))] : []),
         ...(r.fd_mode === "gear" ? [sel([1, 2, 3, 4].map(g => [g, t(FD_GEAR_NAME[g])]), r.fd_gear ?? 2, v => { r.fd_gear = +v; }),
           sel(FD_LEVELS.map(l => [l, t(FD_LEVEL_NAME[l])]), r.fd_level ?? "mid", v => { r.fd_level = v; })] : [])] : []));
@@ -2927,7 +3002,8 @@ function renderRulesLog(R) {
   const extra = x => [x.fan_boost === true ? t("Fan Boost on") : x.fan_boost === false ? t("Fan Boost off") : "",
     x.lc_mode ? t("Liquid cooler") + ": " + lcm(x.lc_mode) : "",
     x.lc_profile ? (x.what === "back" ? t("cooler curves back") : t("Liquid cooler") + " " + lcn(x.lc_profile)) : "",
-    x.fd_mode ? t("Flydigi cooler") + ": " + t((FD_MODES.find(m => m.id === x.fd_mode) || { name: x.fd_mode }).name) : ""].filter(Boolean).join(" · ");
+    x.fd_mode ? t("Flydigi cooler") + ": " + t((FD_MODES.find(m => m.id === x.fd_mode) || { name: x.fd_mode }).name)
+      + (x.fd_slot != null ? " · " + fdSlotName((S.flydigi || {}).config || {}, x.fd_slot) : "") : ""].filter(Boolean).join(" · ");
   const rows = (auLogAll ? L : L.slice(0, 10)).map(x => {
     const tm = new Date(x.t * 1000).toLocaleTimeString(LANG === "en" ? undefined : LANG, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
     const ex = extra(x);
@@ -3029,7 +3105,9 @@ function connect() {
     return;
   }
   try { await refresh(); } catch (e) { toast(t("Service unavailable: {0}", e.message), true); }
-  api("langs").then(r => { if (r.languages && r.languages.length > 1) { AVAILABLE_LANGS = r.languages; buildLangPickers(); } }).catch(() => {});
+  if (langLoading) await langLoading;                 // the dialogs below are built once: in the chosen language (1.9.0.0)
+  try { const r = await api("langs"); if (r.languages && r.languages.length > 1) { AVAILABLE_LANGS = r.languages; buildLangPickers(); } } catch (_) {}
+  if (S && S.settings && S.settings.lang_chosen === false) await showLangChooser();   // first start (1.9.0.0)
   if (S && S.settings && (S.settings.eula_accepted || 0) < (S.settings.eula_version || 1)) await showAgreement();
   await offerWmiIfNoDriver();
   if (S && S.detect && S.detect.seen !== S.detect.signature) await showDetect(true);   // first start or something changed

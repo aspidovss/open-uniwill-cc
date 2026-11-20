@@ -356,7 +356,7 @@ mode_on_battery
 переключить световую полосу, как горячая клавиша
 .TP
 .B lang
-.BR en | ru
+.BR en | ru | zh-cn
 .TP
 .B fan_manager
 .BR auto " (по проекту), " cml ", " std ;
@@ -438,7 +438,10 @@ mode_on_battery
 Постоянные обороты 0..5000 об/мин или передача с заданными оборотами.
 .TP
 \fBflydigi curve\fR [\fIT:RPM\fR ...|reset]
-Показать или задать кривую по температуре.
+Показать или задать текущую кривую по температуре.
+.TP
+\fBflydigi slot\fR [\fI1\-5\fR] [\fIИМЯ\fR]
+Список пяти своих кривых, переключение на одну (режим curve) и по желанию её переименование.
 .TP
 \fBflydigi set\fR \fIKEY VALUE\fR
 temp_source max|cpu|gpu, hysteresis, min_change, ramp_up, ramp_down.
@@ -447,7 +450,7 @@ temp_source max|cpu|gpu, hysteresis, min_change, ramp_up, ramp_down.
 Настройки в памяти кулера.
 .TP
 .BR "flydigi search" " | " "flydigi forget"
-BS1: найти по Bluetooth LE / забыть.
+Поиск по Bluetooth LE: BS1 подключается; о BS2 / BS3 (Pro) сообщается для сопряжения в системе. Забыть BS1.
 .TP
 .BR "flydigi rgb " on | off
 Подсветка кулера вкл./выкл. (хранится в кулере).
@@ -469,8 +472,8 @@ BS1: найти по Bluetooth LE / забыть.
 .B \-\-private
 скрывает serial, uuid, mac, names, apps.
 .TP
-.BR "lang " en | ru
-Язык окна, уведомлений и этой программы.
+.BR "lang " en | ru | zh-cn
+Язык окна, уведомлений и трея (любой файл из uwccd/web/lang/); сама эта программа говорит по-английски и по-русски.
 .TP
 .BR "debug " [ on | off ]
 Подробный журнал службы.

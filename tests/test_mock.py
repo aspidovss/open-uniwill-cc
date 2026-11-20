@@ -231,6 +231,8 @@ class MockService(unittest.TestCase):
         self.assertEqual(self.get("state")["settings"]["lang"], "en")          # English by default
         self.assertEqual(self.post("setting", {"key": "lang", "value": "ru"})[0], 200)
         self.assertEqual(self.get("state")["settings"]["lang"], "ru")
+        self.assertTrue(self.get("state")["settings"]["lang_chosen"])          # 1.9.0.0: no first-start question now
+        self.assertEqual(self.post("setting", {"key": "lang", "value": "zh-cn"})[0], 200)   # shipped JSON language
         self.assertEqual(self.post("setting", {"key": "lang", "value": "de"})[0], 400)
         self.post("setting", {"key": "lang", "value": "en"})
 
@@ -2699,6 +2701,31 @@ class BusAndModulesUnit(unittest.TestCase):
         self.assertGreater(len(d["web"]), 500)
         self.assertIn("boost_on", d["service"])
         self.assertIn("open", d["tray"])
+        # 1.9.0.0: pairs that share a line of the dictionary are found too (the tool used to miss them)
+        self.assertIn("EC values restored, with differences", d["web"])
+        self.assertIn("RAM used", d["web"])
+
+    def test_shipped_chinese(self):
+        """1.9.0.0: zh-cn.json covers every text of the window, the notifications and the tray, placeholders kept."""
+        import re
+        r = subprocess.run([sys.executable, os.path.join(ROOT, "tools", "make_lang_template.py")],
+                           capture_output=True, text=True, check=True)
+        tpl = json.loads(r.stdout)
+        with open(os.path.join(ROOT, "uwccd", "web", "lang", "zh-cn.json"), encoding="utf-8") as f:
+            zh = json.load(f)
+        self.assertEqual(zh["name"], "简体中文")
+        for sec in ("web", "service", "tray"):
+            self.assertEqual(set(zh[sec]), set(tpl[sec]), sec)
+            for k, v in zh[sec].items():
+                self.assertTrue(v, (sec, k))
+                self.assertEqual(sorted(re.findall(r"\{\d*\}", k if sec == "web" else tpl[sec + "_en"][k])),
+                                 sorted(re.findall(r"\{\d*\}", v)), (sec, k))
+                if sec == "web":
+                    self.assertEqual(sorted(re.findall(r"</?[a-z]+[^>]*>", k)), sorted(re.findall(r"</?[a-z]+[^>]*>", v)), k)
+        from uwccd import i18n
+        self.assertIn("zh-cn", [x["code"] for x in i18n.available()])
+        from uwccd.agentcore import T
+        self.assertEqual(T("zh-cn", "boost_on"), "Fan Boost 已开启")
 
 
 class Fix1811Unit(unittest.TestCase):

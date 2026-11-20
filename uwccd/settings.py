@@ -256,6 +256,8 @@ class SettingsManager:
             "eula_accepted": int(self.st.get("eula_accepted", 0) or 0), "eula_version": EULA_VERSION,
             "mem_oc_support": self.mem_oc_support, "mem_oc": self.mem_oc(), "mem_oc_pending": self.mem_oc_pending(),
             "lang": self.st.get("lang", "en"),
+            # 1.9.0.0: the window asks for the language once; an installation that already ran counts as chosen
+            "lang_chosen": bool(self.st.get("lang_chosen") or self.st.get("lang") or self.st.get("eula_accepted")),
             "fan_manager": self.st.get("fan_manager", "auto"),
             "webcam": self.webcam(),
         }

@@ -82,6 +82,12 @@ class Protocol(unittest.TestCase):
         self.assertFalse(D.should_skip_ble_fallback(True, None, None))
         self.assertFalse(D.should_skip_ble_fallback(True, None, 16 * 60))
 
+    def test_ble_names(self):
+        self.assertEqual([D.model_from_ble_name(n) for n in ("FlyDigi BS2PRO", "Flydigi BS3", "BS3 Pro", "Flydigi BS1", "Mouse")],
+                         ["BS2 Pro", "BS3", "BS3 Pro", "BS1", ""])
+        e = D.OtherModelFound("AA", "FlyDigi BS2PRO")
+        self.assertEqual((e.model, e.address), ("BS2 Pro", "AA"))
+
     def test_ble_matcher(self):
         m = D.BS1Ble.match
         self.assertEqual(m([("A", "Flydigi BS1", False)], None, 0), ("A", "Flydigi BS1"))
@@ -326,6 +332,7 @@ class ModelLimit(unittest.TestCase):
     def make(self, model):
         fc = C.FlydigiCooler.__new__(C.FlydigiCooler)
         fc.cfg = {**C.DEFAULTS, "curve": [list(p) for p in P.DEFAULT_FAN_CURVE]}
+        fc.cfg["curves"] = C.normal_slots(None, fc.cfg["curve"])
         fc.dev = type("Dev", (), {"model": model, "connected": True, "status": {"current_rpm": 2000}})()
         fc.short_since = fc.shortfall = None
         fc.path = os.devnull
@@ -342,9 +349,33 @@ class ModelLimit(unittest.TestCase):
         self.assertEqual(max(r for _, r in bs2.cfg["curve"]), 4000)
         custom = self.make("BS1")
         custom.cfg["curve"] = [[40, 1000], [80, 4800]]
+        custom.cfg["curves"][0]["curve"] = [[40, 1000], [80, 4800]]
         custom._on_model("BS1")
         self.assertEqual(custom.cfg["curve"], [[40, 1000], [80, 4800]])      # an own curve is left alone…
         self.assertEqual(C.clamp_curve(custom.cfg["curve"], 3400), [[40, 1000], [80, 3400]])  # …but cut on save
+
+    def test_curve_slots(self):
+        """1.9.0.0: five own curves; the curve before 1.9.0.0 becomes slot 1; editing changes the slot in use."""
+        old = [[40, 1200], [70, 3000]]
+        slots = C.normal_slots(None, old)
+        self.assertEqual(len(slots), 5)
+        self.assertEqual(slots[0]["curve"], old)
+        self.assertEqual(slots[1]["curve"], [list(p) for p in P.DEFAULT_FAN_CURVE])
+        broken = C.normal_slots([{"name": "x" * 99, "curve": "bad"}, None], old)
+        self.assertEqual((len(broken[0]["name"]), broken[0]["curve"]), (32, [list(p) for p in P.DEFAULT_FAN_CURVE]))
+        fc = self.make("BS2 Pro")
+        fc.lock, fc.wake, fc.applied, fc.ctl_temp = threading.RLock(), threading.Event(), None, None
+        fc.configure({"slot": 2, "slot_name": "Games"})
+        self.assertEqual((fc.cfg["slot"], fc.cfg["curves"][2]["name"]), (2, "Games"))
+        fc.configure({"curve": [[30, 1000], [90, 4500]]})
+        self.assertEqual(fc.cfg["curves"][2]["curve"], [[30, 1000], [90, 4500]])
+        self.assertEqual(fc.cfg["curve"], [[30, 1000], [90, 4500]])
+        self.assertEqual(fc.cfg["curves"][0]["curve"], [list(p) for p in P.DEFAULT_FAN_CURVE])   # others untouched
+        fc.configure({"slot": 0})
+        self.assertEqual(fc.cfg["curve"], [list(p) for p in P.DEFAULT_FAN_CURVE])
+        with self.assertRaises(ValueError):
+            fc.configure({"slot": 5})
+        self.assertEqual(fc.snapshot()["slot"], 0)
 
     def test_shortfall(self):
         fc = self.make("BS1")
@@ -367,6 +398,11 @@ class Automation(unittest.TestCase):
                                                                       {"metric": "fd_rpm", "op": ">", "value": 3000}],
                                      "hold": 0, "mode": 1}])
         self.assertEqual((rules[0]["fd_mode"], rules[0]["fd_rpm"]), ("rpm", 4200))
+        slot_rule = A.check_load_rules([{"conditions": [{"metric": "cpu_temp", "op": ">", "value": 1}],
+                                         "fd_mode": "curve", "fd_slot": 3}])[0]
+        self.assertEqual(A.LoadRules._fd_want(slot_rule), {"mode": "curve", "slot": 3})     # 1.9.0.0
+        with self.assertRaises(ValueError):
+            A.check_load_rules([{"conditions": [{"metric": "cpu_temp", "op": ">", "value": 1}], "fd_mode": "curve", "fd_slot": 7}])
         self.assertEqual(rules[1]["conditions"][0]["op"], "=")
         with self.assertRaises(ValueError):
             A.check_load_rules([{"conditions": [{"metric": "cpu_temp", "op": ">", "value": 1}], "fd_mode": "turbo"}])

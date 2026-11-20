@@ -154,15 +154,22 @@ The protocol and the control and pairing logic are ported from [THRM](https://gi
 (MIT) with the same commands, sequences and timings — `uwccd/flydigi/`, each function names the THRM function it
 comes from.
 
-**Connecting.** BS2 / BS2 Pro / BS3 / BS3 Pro: pair the cooler **once in the system's Bluetooth settings** (or plug
-it in by USB); it then appears as an HID device (VID `37D7`) and the service finds it by itself — also after sleep or
-when it comes back. BS1: plug it in by USB (found by itself), or switch it on and press **Search BS1** (Bluetooth LE,
-up to 10 s, needs `python3-bleak`); a BS1 found this way is remembered and connected again by itself. The service
-does not scan Bluetooth LE in the background for a BS1 it has never seen.
+**Connecting.** Every Flydigi BS model is found by Bluetooth LE: **Search by Bluetooth** (up to 10 s, needs
+`python3-bleak` on Linux). How each one is then controlled is THRM's:
+
+- **BS1** takes commands directly over Bluetooth LE: the search connects it at once, and it is remembered and
+  connected again by itself. It can also be plugged in by USB (found by itself).
+- **BS2 / BS2 Pro / BS3 / BS3 Pro** are controlled as an HID device over Bluetooth (HID over GATT), which the system
+  opens only to a **paired** device: pair the cooler **once in the system's Bluetooth settings** (or plug it in by
+  USB). It then appears as an HID device (VID `37D7`) and the service finds it by itself — also after sleep or when it
+  comes back. If the search finds one that is not paired yet, the page says so (on Windows with a link to the
+  Bluetooth settings).
+
+The service does not scan Bluetooth LE in the background for a cooler it has never seen.
 
 | Mode | What the cooler does |
 |---|---|
-| **Temperature curve** | the fan speed follows the hotter of CPU and GPU (or one of them) by the curve; THRM's default curve and smoothing: hysteresis 2 °C, smallest change 50 rpm, at most +220 / −160 rpm per second |
+| **Temperature curve** | the fan speed follows the hotter of CPU and GPU (or one of them) by the curve; THRM's default curve and smoothing: hysteresis 2 °C, smallest change 50 rpm, at most +220 / −160 rpm per second. **Five own curves** (1.9.0.0): *Curve 1…5* above the chart, each can be renamed; the one picked is used and edited, automation rules can switch to any of them |
 | **Fixed speed** | one speed, 0–5000 rpm (BS1: up to 3400 rpm) |
 | **Gear** | one of the four gears — Quiet / Standard / Strong / Overclock — with THRM's low / medium / high speeds (1300…4000 rpm); the speed is written to the gear only when the cooler does not hold it yet |
 | **Stop** | 0 rpm |
@@ -294,7 +301,7 @@ to the hardware differs (see the last section).
 | *Not in the original:* 17 BetterRGB effects (Wave, Sparkle, Lightning, Flame, Rain, Matrix, Quicksand, Current, Screen ambient, CPU / GPU temperature …) | ✅ | ✅ | frames from `uwccd/lighting/fx.py` (from BetterRGB, MIT): picture 12h on per-key keyboards, zone colours on four-zone ones — [LIGHTING.md](LIGHTING.md) |
 | *Not in the original:* transitions, white calibration, top-row bar, frame rate on AC / battery | ✅ | ✅ | `uwccd/lighting/fx.py`; key presses: Linux `/dev/input`, Windows the tray app; screen: Windows tray app, Linux agent (X11) |
 | LED colour correction per keyboard type / LED vendor | ✅ | ✅ | `WKDColor.cheatRGB_*` (`uwccd/lighting/oem`, proprietary) |
-| Chassis light bar (hinge / base / logo) | ✅ | ✅ | HIDLightbar4, HID `048D:7000`; front bar `048D:7001` (XMG NEO 16 E25 / TUXEDO Stellaris Gen7: own protocol from 1.8.2.4, facts from tuxedo-drivers `ite_8291_lb`; static colour, breathing experimental) |
+| Chassis light bar (hinge / base / logo) | ✅ | ✅ | HIDLightbar4, HID `048D:7000`; front bar `048D:7001` (XMG NEO 16 E25 / TUXEDO Stellaris Gen7: own protocol from 1.8.2.4, facts from tuxedo-drivers `ite_8291_lb`; static colour and breathing; confirmed on XMG NEO 16 E25, Windows, 1.9.0.0) |
 | Light bar power through the EC (the Fn key's switch), on the *Laptop light bar* page | ✅ | ✅ | EC `0x767` bit 1 (trigger), state `0x768` bit 1; models with an RGB light bar in `0x78E` bit 4 |
 | Single-colour backlight (on/off, level) | ✅ | ✅ | EC `0x78C` |
 | Backlight auto-off on inactivity | ✅ | ✅ | Linux: `/dev/input` events; Windows: idle time of the tray app |

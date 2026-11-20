@@ -31,7 +31,7 @@ Overview
   history [csv|csv-excel|json] [1m|5m|15m|1h|24h] [FILE]
   export fans|all FILE  /  import FILE [fans,profiles,settings] [--force]
   report [FILE] [--private serial,uuid,mac,names,apps] [--sections ...] [--full]
-  lang en|ru  /  debug on|off  /  version  /  update [check|install]  /  restart
+  lang en|ru|zh-cn  /  debug on|off  /  version  /  update [check|install]  /  restart
   ec [use auto|oem|wmi] [--accept-risks]   EC Manager (Windows): OEM driver / WMI (beta); same as `driver`
   ec unlock [MIN] | lock         administrator unlock of the EC Manager settings (run as administrator / sudo)
   ec fetch-driver | check-driver | install-driver [--accept-risks]   OEM driver for the free build
@@ -51,6 +51,7 @@ unavailable or access is denied.
 import json
 import locale
 import os
+import re
 import sys
 import time
 import urllib.error
@@ -265,7 +266,7 @@ HELP = {
     "set": ("uwccctl set KEY VALUE\n  bool: on|off   int: number   mode: keep|previous|office|gaming|turbo|custom\n"
             "  " + "\n  ".join(f"{k:18} {v}" for k, v in SETTINGS.items()) +
             "\n  kb_timeout: seconds 0..3600 (0 = never); cpu_alert/gpu_alert: 60..105 °C;\n"
-            "  mode_on_battery does not accept `previous`; lang: en|ru;\n"
+            "  mode_on_battery does not accept `previous`; lang: en|ru|zh-cn;\n"
             "  fan_manager: auto|cml|std (restarts the service; auto = chosen by the project)."),
     "apps": (
         "uwccctl apps                             rules\n"
@@ -333,17 +334,19 @@ HELP = {
         "      stop    0 RPM                               device  the program sends nothing (cooler's own buttons)\n"
         "uwccctl flydigi rpm N                    fixed RPM 0..5000 (switches to mode rpm)\n"
         "uwccctl flydigi gear 1-4 [low|mid|high]  quiet / standard / performance / extreme (switches to mode gear)\n"
-        "uwccctl flydigi curve [T:RPM ...|reset]  show / set the temperature curve, e.g. 40:1400 60:2300 80:3500 90:4000\n"
+        "uwccctl flydigi curve [T:RPM ...|reset]  show / set the curve in use, e.g. 40:1400 60:2300 80:3500 90:4000\n"
+        "uwccctl flydigi slot [1-5] [NAME]        list the 5 own curves / switch to one (mode curve) / and rename it\n"
         "uwccctl flydigi set KEY VALUE            temp_source max|cpu|gpu, hysteresis 0..8, min_change 20..400,\n"
         "                                         ramp_up / ramp_down 50..1200 RPM per step\n"
         "uwccctl flydigi rgb on|off               the cooler's lighting (stored in the cooler; all models)\n"
         "uwccctl flydigi light on|off             gear light (stored in the cooler)\n"
         "uwccctl flydigi power-on-start on|off    start with power (stored in the cooler)\n"
         "uwccctl flydigi smart-stop off|immediate|delayed   smart start/stop (stored in the cooler)\n"
-        "uwccctl flydigi search | forget          BS1: find it by Bluetooth LE / forget it\n"
+        "uwccctl flydigi search | forget          search by Bluetooth LE (BS1 connects; BS2+ is reported for pairing)\n"
+        "                                         / forget the BS1\n"
         "uwccctl flydigi automation on|off        use the cooler in the automation rules (off by default)\n"
-        "  BS2 / BS2 Pro / BS3 / BS3 Pro: pair the cooler in the system's Bluetooth settings (or plug it in by USB);\n"
-        "  the service finds it by itself. The service module \"flydigi\" must be on (uwccctl modules flydigi on)."),
+        "  Every model is found by Bluetooth LE. BS1 connects directly. BS2 / BS2 Pro / BS3 / BS3 Pro: pair the cooler\n"
+        "  once in the system's Bluetooth settings (or plug it in by USB); the service then finds it by itself. The service module \"flydigi\" must be on (uwccctl modules flydigi on)."),
     "caps": "uwccctl caps [--json]\n  What this laptop has, one line per function: available, source (ec / profile /\n"
             "  driver / os / none) and a detail. The same list as Information -> Functions on this laptop.",
     "modules": "uwccctl modules [NAME on|off]\n  Switchable parts of the service (liquid, afterburner, automation, lighting, ...).\n"
@@ -359,7 +362,8 @@ HELP = {
 
 
 def T(k):
-    return TEXT[LANG].get(k, TEXT["en"].get(k, k))
+    # uwccctl speaks English and Russian; another interface language (zh-cn …) gets English here
+    return TEXT.get(LANG, TEXT["en"]).get(k, TEXT["en"].get(k, k))
 
 
 def guess_lang():
@@ -1611,12 +1615,18 @@ def fd_line(f):
         return "not connected" + (f" ({f['error']})" if f.get("error") else "") + \
             (f", BS1 remembered: {c['ble_address']}" if c.get("ble_address") else "")
     mode = c["mode"] + (f" {c['rpm']} RPM" if c["mode"] == "rpm" else
-                        f" {c['gear']} {c['level']}" if c["mode"] == "gear" else "")
+                        f" {c['gear']} {c['level']}" if c["mode"] == "gear" else
+                        f" {fd_slot_name(c, c.get('slot', 0))}" if c["mode"] == "curve" and c.get("curves") else "")
     fw = (f.get("settings") or {}).get("firmware")
     return (f"{f['model']} ({f['transport']}{', fw ' + fw if fw else ''}) · mode {mode} · "
             f"fan {f['current_rpm'] if f['current_rpm'] is not None else '—'} RPM"
             f" (target {f['target_rpm'] if f['target_rpm'] is not None else '—'})"
             + (f" · {f['temp']}°C" if f.get("temp") is not None else ""))
+
+
+def fd_slot_name(c, i):
+    n = ((c.get("curves") or [{}] * 5)[i] or {}).get("name")
+    return f"{i + 1}" + (f" ({n})" if n else "")
 
 
 def cmd_flydigi(a):
@@ -1644,6 +1654,19 @@ def cmd_flydigi(a):
             except (ValueError, IndexError):
                 usage("flydigi")
             call("flydigi/config", {"curve": pts})
+    elif op == "slot":                             # 1.9.0.0: five own temperature curves
+        if not a[1:]:
+            c = call("state")["flydigi"]["config"]
+            return out({"slot": c.get("slot", 0) + 1, "curves": c.get("curves")}, lambda d: "\n".join(
+                f"{'*' if i + 1 == d['slot'] else ' '} {fd_slot_name(c, i)}: " + "  ".join(f"{t:g}°C {r}" for t, r in s["curve"])
+                for i, s in enumerate(d["curves"] or [])))
+        n = num(a[1], "flydigi")
+        if not 1 <= n <= 5:
+            usage("flydigi")
+        body = {"mode": "curve", "slot": n - 1}
+        if a[2:]:
+            body["slot_name"] = " ".join(a[2:])
+        call("flydigi/config", body)
     elif op == "set" and len(a) == 3:
         k, v = a[1], a[2]
         if k == "temp_source":
@@ -1662,6 +1685,10 @@ def cmd_flydigi(a):
         call("flydigi/device", {"smart_start_stop": a[1]})
     elif op == "search":
         r = call("flydigi/search", {}, timeout=60)
+        if r.get("found_other"):
+            return out(r, lambda d: f"Flydigi: found {d['found_other']['name']} by Bluetooth LE — pair it once in the "
+                                    "system's Bluetooth settings (or plug it in by USB); the service then connects "
+                                    "to it by itself.")
         return out(r, lambda d: "Flydigi: " + fd_line(d["status"]))
     elif op == "forget":
         call("flydigi/forget", {})
@@ -1982,11 +2009,11 @@ def cmd_restore(a):
 def cmd_lang(a):
     global LANG
     if a:
-        if a[0] not in ("en", "ru"):
+        if not re.fullmatch(r"[a-z]{2}(-[a-z0-9]{2,8})?", a[0].lower()):
             usage("lang")
-        call("setting", {"key": "lang", "value": a[0]})
-        LANG = a[0]
-    out({"lang": LANG}, T("lang_set"))
+        call("setting", {"key": "lang", "value": a[0].lower()})     # the service names the languages it has
+        LANG = a[0].lower()
+    out({"lang": LANG}, T("lang_set") if LANG in TEXT else f"Language: {LANG}")
 
 
 def driver_text(d):

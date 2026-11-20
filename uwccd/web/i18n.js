@@ -1323,3 +1323,32 @@ Object.assign(RU, {
   "These settings are written to the cooler's own memory and stay there; change them only when needed. The cooler does not report the current value of the gear light and the start when powered — press to set them.":
     "Эти настройки записываются в собственную память кулера и сохраняются в ней; меняйте их только при необходимости. Текущее значение индикатора передачи и запуска при подаче питания кулер не сообщает — нажмите, чтобы задать.",
 });
+
+// 1.9.0.0: search by Bluetooth for every Flydigi BS model; credits
+Object.assign(RU, {
+  "Search by Bluetooth": "Найти по Bluetooth",
+  "Every Flydigi BS model is found by Bluetooth LE. BS1 connects at once with Search by Bluetooth. BS2, BS2 Pro, BS3 and BS3 Pro are paired once in the system's Bluetooth settings (or connected by USB) — then the program finds them by itself.":
+    "Все модели Flydigi BS находятся по Bluetooth LE. BS1 подключается сразу кнопкой «Найти по Bluetooth». BS2, BS2 Pro, BS3 и BS3 Pro один раз сопрягаются в настройках Bluetooth системы (или подключаются по USB) — дальше программа находит их сама.",
+  "Found {0} by Bluetooth. Pair it once in the system's Bluetooth settings — the program then connects to it by itself.":
+    "Найден {0} по Bluetooth. Выполните сопряжение один раз в настройках Bluetooth системы — дальше программа подключится к нему сама.",
+  "Open Bluetooth settings": "Открыть настройки Bluetooth",
+  "Searching for a Flydigi BS for up to 10 seconds…": "Поиск Flydigi BS — до 10 секунд…",
+  "Found {0}: pair it in the system's Bluetooth settings": "Найден {0}: выполните сопряжение в настройках Bluetooth системы",
+  "Third-party code": "Сторонний код",
+});
+
+// 1.9.0.0: language choice at the first start and in Switches
+Object.assign(RU, {
+  "Interface language": "Язык интерфейса",
+  "The window, the tray menu and the notifications. The user agreement and the help pages are in English or Russian.":
+    "Окно, меню в трее и уведомления. Пользовательское соглашение и справка — на английском или русском.",
+});
+
+// 1.9.0.0: Flydigi BS — five own curves
+Object.assign(RU, {
+  "Rename…": "Переименовать…",
+  "Five own curves: pick one to use it and edit it here. Automation rules can switch between them.": "Пять своих кривых: выберите кривую, чтобы использовать её и править здесь. Правила автоматизации могут переключать их.",
+  "Curve {0}": "Кривая {0}",
+  "Name of curve {0} (empty: “{1}”)": "Название кривой {0} (пусто: «{1}»)",
+  "the curve in use": "текущая кривая",
+});

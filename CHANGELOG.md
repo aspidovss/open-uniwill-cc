@@ -1,5 +1,51 @@
 # Changelog
 
+## 1.9.0.0
+
+The feature release for the Flydigi BS coolers: everything of 1.8.2.7 and 1.8.2.8 (intermediate releases, not offered
+to everyone) plus the points below. The Flydigi BS support is a port of **THRM by Tianli**
+(https://github.com/TIANLI0/THRM, MIT): the protocol and the control and pairing logic, unchanged.
+
+- **Search by Bluetooth for every Flydigi BS model** (was *Search BS1*): a BS1 connects at once; a BS2 / BS2 Pro /
+  BS3 / BS3 Pro found this way is reported with a hint to pair it once in the system's Bluetooth settings (Windows: a
+  link to them) — those models are controlled over HID after pairing, as in THRM. `uwccctl flydigi search`,
+  `POST /api/flydigi/search` → `{found_other: {name, model, address}}`; `state.flydigi.found_other`.
+- The page's connection text says that every model is found by Bluetooth LE and how each one connects.
+- **Monitor:** the Flydigi bar is scaled to the model's highest speed (BS1: 3400 rpm is a full bar, not 5000); a
+  reading a little above it (the BS1 tachometer shows up to about 3500 at a target of 3400) fills the bar.
+  The monitor stream's `flydigi` has `max`.
+- **Layout:** the fixed-speed slider row no longer runs past the card (the value has its own column) and the BS1
+  speed note sits under the slider.
+- **Flydigi BS — five own temperature curves:** *Curve 1…5* above the chart (each can be renamed); the one picked is
+  used and edited. The curve from before 1.9.0.0 becomes *Curve 1*, the others start with THRM's default curve (fitted
+  to the model's limit). **Automation rules** can switch the cooler to any of them (*Flydigi cooler → Temperature
+  curve → Curve N*; `fd_slot` 0..4) and put the previous one back. `uwccctl flydigi slot [1-5] [NAME]`;
+  `POST /api/flydigi/config {slot, slot_name}`; `state.flydigi.config.curves` / `.slot`, `curve_slots`.
+- **Simplified Chinese (简体中文)** interface: the window (every text), the tray menu and the notifications —
+  `uwccd/web/lang/zh-cn.json`, picked with **ZH** in the language switch, in the tray (*Language*) or
+  `uwccctl lang zh-cn`. The user agreement and the help pages stay English for it; `uwccctl` itself speaks
+  English for it.
+- The window waits for an extra language's dictionary before the start dialogs (agreement, *Your laptop*), so they
+  come up in that language, not in English. The language switch shows an extra language by its main code
+  (`zh-cn` → **ZH**; the full name is the button's tooltip).
+- **Language at the first start:** before the user agreement the window asks for the interface language (English,
+  Русский, 简体中文 …), the one matching the system language highlighted; an installation that already ran is not
+  asked. **Switches → Interface language** changes it at any time (besides EN / RU / ZH at the foot of the side bar).
+  `state.settings.lang_chosen`.
+- **Switches:** *Interface language* is the first item; *Check intermediate updates* moved there from
+  *Information → About* as the sub-item of *Check for updates automatically*.
+- The Windows tray's *Language* menu lists every language the service has (it offered only English and Russian).
+- `uwccctl` no longer fails when the interface language is not English or Russian; `uwccctl lang` takes any code
+  the service has.
+- `tools/make_lang_template.py` found only the texts that start a line of the dictionary (1081 of 1660); it now
+  reads every pair.
+- **Front light bar `048D:7001` of XMG NEO 16 (E25): confirmed** by a user report — its own protocol (1.8.2.4)
+  works fully on Windows 11; *breathing* is no longer marked experimental. README compatibility table and
+  docs/FEATURES updated.
+- **Credits:** THRM by Tianli is named in README (features and licence), LICENSE (scope of the licence),
+  THIRD_PARTY_LICENSES.txt (its MIT notice), NOTICE.md, *Information → About → Third-party code*, the first-visit note
+  and the foot of the Flydigi BS page.
+
 ## 1.8.2.8
 
 - **Flydigi BS in Switches:** a group of its own — *Enable Flydigi BS* (the component: page, connection, control) and,

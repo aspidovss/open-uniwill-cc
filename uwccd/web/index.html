@@ -121,8 +121,6 @@
             <button class="btn hidden" id="upd-install" data-i>Download and install</button></div></div>
         <dl class="kv" id="about-kv"></dl>
         <p class="muted tiny" id="upd-text"></p>
-        <div class="row upd-minor"><label class="sw"><input type="checkbox" id="upd-minor"><span></span></label>
-          <div><b data-i>Check intermediate updates</b><p class="muted tiny" data-i>Releases that change only the last number of the version (1.7.6.1, 1.7.6.2 …): settings for particular laptops. They are optional.</p></div></div>
       </div>
       <div class="card" id="report-card">
         <div class="row between wrap"><h3 data-i data-help="features#diagnostic-report|диагностический-отчёт">Diagnostic report</h3><button class="btn" id="rep-make" data-i>Create report</button></div>
@@ -400,11 +398,12 @@
             <div><h3 id="fd-title">—</h3><p class="muted tiny" id="fd-sub"></p></div>
           </div>
           <div class="row wrap">
-            <button class="btn ghost" id="fd-search" data-i>Search BS1 (Bluetooth LE)</button>
+            <button class="btn ghost" id="fd-search" data-i>Search by Bluetooth</button>
             <button class="btn ghost hidden" id="fd-forget" data-i>Forget BS1</button>
           </div>
         </div>
-        <p class="muted tiny" id="fd-hint" data-i>BS2, BS2 Pro, BS3, BS3 Pro: pair the cooler once in the system's Bluetooth settings or connect it by USB — the program finds it by itself. BS1: connect it by USB, or press Search BS1 with the cooler switched on.</p>
+        <p class="muted tiny" id="fd-hint" data-i>Every Flydigi BS model is found by Bluetooth LE. BS1 connects at once with Search by Bluetooth. BS2, BS2 Pro, BS3 and BS3 Pro are paired once in the system's Bluetooth settings (or connected by USB) — then the program finds them by itself.</p>
+        <p class="tiny hidden fd-found" id="fd-found"></p>
         <p class="warn-text tiny hidden" id="fd-short"></p>
       </div>
 
@@ -425,7 +424,9 @@
       </div>
 
       <div class="card" id="fd-curve-card">
-        <h3 data-i>Temperature curve</h3>
+        <div class="row between wrap fd-slot-head"><h3 data-i>Temperature curve</h3>
+          <div class="row wrap"><div class="seg" id="fd-slots"></div><button class="btn ghost sm" id="fd-slot-rename" data-i>Rename…</button></div></div>
+        <p class="muted tiny" data-i>Five own curves: pick one to use it and edit it here. Automation rules can switch between them.</p>
         <div id="fd-curve" class="fd-curve"></div>
         <p class="muted tiny fd-hint" data-i>Drag the points. Double-click on the chart: add a point; double-click on a point: remove it.</p>
         <div class="fd-params" id="fd-params"></div>
@@ -586,6 +587,11 @@
     <!-- SWITCHES -->
     <section class="page" id="page-switches">
       <header class="ph"><h1 data-i>Switches</h1><p data-i>Keyboard, touchpad and system functions</p></header>
+      <div class="card" id="lang-card">
+        <h3 data-i>Interface language</h3>
+        <p class="muted" data-i>The window, the tray menu and the notifications. The user agreement and the help pages are in English or Russian.</p>
+        <div class="seg" id="lang-set"></div>
+      </div>
       <div class="alt-box" id="switches-alt"></div>
       <div class="list" id="switch-list"></div>
       <div class="card" id="backup-card">

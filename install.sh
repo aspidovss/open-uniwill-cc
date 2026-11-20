@@ -177,6 +177,6 @@ Done. Control Center is installed.
   • Open "Control Center" from the application menu (or run: uwcc)
   • Console:  uwccctl status      Liquid cooler:  uwccctl lc scan      Manual: man uwccctl
   • Log:      journalctl -u uwccd -f
-  • Language: English by default; switch with EN/RU in the window or: uwccctl lang ru
+  • Language: English by default; switch with EN/RU/ZH in the window or: uwccctl lang ru
 User ${TARGET_USER:-<yours>} was added to the uwcc group — log out and back in.
 EOF

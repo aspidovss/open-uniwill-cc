@@ -60,6 +60,25 @@ class DeviceError(Exception):
     pass
 
 
+class OtherModelFound(LookupError):
+    """1.9.0.0: the Bluetooth LE search found a BS2 / BS2 Pro / BS3 / BS3 Pro but no BS1. Those are controlled over
+    HID after pairing in the system (THRM: README, "pair in the system Bluetooth settings first"), so the search only
+    reports them."""
+
+    def __init__(self, address, name):
+        super().__init__(f"{name} found by Bluetooth LE: pair it in the system's Bluetooth settings")
+        self.address, self.name, self.model = address, name, model_from_ble_name(name)
+
+
+def model_from_ble_name(name):
+    """The advertised name -> model: "FlyDigi BS2PRO" -> "BS2 Pro"."""
+    import re
+    m = re.search(r"BS\s*([123])\s*(PRO)?", (name or "").upper())
+    if not m:
+        return ""
+    return f"BS{m.group(1)}" + (" Pro" if m.group(2) else "")
+
+
 class ResponseBroker:
     """response.go responseBroker: frames from the read loop go to the command waiting for that exact reply."""
 
@@ -795,6 +814,7 @@ class BS1Ble(BS1Cooler):
         self.loop = asyncio.new_event_loop()
         self.client = None
         self.address = None
+        self.others = {}
         threading.Thread(target=self.loop.run_forever, daemon=True, name="flydigi-ble").start()
 
     def _call(self, coro, timeout=30):
@@ -819,6 +839,7 @@ class BS1Ble(BS1Cooler):
 
     async def _scan(self, known):
         seen = {}
+        self.others = {}                 # 1.9.0.0: other Flydigi BS models seen during the scan (reported only)
         start = time.monotonic()
 
         def cb(dev, adv):
@@ -826,6 +847,8 @@ class BS1Ble(BS1Cooler):
             has = BS1_SERVICE in [u.lower() for u in (getattr(adv, "service_uuids", None) or [])]
             if "BS1" in name or "Flydigi" in name or (not name and has):
                 seen[dev.address] = (dev.address, name, has)
+            if model_from_ble_name(name) not in ("", "BS1"):
+                self.others[dev.address] = name
         sc = self.bleak.BleakScanner(detection_callback=cb)
         await sc.start()
         try:
@@ -841,7 +864,9 @@ class BS1Ble(BS1Cooler):
     async def _connect(self, known):
         hit = await self._scan(known)
         if not hit:
-            raise LookupError("no BS1 found by Bluetooth LE")
+            if self.others:
+                raise OtherModelFound(*next(iter(self.others.items())))
+            raise LookupError("no Flydigi BS found by Bluetooth LE")
         address, name = hit
         client = self.bleak.BleakClient(address, disconnected_callback=lambda _c: self._lost(), timeout=15.0)
         await asyncio.wait_for(client.connect(), 20)

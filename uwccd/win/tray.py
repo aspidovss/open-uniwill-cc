@@ -29,7 +29,7 @@ import winreg
 import pystray
 from PIL import Image, ImageDraw
 
-from .. import agentcore, updates
+from .. import agentcore, i18n, updates
 from . import winapi, winplat
 from .appwindow import AppWindow, plain_start
 from .winplat import data_root
@@ -301,9 +301,13 @@ class Tray:
                     sub.append(I(T("lc_connect"), lambda *_: self.act("lc/connect", {"address": self.state["liquid"]["config"]["address"]})))
                 items.append(I(T("lc"), pystray.Menu(*sub)))
             items.append(pystray.Menu.SEPARATOR)
-            items.append(I(T("lang"), pystray.Menu(
-                I("English", lambda *_: self.act("setting", {"key": "lang", "value": "en"}), checked=lambda *_: self.lang == "en", radio=RADIO),
-                I("Русский", lambda *_: self.act("setting", {"key": "lang", "value": "ru"}), checked=lambda *_: self.lang == "ru", radio=RADIO))))
+            try:                                   # English, Russian and every uwccd/web/lang/<code>.json (1.9.0.0)
+                langs = i18n.available()
+            except Exception:  # noqa: BLE001
+                langs = [{"code": "en", "name": "English"}, {"code": "ru", "name": "Русский"}]
+            items.append(I(T("lang"), pystray.Menu(*[
+                I(l["name"], (lambda c: lambda *_: self.act("setting", {"key": "lang", "value": c}))(l["code"]),
+                  checked=(lambda c: lambda *_: self.lang == c)(l["code"]), radio=RADIO) for l in langs])))
         upd = (st or {}).get("update") or {}
         if upd.get("newer") and upd.get("setup"):
             items.append(I(T("upd_install_opt" if upd.get("optional") else "upd_install", upd.get("latest")),

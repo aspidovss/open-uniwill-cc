@@ -106,17 +106,19 @@ Super / XMG NEO 16 (E23); on other models every function stays off until the sel
   undervolt in Office, overclock in Turbo — [docs/AFTERBURNER.md](docs/AFTERBURNER.md)
 - **Liquid cooler** XMG Oasis (LCT21001 Mk1 / LCT22002 Mk2), Eluktronics Liquid Pad Pro, PCS Liquid Series,
   TUXEDO Aquaris: fan and pump curves (common and per laptop mode), cooler profiles, lighting, coolant flow guard, filling cycle
-- **Flydigi BS coolers** (new in 1.8.2.7) BS1, BS2, BS2 Pro, BS3, BS3 Pro: own page, temperature curve, fixed speed,
-  gears, automation rules; control and pairing logic from [THRM](https://github.com/TIANLI0/THRM) by Tianli (MIT) —
-  [docs/FEATURES.md](docs/FEATURES.md#flydigi-bs-coolers)
-- **English and Russian** interface; tray app with notifications on Windows; desktop notifications on Linux
+- **Flydigi BS laptop coolers** (new in 1.9.0.0) BS1, BS2, BS2 Pro, BS3, BS3 Pro, found by Bluetooth LE or USB:
+  own page, temperature curve, fixed speed, gears, stop, lighting on/off, settings stored in the cooler, fan speed on
+  the Monitor page, automation rules (optional). The protocol and the control and pairing logic are a port of
+  **[THRM](https://github.com/TIANLI0/THRM) by Tianli** (MIT) — [docs/FEATURES.md](docs/FEATURES.md#flydigi-bs-coolers)
+- **English, Russian and Simplified Chinese** interface (new in 1.9.0.0: 简体中文); tray app with notifications on Windows; desktop notifications on Linux
 - **Backup and transfer**: export / import of fan curves (one or all), full backup, import from the original Control Center
 - **API for scripts and integrations**: plain HTTP + JSON on 127.0.0.1 with a stable contract
   ([docs/API.md](docs/API.md)) — events stream, capability registry, switchable service modules; a Zabbix /
   monitoring exporter is ~40 lines ([examples/zabbix_exporter.py](examples/zabbix_exporter.py)). *Settings → API*
   (off by default): a separate token with read-only or full access, and optionally access from the local network
   over HTTPS with an address list
-- **Translatable interface**: English and Russian built in, any other language is one JSON file —
+- **Translatable interface**: English and Russian built in, any other language is one JSON file (Simplified Chinese
+  ships as `uwccd/web/lang/zh-cn.json`) —
   [docs/TRANSLATING.md](docs/TRANSLATING.md)
 - **Update check** against the GitHub releases (once a day, can be switched off); on Windows download, checksum check and
   install from the window or the tray; optional *intermediate* updates for particular laptops —
@@ -168,7 +170,7 @@ Uniwill one): only the experimental *Control Center 3.0 / Clevo* module ([docs/C
 | MAIBENBEN Tsunami Series | i9-12900HX / NVIDIA | `0x10` | N.1.23A14 / 1.13 | ✅ Ubuntu 24.04 | ✅ Windows 11 24H2 |
 | MECHREVO Aurora X (Kuangshi / Jiguang B2) — user reports | i7-13700HX / RTX 5060 | `0x1A` | N.1.25MRO33 / 1.31 | ✅ CachyOS, kernel 7.3 (kernel module `uwcc`): modes, power limits, monitoring; custom fan curves from 1.8.2.1 (the EC needs its Custom-mode flags `CUME` + `UFME`); one-zone RGB keyboard backlight (EC, colour + 5 levels) and the GPU fan speed from 1.8.1.1; battery protection held from 1.8.2.2 (waiting for confirmation) | ✅ Windows 11 (OEM driver): modes, fans, limits, monitoring; single-colour backlight from 1.6.4; BIOS-variable features not yet |
 | MECHREVO Yaoshi (X6AR55xY) — user reports | Core Ultra 9 275HX / RTX 5080, RTX 5070 Ti | `0x1A` | N.1.18MRO24 / 1.25, N.1.13MRO16 / 2.6 | ✅ Ubuntu 26.04 (kernel module `uwcc`): modes, Fan Boost, fan tables, power limits from the firmware table `SMRW` (from 1.7.3), cTGP / Dynamic Boost, battery, switches, liquid cooler LCT22002, per-key RGB keyboard and light bar | ✅ Windows 10 (OEM driver): self-check stage 2 all OK (modes, Fan Boost, limits, cTGP, battery, fan tables), liquid cooler LCT22002; per-key RGB keyboard ITE `600B` works from 1.6.7 |
-| XMG NEO 16 (E25) — user report | Core Ultra 9 275HX / NVIDIA | `0x1A` | N.1.33A27 / 2.11 | — | ✅ Windows 11 (OEM driver): per-key RGB keyboard ITE `600B` works from 1.6.7; front light bar ITE `7001`: did not light with the `7000` commands; its own protocol from 1.8.2.4 (waiting for a check) |
+| XMG NEO 16 (E25) — user report | Core Ultra 9 275HX / NVIDIA | `0x1A` | N.1.33A27 / 2.11 | — | ✅ Windows 11 (OEM driver): per-key RGB keyboard ITE `600B` works from 1.6.7; front light bar ITE `7001` works with its own protocol from 1.8.2.4 (fully confirmed on Windows in 1.9.0.0; it did not light with the `7000` commands) |
 
 Tested yours? Please open a [model report](https://github.com/aspidovss/open-uniwill-cc/issues/new?template=model_report.yml).
 
@@ -223,7 +225,7 @@ nothing else. *Check for updates automatically* (*Switches*) turns the daily che
 | only the 4th number | **Intermediate update**, marked as optional: *Intermediate update X: only settings for particular laptops, you can skip it* |
 | nothing newer | *You have the latest version* |
 
-**Check intermediate updates** (*Information → About*, on by default): turn it off and intermediate updates are not
+**Check intermediate updates** (*Switches*, under *Check for updates automatically*; on by default): turn it off and intermediate updates are not
 offered at all — no notification, no tray item; the card only says *Intermediate update X is not offered*. Updates
 that change one of the first three numbers are always shown. The switch works at once, without a new check.
 
@@ -300,7 +302,7 @@ The installer builds the `uwcc` kernel module with DKMS (falls back to `acpi_cal
 
 ## Usage
 
-- **Window** — all settings; the language switch (EN / RU) is at the bottom of the side bar.
+- **Window** — all settings; the language is asked at the first start and can be changed at any time in *Switches → Interface language* or with EN / RU / ZH at the bottom of the side bar.
 - **Tray (Windows)** — right click: mode, Fan Boost, keyboard backlight, liquid cooler, language, updates, *Start with Windows*.
 - **Tray (Linux)** — *Show the configuration window* and *Close the window (free memory)*; needs
   `gir1.2-ayatanaappindicator3-0.1` (the installer adds it) and a desktop that shows AppIndicator icons (Ubuntu does).
@@ -373,6 +375,9 @@ The BetterRGB keyboard effects (`uwccd/lighting/fx.py`) are rewritten from
 [BetterRGB ITE8291 Adaptive](https://github.com/ZavierChen/BetterRGB-ITE8291-Adaptive) by ZavierChen and
 [Better RGB](https://github.com/EpicYamo/Better-RGB-for-Tongfang-ITE8291) by TheYamo — MIT as well; their copyright
 notices are kept in [LICENSE](LICENSE) and [THIRD_PARTY_LICENSES.txt](THIRD_PARTY_LICENSES.txt).
+The Flydigi BS cooler support (`uwccd/flydigi/`) is a port of [THRM](https://github.com/TIANLI0/THRM) by Tianli from
+Go to Python — the protocol and the control and pairing logic, unchanged — MIT, Copyright (c) 2025 Tianli; the
+notice is kept in [LICENSE](LICENSE) and [THIRD_PARTY_LICENSES.txt](THIRD_PARTY_LICENSES.txt).
 Credits and the projects that helped: [NOTICE.md](NOTICE.md), contributors: [CONTRIBUTORS.md](CONTRIBUTORS.md).
 
 **User agreement** ([English](uwccd/web/eula.en.txt) · [Русский](uwccd/web/eula.ru.txt)) — shown by the installers and

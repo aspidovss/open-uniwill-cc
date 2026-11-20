@@ -165,7 +165,7 @@ log of what the rules did) — see `uwccctl help rules`.
 | `fan_boost` | `keep` / `on` / `off` |
 | `lc_mode` | `auto` `laptop` `ec` `manual` `high` `medium` `low` `off`, or `null` = keep |
 | `lc_profile` | cooler profile ID, or `null` = keep |
-| `fd_mode`, `fd_rpm`, `fd_gear`, `fd_level` | Flydigi BS cooler (1.8.2.7): `curve` `rpm` `gear` `stop` `device`, or `null` = keep; `rpm` 0..5000 for `rpm`; gear 1..4 and `low` / `mid` / `high` for `gear` |
+| `fd_mode`, `fd_rpm`, `fd_gear`, `fd_level`, `fd_slot` | Flydigi BS cooler (1.8.2.7): `curve` `rpm` `gear` `stop` `device`, or `null` = keep; `rpm` 0..5000 for `rpm`; gear 1..4 and `low` / `mid` / `high` for `gear`; `fd_slot` 0..4 = own curve 1..5 for `curve` (1.9.0.0; `null` = the curve in use) |
 | `back`, `back_after`, `back_unit` | `never` (stay), `while` (return as soon as the conditions stop), `after` (return when they have not held for `back_after` s) |
 
 A rule must change at least one of mode, Fan Boost, cooler mode, cooler profile or the Flydigi cooler's mode. Older files (`back: true/false`,
@@ -198,11 +198,12 @@ A rule must change at least one of mode, Fan Boost, cooler mode, cooler profile 
 | `flydigi [status]` | state: model, connection, mode, fan speed and target |
 | `flydigi mode curve\|rpm\|gear\|stop\|device` | temperature curve / fixed speed / gear / 0 rpm / the cooler's own buttons |
 | `flydigi rpm N` / `flydigi gear 1-4 [low\|mid\|high]` | fixed speed 0..5000 / a gear with THRM's preset speed |
-| `flydigi curve [T:RPM ...\|reset]` | show / set the curve (2..20 points) |
+| `flydigi curve [T:RPM ...\|reset]` | show / set the curve in use (2..20 points) |
+| `flydigi slot [1-5] [NAME]` | list the five own curves / switch to one (mode curve) and optionally rename it (1.9.0.0) |
 | `flydigi set KEY VALUE` | `temp_source max\|cpu\|gpu`, `hysteresis` 0..8, `min_change` 20..400, `ramp_up` / `ramp_down` 50..1200 |
 | `flydigi rgb on\|off` | the cooler's lighting (all models; stored in the cooler) |
 | `flydigi light on\|off` / `power-on-start on\|off` / `smart-stop off\|immediate\|delayed` | settings stored in the cooler (BS2 and later) |
-| `flydigi search` / `flydigi forget` | BS1: find it by Bluetooth LE / forget it |
+| `flydigi search` / `flydigi forget` | search by Bluetooth LE: a BS1 connects, a BS2 / BS3 (Pro) is reported for pairing in the system / forget the BS1 |
 | `flydigi automation on\|off` | use the cooler in the automation rules (off by default; same as `set flydigi_automation`) |
 
 ## Service
@@ -211,7 +212,7 @@ A rule must change at least one of mode, Fan Boost, cooler mode, cooler profile 
 |---|---|
 | `export fans\|all [FILE]` / `import FILE [fans,profiles,settings] [--force]` | backup / restore |
 | `report [FILE] [--private serial,uuid,mac,names,apps] [--sections LIST] [--full]` | diagnostic zip |
-| `lang en\|ru` / `debug [on\|off]` | language / verbose log |
+| `lang en\|ru\|zh-cn` / `debug [on\|off]` | language (any file in `uwccd/web/lang/`) / verbose log |
 | `version` / `update [check\|install]` | version / new release (install: Windows) |
 | `restart` / `resume` | restart the service / re-apply settings |
 | `lighting` / `nvram` / `ec read ADDR` | diagnostics |

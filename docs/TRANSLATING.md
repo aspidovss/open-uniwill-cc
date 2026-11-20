@@ -1,6 +1,7 @@
 # Translating the interface
 
-English and Russian are built in. **Any other language is one JSON file — no code.** A translation covers the
+English and Russian are built in. **Any other language is one JSON file — no code.** Simplified Chinese
+(`uwccd/web/lang/zh-cn.json`, 1.9.0.0) is the first one shipped this way and a working example. A translation covers the
 window; the notifications and the tray menu have their own small sections in the same file. What the file does not
 translate stays English, key by key, so a partial translation is fine.
 
@@ -27,11 +28,13 @@ translate stays English, key by key, so a partial translation is fine.
    | installed copy | Linux `/var/lib/uwcc/langs/de.json` · Windows `%ProgramData%\UWCC\data\langs\de.json` | trying it on your laptop |
    | repository | `uwccd/web/lang/de.json` | sending it to the project |
 
-4. Reload the window (F5). The new language appears in the language switch (bottom of the side bar) and in
+4. Reload the window (F5). The new language appears in the language switch (bottom of the side bar), in
+   *Switches → Interface language*, in the first-start language question, in the Windows tray menu and in
    `GET /api/langs`; mistakes are written to the service log.
 
 The user agreement is shown in English for other languages (translations of a legal text need review), and the
-console tool `uwccctl` and the Linux agent notifications stay English/Russian for now.
+console tool `uwccctl` and the Linux agent notifications stay English/Russian for now (English for other languages).
+The help pages (*Help*) are shown in English for other languages too.
 
 ## Sending it to the project
 

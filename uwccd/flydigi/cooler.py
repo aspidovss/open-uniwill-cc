@@ -32,6 +32,8 @@ SCAN_S = 5.0               # HID enumeration while not connected
 BLE_RETRY_S = 60.0         # reconnect attempts to a remembered BS1 over Bluetooth LE
 EMIT_S = 2.0
 MAX_CURVE_POINTS = 20
+CURVE_SLOTS = 5            # 1.9.0.0: own temperature curves, one of them in use ("curve" is the copy of that one)
+SLOT_NAME_MAX = 32
 # 1.8.2.8: the highest speed a model actually reaches. The protocol (and THRM) take 0..5000 for every model, but the
 # fan stops at its own ceiling: BS1 is rated 3000 rpm on its top gear and was measured at 3400 rpm. Other models:
 # no data yet, so THRM's 5000. Targets above the limit are cut to it.
@@ -45,7 +47,28 @@ DEFAULTS = {
     "hysteresis": 2, "min_change": 50, "ramp_up": 220, "ramp_down": 160,     # THRM SmartControl defaults
     "ble_address": None,                                                       # a BS1 found before
     "model": None,                                                             # the last connected model
+    "slot": 0,                                                                 # 1.9.0.0: the curve slot in use
+    "curves": None,                                                            # [{name, curve}] × CURVE_SLOTS
 }
+
+
+def normal_slots(saved, current):
+    """CURVE_SLOTS slots {name, curve}; a config from before 1.9.0.0 keeps its curve in slot 1, the others start
+    with THRM's default curve."""
+    out = []
+    for i in range(CURVE_SLOTS):
+        s = saved[i] if isinstance(saved, list) and i < len(saved) and isinstance(saved[i], dict) else None
+        curve = None
+        if s is not None:
+            try:
+                curve = check_curve(s.get("curve"))
+            except (TypeError, ValueError, IndexError):
+                curve = None
+        if curve is None:
+            curve = copy.deepcopy(current) if i == 0 and s is None and not isinstance(saved, list) \
+                else [list(p) for p in P.DEFAULT_FAN_CURVE]
+        out.append({"name": str((s or {}).get("name") or "")[:SLOT_NAME_MAX], "curve": [list(p) for p in curve]})
+    return out
 
 
 def interpolate(curve, temp):
@@ -103,6 +126,14 @@ class FlydigiCooler:
         saved = store.load_json(self.path, {}) or {}
         self.cfg = copy.deepcopy(DEFAULTS)
         self.cfg.update({k: v for k, v in saved.items() if k in DEFAULTS})
+        try:
+            self.cfg["curve"] = check_curve(self.cfg["curve"])
+        except (TypeError, ValueError, IndexError):
+            self.cfg["curve"] = copy.deepcopy(DEFAULTS["curve"])
+        self.cfg["curves"] = normal_slots(self.cfg.get("curves"), self.cfg["curve"])
+        if not isinstance(self.cfg.get("slot"), int) or not 0 <= self.cfg["slot"] < CURVE_SLOTS:
+            self.cfg["slot"] = 0
+        self.cfg["curve"] = [list(p) for p in self.cfg["curves"][self.cfg["slot"]]["curve"]]
         self.dev = None
         self.lock = threading.RLock()
         self.stop_ev = threading.Event()
@@ -118,6 +149,7 @@ class FlydigiCooler:
         self.last_emit = 0.0
         self.scanning = False
         self.suspended = False
+        self.found_other = None         # 1.9.0.0: a BS2+ seen by the Bluetooth search, not paired yet
         self.short_since = None         # since when the fan stays below the target (monotonic)
         self.shortfall = None           # {"target", "rpm"} while it does for SHORTFALL_S
         try:
@@ -225,6 +257,7 @@ class FlydigiCooler:
         with self.lock:
             self.dev = d
             self.error = None
+            self.found_other = None
             self.last_type = "ble" if d.kind == "bs1-ble" else "hid"
             self.applied = None
             self.ctl_rpm = None
@@ -244,9 +277,16 @@ class FlydigiCooler:
         changed = self.cfg.get("model") != model
         self.cfg["model"] = model
         default = [list(p) for p in P.DEFAULT_FAN_CURVE]
-        if limit < P.REALTIME_RPM_MAX and [list(p) for p in self.cfg["curve"]] == default:
-            self.cfg["curve"] = clamp_curve(default, limit)
-            changed = True
+        if limit < P.REALTIME_RPM_MAX:
+            for s in self.cfg.get("curves") or []:      # every slot still on the default curve (1.9.0.0)
+                if [list(p) for p in s["curve"]] == default:
+                    s["curve"] = clamp_curve(default, limit)
+                    changed = True
+            if self.cfg.get("curves"):
+                self.cfg["curve"] = [list(p) for p in self.cfg["curves"][self.cfg.get("slot", 0)]["curve"]]
+            elif [list(p) for p in self.cfg["curve"]] == default:
+                self.cfg["curve"] = clamp_curve(default, limit)
+                changed = True
         if changed:
             self._save()
 
@@ -261,15 +301,22 @@ class FlydigiCooler:
         self._changed(force=True)
 
     def search_ble(self):
-        """Search BS1 (button): one Bluetooth LE scan (10 s) and connect to the BS1 found."""
+        """Search by Bluetooth (button): one Bluetooth LE scan (10 s). A BS1 is connected at once; a BS2 / BS2 Pro /
+        BS3 / BS3 Pro is only reported — it is controlled over HID after pairing in the system (as in THRM)."""
         if not self.ble_available:
             raise NotImplementedError("Bluetooth LE is not available (python3-bleak / bleak missing)")
         if self.dev is not None:
             raise ConnectionError("a cooler is already connected")
         self.scanning = True
+        self.found_other = None
         self._changed(force=True)
         try:
             d = self._connect_ble(self.cfg.get("ble_address"))
+        except D.OtherModelFound as e:
+            self.found_other = {"name": e.name, "model": e.model, "address": e.address}
+            log.info("Flydigi: %s found by Bluetooth LE — it needs pairing in the system", e.name)
+            self._changed(force=True)
+            return {"found_other": self.found_other}
         finally:
             self.scanning = False
         with self.lock:
@@ -399,6 +446,15 @@ class FlydigiCooler:
 
     def configure(self, b):
         c = dict(self.cfg)
+        c["curves"] = copy.deepcopy(self.cfg["curves"])
+        if "slot" in b:                                # 1.9.0.0: switch to another own curve
+            v = int(b["slot"])
+            if not 0 <= v < CURVE_SLOTS:
+                raise ValueError(f"slot 0..{CURVE_SLOTS - 1}")
+            c["slot"] = v
+            c["curve"] = [list(p) for p in c["curves"][v]["curve"]]
+        if "slot_name" in b:                           # the name of the slot in use ("" = the default "Curve N")
+            c["curves"][c["slot"]]["name"] = str(b["slot_name"] or "").strip()[:SLOT_NAME_MAX]
         if "mode" in b:
             if b["mode"] not in MODES:
                 raise ValueError(f"mode: {' | '.join(MODES)}")
@@ -420,6 +476,7 @@ class FlydigiCooler:
         if "curve" in b:
             c["curve"] = clamp_curve(check_curve(b["curve"]) if b["curve"] else copy.deepcopy(DEFAULTS["curve"]),
                                      self.max_rpm())
+            c["curves"][c["slot"]]["curve"] = [list(p) for p in c["curve"]]    # edits the slot in use
         if "temp_source" in b:
             if b["temp_source"] not in TEMP_SOURCES:
                 raise ValueError("temp_source: max | cpu | gpu")
@@ -433,6 +490,8 @@ class FlydigiCooler:
                 c[k] = v
         with self.lock:
             changed_mode = (c["mode"], c["gear"], c["level"]) != (self.cfg["mode"], self.cfg["gear"], self.cfg["level"])
+            if c["slot"] != self.cfg["slot"]:
+                log.info("Flydigi: curve %d (%s)", c["slot"] + 1, c["curves"][c["slot"]]["name"] or "-")
             self.cfg = c
             if changed_mode:
                 self.applied = None
@@ -466,10 +525,10 @@ class FlydigiCooler:
 
     # -- automation -----------------------------------------------------------------------------------------------
     def snapshot(self):
-        return {k: self.cfg[k] for k in ("mode", "rpm", "gear", "level")}
+        return {k: self.cfg[k] for k in ("mode", "rpm", "gear", "level", "slot")}
 
     def restore(self, snap):
-        self.configure({k: v for k, v in (snap or {}).items() if k in ("mode", "rpm", "gear", "level")})
+        self.configure({k: v for k, v in (snap or {}).items() if k in ("mode", "rpm", "gear", "level", "slot")})
 
     # -- status ---------------------------------------------------------------------------------------------------
     def _changed(self, force=False, event="state"):
@@ -492,7 +551,8 @@ class FlydigiCooler:
         d = self.dev
         conn = bool(d is not None and d.connected)
         st = (d.status if conn else None) or {}
-        return {"connected": conn, "model": d.model if conn else None, "mode": self.cfg["mode"],
+        return {"connected": conn, "model": d.model if conn else None, "mode": self.cfg["mode"], "max": self.max_rpm(),
+                "slot": self.cfg["slot"],
                 "rpm": st.get("current_rpm"), "target": st.get("target_rpm"), "temp": self.ctl_temp
                 if conn and self.cfg["mode"] == "curve" else None}
 
@@ -511,7 +571,9 @@ class FlydigiCooler:
             "config": self.cfg, "modes": list(MODES), "levels": list(P.LEVELS),
             "gear_presets": P.DEFAULT_MANUAL_GEAR_RPM, "gear_names": list(P.GEARS),
             "default_curve": [list(p) for p in P.DEFAULT_FAN_CURVE], "max_curve_points": MAX_CURVE_POINTS,
+            "curve_slots": CURVE_SLOTS,
             "rpm_max": self.max_rpm(), "rpm_axis": P.REALTIME_RPM_MAX, "shortfall": self.shortfall if conn else None,
+            "found_other": None if conn else self.found_other,
             "ble_available": self.ble_available, "scanning": self.scanning,
             "error": self.error if not conn else None,
         }

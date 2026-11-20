@@ -355,7 +355,7 @@ mode_on_battery
 toggle the light bar as the hotkey does
 .TP
 .B lang
-.BR en | ru
+.BR en | ru | zh-cn
 .TP
 .B fan_manager
 .BR auto " (by project), " cml ", " std ;
@@ -437,7 +437,10 @@ Temperature curve, fixed speed, gear, 0 rpm, or the cooler's own buttons.
 Fixed speed 0..5000 rpm, or a gear with its preset speed.
 .TP
 \fBflydigi curve\fR [\fIT:RPM\fR ...|reset]
-Show or set the temperature curve.
+Show or set the temperature curve in use.
+.TP
+\fBflydigi slot\fR [\fI1\-5\fR] [\fINAME\fR]
+List the five own curves, switch to one (mode curve) and optionally rename it.
 .TP
 \fBflydigi set\fR \fIKEY VALUE\fR
 temp_source max|cpu|gpu, hysteresis, min_change, ramp_up, ramp_down.
@@ -446,7 +449,7 @@ temp_source max|cpu|gpu, hysteresis, min_change, ramp_up, ramp_down.
 Settings stored in the cooler.
 .TP
 .BR "flydigi search" " | " "flydigi forget"
-BS1: find it by Bluetooth LE / forget it.
+Search by Bluetooth LE: a BS1 connects; a BS2 / BS3 (Pro) is reported for pairing in the system. Forget the BS1.
 .TP
 .BR "flydigi rgb " on | off
 The cooler's lighting on or off (stored in the cooler).
@@ -468,8 +471,8 @@ Diagnostic zip for bug reports.
 .B \-\-private
 hides serial, uuid, mac, names, apps.
 .TP
-.BR "lang " en | ru
-Language of the window, notifications and this tool.
+.BR "lang " en | ru | zh-cn
+Language of the window, notifications and the tray (any file in uwccd/web/lang/); this tool speaks English and Russian.
 .TP
 .BR "debug " [ on | off ]
 Verbose service log.

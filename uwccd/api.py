@@ -760,8 +760,11 @@ class Handler(BaseHTTPRequestHandler):
             fd.configure(b)
         elif op == "device":                       # settings kept in the cooler's flash
             fd.device_setting(b)
-        elif op == "search":                       # BS1 by Bluetooth LE
-            return {"info": fd.search_ble(), "status": fd.status()}
+        elif op == "search":                       # Bluetooth LE: BS1 connects, BS2+ is reported (pair it first)
+            r = fd.search_ble()
+            if isinstance(r, dict) and "found_other" in r:
+                return {"found_other": r["found_other"], "status": fd.status()}
+            return {"info": r, "status": fd.status()}
         elif op == "forget":
             fd.forget_ble()
         elif op == "refresh":
@@ -1012,6 +1015,7 @@ class Handler(BaseHTTPRequestHandler):
             if not i18n.valid(str(value).lower()):
                 raise ValueError("lang: " + " | ".join(l["code"] for l in i18n.available()))
             s.settings_store.set("lang", str(value).lower())
+            s.settings_store.set("lang_chosen", True)                  # 1.9.0.0: no first-start language question
         else:
             raise KeyError(key)
 

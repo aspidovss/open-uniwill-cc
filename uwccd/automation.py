@@ -640,7 +640,11 @@ def check_load_rules(rules):
         fdm = None if fdm in (None, "", "keep") else str(fdm)
         if fdm is not None and fdm not in FD_RULE_MODES:
             raise ValueError(f"rule {i + 1}: Flydigi mode {' | '.join(FD_RULE_MODES)}")
-        fd_rpm = fd_gear = fd_level = None
+        fd_rpm = fd_gear = fd_level = fd_slot = None
+        if fdm == "curve" and r.get("fd_slot") not in (None, "", "keep"):    # 1.9.0.0: one of the 5 own curves
+            fd_slot = int(r["fd_slot"])
+            if not 0 <= fd_slot <= 4:
+                raise ValueError(f"rule {i + 1}: Flydigi curve 1..5")
         if fdm == "rpm":
             fd_rpm = int(r.get("fd_rpm", 2000))
             if not 0 <= fd_rpm <= 5000:
@@ -654,7 +658,7 @@ def check_load_rules(rules):
         out.append({"enabled": bool(r.get("enabled", True)), "name": str(r.get("name") or "")[:40],
                     "conditions": cc, "join": join, "hold": hold, "mode": mode, "slot": slot if mode is not None else None,
                     "fan_boost": fb, "lc_mode": lcm, "lc_profile": lcp, "avg": r.get("avg", True) is not False,
-                    "fd_mode": fdm, "fd_rpm": fd_rpm, "fd_gear": fd_gear, "fd_level": fd_level,
+                    "fd_mode": fdm, "fd_rpm": fd_rpm, "fd_gear": fd_gear, "fd_level": fd_level, "fd_slot": fd_slot,
                     "back": back, "back_after": back_after, **units})
     return out
 
@@ -691,7 +695,8 @@ class LoadRules:
     def _note(self, what, r, now=None, **kw):
         self.log.append({"t": round(now or time.time()), "what": what, "rule": r.get("name") or "",
                          "mode": kw.get("mode"), "slot": kw.get("slot"), "lc_profile": kw.get("lc_profile"),
-                         "lc_mode": kw.get("lc_mode"), "fan_boost": kw.get("fan_boost"), "fd_mode": kw.get("fd_mode")})
+                         "lc_mode": kw.get("lc_mode"), "fan_boost": kw.get("fan_boost"), "fd_mode": kw.get("fd_mode"),
+                         "fd_slot": kw.get("fd_slot")})
 
     def clear_log(self):
         with self.lock:
@@ -850,6 +855,8 @@ class LoadRules:
             want["rpm"] = r.get("fd_rpm") if r.get("fd_rpm") is not None else 2000
         if m == "gear":
             want["gear"], want["level"] = r.get("fd_gear") or 2, r.get("fd_level") or "mid"
+        if m == "curve" and r.get("fd_slot") is not None:
+            want["slot"] = int(r["fd_slot"])
         return want
 
     def _apply_fd(self, r):
@@ -864,7 +871,7 @@ class LoadRules:
         except (KeyError, ValueError) as e:
             log.warning("load rule: Flydigi cooler: %s", e)
             return {}
-        return {"fd_mode": want["mode"], "fd": want}
+        return {"fd_mode": want["mode"], "fd_slot": want.get("slot"), "fd": want}
 
     def _activate(self, i, r, now):
         if self.active is None:
@@ -885,7 +892,8 @@ class LoadRules:
         self.did.update(did)
         self.active, self.false_since = i, None
         self._note("on", r, now, mode=r.get("mode"), slot=r.get("slot"), lc_profile=did.get("lc_profile"),
-                   lc_mode=did.get("lc_mode"), fan_boost=did.get("fan_boost"), fd_mode=did.get("fd_mode"))
+                   lc_mode=did.get("lc_mode"), fan_boost=did.get("fan_boost"), fd_mode=did.get("fd_mode"),
+                   fd_slot=did.get("fd_slot"))
 
     def _return(self, r, now):
         """Put back what the rules changed — each part only if it is still what the rule set."""
@@ -917,6 +925,8 @@ class LoadRules:
                 if all(fd.cfg.get(k) == v for k, v in did["fd"].items()):       # nobody changed it meanwhile
                     fd.restore(sv["fd"])
                     back["fd_mode"] = sv["fd"].get("mode")
+                    if "slot" in did["fd"]:
+                        back["fd_slot"] = sv["fd"].get("slot")
             except (KeyError, ValueError) as e:
                 log.warning("load rule: Flydigi cooler back: %s", e)
         self._note("back" if back else "end", r, now, **back)

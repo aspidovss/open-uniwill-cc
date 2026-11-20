@@ -166,7 +166,7 @@ Control Center 3.0 / Clevo (экспериментально): `uwccctl clevo �
 | `fan_boost` | `keep` / `on` / `off` (не менять / включить / выключить) |
 | `lc_mode` | `auto` `laptop` `ec` `manual` `high` `medium` `low` `off` или `null` = не менять |
 | `lc_profile` | ID профиля охладителя или `null` = не менять |
-| `fd_mode`, `fd_rpm`, `fd_gear`, `fd_level` | кулер Flydigi BS (1.8.2.7): `curve` `rpm` `gear` `stop` `device` или `null` = не менять; `rpm` 0..5000 для `rpm`; передача 1..4 и `low` / `mid` / `high` для `gear` |
+| `fd_mode`, `fd_rpm`, `fd_gear`, `fd_level`, `fd_slot` | кулер Flydigi BS (1.8.2.7): `curve` `rpm` `gear` `stop` `device` или `null` = не менять; `rpm` 0..5000 для `rpm`; передача 1..4 и `low` / `mid` / `high` для `gear`; `fd_slot` 0..4 = своя кривая 1..5 для `curve` (1.9.0.0; `null` = текущая кривая) |
 | `back`, `back_after`, `back_unit` | `never` (не возвращать), `while` (вернуть, как только условие перестанет выполняться), `after` (вернуть, когда условие не выполняется `back_after` с) |
 
 Правило должно менять хотя бы что-то одно: режим, Fan Boost, режим или профиль охладителя, режим кулера Flydigi. Старые файлы
@@ -199,11 +199,12 @@ Control Center 3.0 / Clevo (экспериментально): `uwccctl clevo �
 | `flydigi [status]` | состояние: модель, подключение, режим, обороты и цель |
 | `flydigi mode curve\|rpm\|gear\|stop\|device` | кривая по температуре / постоянные обороты / передача / 0 об/мин / кнопки кулера |
 | `flydigi rpm N` / `flydigi gear 1-4 [low\|mid\|high]` | постоянные обороты 0..5000 / передача с оборотами THRM |
-| `flydigi curve [T:RPM ...\|reset]` | показать / задать кривую (2..20 точек) |
+| `flydigi curve [T:RPM ...\|reset]` | показать / задать текущую кривую (2..20 точек) |
+| `flydigi slot [1-5] [ИМЯ]` | список пяти своих кривых / переключиться на одну (режим curve) и по желанию переименовать (1.9.0.0) |
 | `flydigi set KEY VALUE` | `temp_source max\|cpu\|gpu`, `hysteresis` 0..8, `min_change` 20..400, `ramp_up` / `ramp_down` 50..1200 |
 | `flydigi rgb on\|off` | подсветка кулера (все модели; хранится в кулере) |
 | `flydigi light on\|off` / `power-on-start on\|off` / `smart-stop off\|immediate\|delayed` | настройки в памяти кулера (BS2 и новее) |
-| `flydigi search` / `flydigi forget` | BS1: найти по Bluetooth LE / забыть |
+| `flydigi search` / `flydigi forget` | поиск по Bluetooth LE: BS1 подключается, о BS2 / BS3 (Pro) сообщается для сопряжения в системе / забыть BS1 |
 | `flydigi automation on\|off` | кулер в правилах автоматизации (по умолчанию выкл.; то же, что `set flydigi_automation`) |
 
 ## Служба
@@ -212,7 +213,7 @@ Control Center 3.0 / Clevo (экспериментально): `uwccctl clevo �
 |---|---|
 | `export fans\|all [ФАЙЛ]` / `import ФАЙЛ [fans,profiles,settings] [--force]` | резервная копия / восстановление |
 | `report [ФАЙЛ] [--private serial,uuid,mac,names,apps] [--sections СПИСОК] [--full]` | диагностический архив |
-| `lang en\|ru` / `debug [on\|off]` | язык / подробный журнал |
+| `lang en\|ru\|zh-cn` / `debug [on\|off]` | язык (любой файл из `uwccd/web/lang/`) / подробный журнал |
 | `version` / `update [check\|install]` | версия / новый выпуск (установка: Windows) |
 | `restart` / `resume` | перезапуск службы / применить настройки заново |
 | `lighting` / `nvram` / `ec read АДРЕС` | диагностика |

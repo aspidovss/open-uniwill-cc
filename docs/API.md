@@ -49,7 +49,7 @@ computers use the **external token** — see [External access](#external-access-
 | `POST /api/module` | `{name, enabled}` — switch a service module; answers `{modules: [...]}` |
 | `POST /api/battery` | `{limit_up?, limit_down?, health_mode?}` |
 | `POST /api/lc/...` | liquid cooler: `scan`, `connect`, `disconnect`, `config` |
-| `POST /api/flydigi/...` | Flydigi BS cooler (1.8.2.7): `config` `{mode: curve/rpm/gear/stop/device, rpm, gear, level, curve, temp_source, hysteresis, min_change, ramp_up, ramp_down}`, `device` `{rgb, gear_light, power_on_start, smart_start_stop}`, `search` (BS1 by Bluetooth LE), `forget`, `refresh`; state in `state.flydigi` |
+| `POST /api/flydigi/...` | Flydigi BS cooler (1.8.2.7): `config` `{mode: curve/rpm/gear/stop/device, rpm, gear, level, curve, temp_source, hysteresis, min_change, ramp_up, ramp_down, slot (0..4, 1.9.0.0), slot_name}`, `device` `{rgb, gear_light, power_on_start, smart_start_stop}`, `search` (BS1 by Bluetooth LE), `forget`, `refresh`; state in `state.flydigi` |
 | `POST /api/afterburner` | `{action: "apply", slot}` and the other actions of the card |
 
 The window uses more endpoints than this table; they work but are not part of the promise yet.

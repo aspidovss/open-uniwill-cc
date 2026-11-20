@@ -22,12 +22,23 @@ def web_keys():
     """The English keys of the RU dictionary in uwccd/web/i18n.js (RU translates everything, so its keys = all texts)."""
     src = open(os.path.join(ROOT, "uwccd", "web", "i18n.js"), encoding="utf-8").read()
     keys, seen = [], set()
-    # "English text": "..."  — the key is any double-quoted string followed by a colon
-    for m in re.finditer(r'(?m)^\s*"((?:[^"\\]|\\.)*)"\s*:', src):
-        k = m.group(1).replace('\\"', '"').replace("\\\\", "\\").replace("\\n", "\n")
-        if k not in seen:
-            seen.add(k)
-            keys.append(k)
+    # The RU dictionary: `const RU = {...};` and every later `Object.assign(RU, {...});`. Several pairs often share
+    # one line, so every string literal is read in turn (a value may itself contain ": ") and a string followed by
+    # a colon is a key.
+    lit = re.compile(r'"((?:[^"\\]|\\.)*)"(\s*:)?')
+    for start in re.finditer(r'(?:const RU = |Object\.assign\(RU, )\{', src):
+        pos = start.end()
+        while True:                                   # walk the block to its closing brace, string by string
+            m = lit.search(src, pos)
+            close = src.find("}", pos)
+            if m is None or close < m.start():
+                break
+            if m.group(2):
+                k = json.loads('"' + m.group(1) + '"')
+                if k not in seen:
+                    seen.add(k)
+                    keys.append(k)
+            pos = m.end()
     return keys
 
 

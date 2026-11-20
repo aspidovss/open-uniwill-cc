@@ -67,7 +67,8 @@ SOFTWARE.
 
 
 uwccd/flydigi/ (Flydigi BS coolers) is ported from Go to Python from THRM
-(protocol, control and pairing logic; internal/deviceproto, internal/device, internal/types).
+(protocol, control and pairing logic, the lighting switch; internal/deviceproto,
+internal/device, internal/types, internal/smartcontrol defaults).
   https://github.com/TIANLI0/THRM
 
 MIT License
