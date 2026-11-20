@@ -146,7 +146,9 @@ leave the cooler unusable. Use the vendor tool or nRF Connect with the right pac
 
 Page **Performance → Flydigi BS** (or `uwccctl flydigi …`), new in 1.8.2.7. Coolers: **BS1, BS2, BS2 Pro, BS3,
 BS3 Pro**. The page is a service module: *Switches → Service modules → Flydigi BS cooler*; off, the page is hidden and
-the program leaves the cooler alone.
+the program leaves the cooler alone. Since 1.8.2.8 it has its own group in *Switches → Flydigi BS*: **Enable
+Flydigi BS** and, under it, **Flydigi BS — add to the automation rules** (off by default, available only while
+Flydigi BS is on). The first visit of the page says that it is a port of THRM and offers to turn the component off.
 
 The protocol and the control and pairing logic are ported from [THRM](https://github.com/TIANLI0/THRM) by Tianli
 (MIT) with the same commands, sequences and timings — `uwccd/flydigi/`, each function names the THRM function it
@@ -161,7 +163,7 @@ does not scan Bluetooth LE in the background for a BS1 it has never seen.
 | Mode | What the cooler does |
 |---|---|
 | **Temperature curve** | the fan speed follows the hotter of CPU and GPU (or one of them) by the curve; THRM's default curve and smoothing: hysteresis 2 °C, smallest change 50 rpm, at most +220 / −160 rpm per second |
-| **Fixed speed** | one speed, 0–5000 rpm |
+| **Fixed speed** | one speed, 0–5000 rpm (BS1: up to 3400 rpm) |
 | **Gear** | one of the four gears — Quiet / Standard / Strong / Overclock — with THRM's low / medium / high speeds (1300…4000 rpm); the speed is written to the gear only when the cooler does not hold it yet |
 | **Stop** | 0 rpm |
 | **Cooler's buttons** | the program sends nothing |
@@ -171,14 +173,22 @@ is started through the cooler's own start path (gear, 450 ms, then at least 1700
 3 s later; three failed writes are followed by a read-only check before the connection is dropped. A physical gear
 button puts the cooler back in gear mode, and the next speed enters realtime mode again.
 
-**Settings stored in the cooler** (BS2 and later): gear light, start when powered, smart start/stop. They are written
+**Highest speed.** The protocol takes 0–5000 rpm for every model, but a fan stops at its own ceiling: BS1 is rated
+3000 rpm on its top gear and reaches about 3400 rpm, so for BS1 the speed, the curve and the rules are cut to 3400 rpm
+(the default curve is fitted to it; the curve shows the limit as a dashed line). The top speeds also need a PD charger:
+18–20 W for BS1 and BS2, 27 W for BS2 Pro — from a laptop USB port or a charger without PD the top gear stays locked.
+When the fan stays below 90 % of the set speed for 15 s, the page says so.
+
+**Settings stored in the cooler:** lighting on/off (all models; the page shows its current state), and on BS2 and
+later the gear light, start when powered, smart start/stop (BS1: only start when powered). They are written
 to the cooler's memory, at least 150 ms apart and only when they change; the page also shows the firmware, the device
 ID, the capability tier and the gear speeds stored in the cooler. A cooler with capability tier 1 or 2 (e.g. not
 enough power) cannot select every gear — the page says so.
 
-**Automation.** A rule can set the Flydigi cooler's mode (with its speed or gear) and put it back when the rule is
+**Automation** (only after *Flydigi BS — add to the automation rules* is turned on). A rule can set the Flydigi cooler's mode (with its speed or gear) and put it back when the rule is
 over; conditions *Flydigi fan speed* (rpm) and *Flydigi cooler* (connected / not connected). Template *Hot → Flydigi
-cooler at 4000 rpm*. The fan speed is also in the history (*Fans*) and its CSV export (`flydigi_fan_rpm`).
+cooler at 4000 rpm*. While the component is on, the cooler's fan speed is shown on *Monitor → Fans* and in the
+sidebar (since 1.8.2.8); it is also in the history (*Fans*) and its CSV export (`flydigi_fan_rpm`).
 
 ```bash
 uwccctl flydigi                      # state

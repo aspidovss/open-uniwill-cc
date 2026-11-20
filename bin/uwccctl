@@ -76,7 +76,8 @@ SETTINGS = {
     "winkey_lock": "bool", "fn_lock": "bool", "usb_charger": "bool", "touchpad_toggle": "bool",
     "touchpad_enabled": "bool", "ac_recovery": "bool", "dgpu_direct": "bool", "lightbar_trigger": "bool",
     "bluetooth": "bool", "wifi": "bool", "webcam": "bool", "kb_timeout": "int", "osd": "bool",
-    "lc_hwoc": "bool", "mem_oc": "bool", "super_performance": "bool", "history_record": "bool",
+    "lc_hwoc": "bool", "flydigi_automation": "bool", "mem_oc": "bool", "super_performance": "bool",
+    "history_record": "bool",
     "update_check": "bool", "kb_picture_modes": "bool", "tcc_extended": "bool", "debug": "bool",
     "kb_fx_screen": "bool", "kb_unlock_effects": "bool", "profile_autoapply": "bool",
     "alerts": "bool", "overheat_boost": "bool", "kb_off_on_battery": "bool", "ppd_sync": "bool",
@@ -335,10 +336,12 @@ HELP = {
         "uwccctl flydigi curve [T:RPM ...|reset]  show / set the temperature curve, e.g. 40:1400 60:2300 80:3500 90:4000\n"
         "uwccctl flydigi set KEY VALUE            temp_source max|cpu|gpu, hysteresis 0..8, min_change 20..400,\n"
         "                                         ramp_up / ramp_down 50..1200 RPM per step\n"
+        "uwccctl flydigi rgb on|off               the cooler's lighting (stored in the cooler; all models)\n"
         "uwccctl flydigi light on|off             gear light (stored in the cooler)\n"
         "uwccctl flydigi power-on-start on|off    start with power (stored in the cooler)\n"
         "uwccctl flydigi smart-stop off|immediate|delayed   smart start/stop (stored in the cooler)\n"
         "uwccctl flydigi search | forget          BS1: find it by Bluetooth LE / forget it\n"
+        "uwccctl flydigi automation on|off        use the cooler in the automation rules (off by default)\n"
         "  BS2 / BS2 Pro / BS3 / BS3 Pro: pair the cooler in the system's Bluetooth settings (or plug it in by USB);\n"
         "  the service finds it by itself. The service module \"flydigi\" must be on (uwccctl modules flydigi on)."),
     "caps": "uwccctl caps [--json]\n  What this laptop has, one line per function: available, source (ec / profile /\n"
@@ -1649,6 +1652,8 @@ def cmd_flydigi(a):
             call("flydigi/config", {k: num(v, "flydigi")})
         else:
             usage("flydigi")
+    elif op == "rgb" and a[1:]:
+        call("flydigi/device", {"rgb": onoff(a[1], "flydigi")})
     elif op == "light" and a[1:]:
         call("flydigi/device", {"gear_light": onoff(a[1], "flydigi")})
     elif op == "power-on-start" and a[1:]:
@@ -1660,6 +1665,10 @@ def cmd_flydigi(a):
         return out(r, lambda d: "Flydigi: " + fd_line(d["status"]))
     elif op == "forget":
         call("flydigi/forget", {})
+    elif op == "automation" and a[1:]:                 # 1.8.2.8: the cooler in the automation rules
+        call("setting", {"key": "flydigi_automation", "value": onoff(a[1], "flydigi")})
+        return out(call("state")["settings"]["flydigi_automation"],
+                   lambda d: "Flydigi in the automation rules: " + ("on" if d else "off"))
     else:
         usage("flydigi")
     out(call("state")["flydigi"], lambda d: "Flydigi: " + fd_line(d))

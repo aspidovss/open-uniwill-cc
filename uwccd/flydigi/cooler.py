@@ -32,6 +32,11 @@ SCAN_S = 5.0               # HID enumeration while not connected
 BLE_RETRY_S = 60.0         # reconnect attempts to a remembered BS1 over Bluetooth LE
 EMIT_S = 2.0
 MAX_CURVE_POINTS = 20
+# 1.8.2.8: the highest speed a model actually reaches. The protocol (and THRM) take 0..5000 for every model, but the
+# fan stops at its own ceiling: BS1 is rated 3000 rpm on its top gear and was measured at 3400 rpm. Other models:
+# no data yet, so THRM's 5000. Targets above the limit are cut to it.
+MODEL_MAX_RPM = {"BS1": 3400}
+SHORTFALL_RATIO, SHORTFALL_S = 0.9, 15.0     # below 90 % of the target for 15 s: "does not reach the speed"
 
 DEFAULTS = {
     "mode": "curve", "rpm": 2000, "gear": 2, "level": "mid",
@@ -39,6 +44,7 @@ DEFAULTS = {
     "temp_source": "max",
     "hysteresis": 2, "min_change": 50, "ramp_up": 220, "ramp_down": 160,     # THRM SmartControl defaults
     "ble_address": None,                                                       # a BS1 found before
+    "model": None,                                                             # the last connected model
 }
 
 
@@ -60,6 +66,14 @@ def apply_ramp_limit(target, last, up, down):
     if target < last:
         return max(last - down, target)
     return target
+
+
+def model_max_rpm(model):
+    return MODEL_MAX_RPM.get(model or "", P.REALTIME_RPM_MAX)
+
+
+def clamp_curve(curve, limit):
+    return [[t, min(int(r), limit)] for t, r in curve]
 
 
 def check_curve(curve):
@@ -104,6 +118,8 @@ class FlydigiCooler:
         self.last_emit = 0.0
         self.scanning = False
         self.suspended = False
+        self.short_since = None         # since when the fan stays below the target (monotonic)
+        self.shortfall = None           # {"target", "rpm"} while it does for SHORTFALL_S
         try:
             import bleak  # noqa: F401
             self.ble_available = True
@@ -212,9 +228,27 @@ class FlydigiCooler:
             self.last_type = "ble" if d.kind == "bs1-ble" else "hid"
             self.applied = None
             self.ctl_rpm = None
+        self._on_model(d.model)
         threading.Thread(target=self._read_settings, daemon=True, name="flydigi-query").start()
         self._changed(force=True, event="connected")
         return True
+
+    def max_rpm(self):
+        """The highest speed of the connected (or the last connected) model."""
+        d = self.dev
+        return model_max_rpm(d.model if d is not None and d.connected else self.cfg.get("model"))
+
+    def _on_model(self, model):
+        """Remember the model; an unchanged default curve is fitted to the model's limit (BS1: up to 3400 rpm)."""
+        limit = model_max_rpm(model)
+        changed = self.cfg.get("model") != model
+        self.cfg["model"] = model
+        default = [list(p) for p in P.DEFAULT_FAN_CURVE]
+        if limit < P.REALTIME_RPM_MAX and [list(p) for p in self.cfg["curve"]] == default:
+            self.cfg["curve"] = clamp_curve(default, limit)
+            changed = True
+        if changed:
+            self._save()
 
     def _read_settings(self):
         d = self.dev
@@ -240,6 +274,7 @@ class FlydigiCooler:
             self.scanning = False
         with self.lock:
             self.dev, self.last_type, self.applied, self.error = d, "ble", None, None
+        self._on_model(d.model)
         self._changed(force=True, event="connected")
         self.wake.set()
         return d.info
@@ -290,6 +325,7 @@ class FlydigiCooler:
         mode = c["mode"]
         if mode == "device":
             self.applied = ("device",)
+            self._track_shortfall(None)
             return
         if mode == "gear":
             key = ("gear", c["gear"], c["level"])
@@ -304,6 +340,7 @@ class FlydigiCooler:
                     self.applied = key                      # not again every second; a change retries
                 self.ctl_rpm = None
                 self._changed(force=True)
+            self._track_shortfall(None)
             return
         if mode == "stop":
             target = 0
@@ -317,6 +354,7 @@ class FlydigiCooler:
                 target = int(c["rpm"])
             else:
                 target = self.curve_target(t)
+        target = min(target, self.max_rpm())                 # the model's ceiling (BS1: 3400 rpm)
         if mode == "curve" and self.ctl_rpm is not None:
             rpm = apply_ramp_limit(target, self.ctl_rpm, int(c["ramp_up"]), int(c["ramp_down"]))
             if rpm != target and abs(rpm - self.ctl_rpm) < int(c["min_change"]):
@@ -332,6 +370,28 @@ class FlydigiCooler:
         except Exception as e:  # noqa: BLE001
             self.error = str(e)
             log.debug("Flydigi: set %d RPM: %s", rpm, e)
+        self._track_shortfall(self.ctl_rpm)
+
+    def _track_shortfall(self, target, now=None):
+        """The fan stays below 90 % of the target for 15 s: the model's limit or a weak charger (the top speeds need a
+        PD charger: 18-20 W for BS1 / BS2, 27 W for BS2 Pro). Cleared as soon as it catches up."""
+        now = time.monotonic() if now is None else now
+        st = self.dev.status if self.dev is not None and self.dev.connected else None
+        cur = st.get("current_rpm") if st else None
+        if not target or cur is None or cur >= SHORTFALL_RATIO * target:
+            was = self.shortfall
+            self.short_since = self.shortfall = None
+            if was:
+                self._changed(force=True)
+            return
+        if self.short_since is None:
+            self.short_since = now
+        elif now - self.short_since >= SHORTFALL_S:
+            first = self.shortfall is None
+            self.shortfall = {"target": target, "rpm": cur}
+            if first:
+                log.info("Flydigi: the fan stays at %d rpm, below the target %d rpm", cur, target)
+                self._changed(force=True)
 
     # -- settings -------------------------------------------------------------------------------------------------
     def _save(self):
@@ -347,7 +407,7 @@ class FlydigiCooler:
             v = int(b["rpm"])
             if not 0 <= v <= P.REALTIME_RPM_MAX:
                 raise ValueError(f"rpm 0..{P.REALTIME_RPM_MAX}")
-            c["rpm"] = v
+            c["rpm"] = min(v, self.max_rpm())
         if "gear" in b:
             v = int(b["gear"])
             if not 1 <= v <= 4:
@@ -358,7 +418,8 @@ class FlydigiCooler:
                 raise ValueError("level: low | mid | high")
             c["level"] = b["level"]
         if "curve" in b:
-            c["curve"] = check_curve(b["curve"]) if b["curve"] else copy.deepcopy(DEFAULTS["curve"])
+            c["curve"] = clamp_curve(check_curve(b["curve"]) if b["curve"] else copy.deepcopy(DEFAULTS["curve"]),
+                                     self.max_rpm())
         if "temp_source" in b:
             if b["temp_source"] not in TEMP_SOURCES:
                 raise ValueError("temp_source: max | cpu | gpu")
@@ -388,6 +449,9 @@ class FlydigiCooler:
         if "gear_light" in b:
             d.set_gear_light(bool(b["gear_light"]))
             self.settings["gear_light"] = bool(b["gear_light"])
+        if "rgb" in b:                                       # the cooler's lighting on / off (0x46)
+            d.set_rgb_enabled(bool(b["rgb"]))
+            self.settings["rgb"] = "on" if b["rgb"] else "off"
         if "power_on_start" in b:
             d.set_power_on_start(bool(b["power_on_start"]))
             self.settings["power_on_start"] = bool(b["power_on_start"])
@@ -423,6 +487,15 @@ class FlydigiCooler:
         st = d.status if d is not None and d.connected else None
         return st["current_rpm"] if st else None
 
+    def brief(self):
+        """For the Monitor page and the sidebar (every monitor sample): connected, model, fan speed, target."""
+        d = self.dev
+        conn = bool(d is not None and d.connected)
+        st = (d.status if conn else None) or {}
+        return {"connected": conn, "model": d.model if conn else None, "mode": self.cfg["mode"],
+                "rpm": st.get("current_rpm"), "target": st.get("target_rpm"), "temp": self.ctl_temp
+                if conn and self.cfg["mode"] == "curve" else None}
+
     def status(self):
         d = self.dev
         conn = bool(d is not None and d.connected)
@@ -438,7 +511,8 @@ class FlydigiCooler:
             "config": self.cfg, "modes": list(MODES), "levels": list(P.LEVELS),
             "gear_presets": P.DEFAULT_MANUAL_GEAR_RPM, "gear_names": list(P.GEARS),
             "default_curve": [list(p) for p in P.DEFAULT_FAN_CURVE], "max_curve_points": MAX_CURVE_POINTS,
-            "rpm_max": P.REALTIME_RPM_MAX, "ble_available": self.ble_available, "scanning": self.scanning,
+            "rpm_max": self.max_rpm(), "rpm_axis": P.REALTIME_RPM_MAX, "shortfall": self.shortfall if conn else None,
+            "ble_available": self.ble_available, "scanning": self.scanning,
             "error": self.error if not conn else None,
         }
 
@@ -451,6 +525,8 @@ class MockCooler(D.BaseCooler):
 
     def __init__(self, on_update):
         super().__init__(on_update)
+        if os.environ.get("UWCC_MOCK_FLYDIGI") == "BS1":                 # UWCC_MOCK_FLYDIGI=BS1: a pretend BS1
+            self.model, self.transport = "BS1", "ble"
         self.connected = True
         self.info = {"model": self.model, "product_id": "0x1002", "path": "mock"}
         self.target, self.gear, self.rt = 1800, 2, False
@@ -459,7 +535,8 @@ class MockCooler(D.BaseCooler):
 
     def _st(self):
         cur = (self.status or {}).get("current_rpm", 0)
-        cur += max(-150, min(150, self.target - cur))
+        top = 3000 if self.model == "BS1" else 5000      # a pretend weak charger on the BS1: below its 3400
+        cur += max(-150, min(150, min(self.target, top) - cur))
         return {"gear_byte": 0x60 | (0x6 + 2 * self.gear), "mode_byte": 0x02 | (1 if self.rt else 0),
                 "max_gear": "extreme", "selected": P.gear_code_name(self.gear), "selected_gear": self.gear,
                 "realtime": self.rt, "smart_start_stop": "off", "current_rpm": cur, "target_rpm": self.target}
@@ -485,6 +562,9 @@ class MockCooler(D.BaseCooler):
     set_power_on_start = set_gear_light
 
     def set_smart_start_stop(self, mode):
+        return True
+
+    def set_rgb_enabled(self, on):
         return True
 
     def query_settings(self):

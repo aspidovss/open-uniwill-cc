@@ -42,6 +42,7 @@
       <div class="busy-chip hidden" id="busy-chip"></div>
       <div class="modepill" id="modepill">—</div>
       <div class="lc-pill hidden" id="lc-pill"></div>
+      <div class="lc-pill hidden" id="fd-pill" role="button" title="Flydigi BS"></div>
       <div class="row between">
         <div class="conn" id="conn"><span class="dot"></span><span>Connecting…</span></div>
         <div class="seg lang" id="lang-seg"><button data-lang="en">EN</button><button data-lang="ru">RU</button></div>
@@ -404,15 +405,17 @@
           </div>
         </div>
         <p class="muted tiny" id="fd-hint" data-i>BS2, BS2 Pro, BS3, BS3 Pro: pair the cooler once in the system's Bluetooth settings or connect it by USB — the program finds it by itself. BS1: connect it by USB, or press Search BS1 with the cooler switched on.</p>
+        <p class="warn-text tiny hidden" id="fd-short"></p>
       </div>
 
       <div id="fd-live" class="grid g4"></div>
 
       <div class="card">
         <h3 data-i>Cooler mode</h3>
-        <div class="choices lc-modes" id="fd-modes"></div>
+        <div class="choices fd-modes" id="fd-modes"></div>
         <div id="fd-rpm-box" class="hidden">
           <label class="slider"><span data-i>Fan speed</span> <input type="range" min="0" max="5000" step="100" id="fd-rpm"><output></output></label>
+          <p class="muted tiny hidden" id="fd-rpm-max"></p>
         </div>
         <div id="fd-gear-box" class="hidden">
           <div class="seg" id="fd-gears"></div>
@@ -423,21 +426,16 @@
 
       <div class="card" id="fd-curve-card">
         <h3 data-i>Temperature curve</h3>
-        <div id="fd-curve"></div>
-        <p class="muted tiny" style="margin:6px 0 0" data-i>Drag the points. Double-click on the chart: add a point; double-click on a point: remove it.</p>
-        <div class="row wrap" style="margin-top:8px;gap:16px" id="fd-params"></div>
-        <div class="row" style="justify-content:flex-end;margin-top:8px"><button class="btn ghost" id="fd-curve-reset" data-i>Default</button></div>
+        <div id="fd-curve" class="fd-curve"></div>
+        <p class="muted tiny fd-hint" data-i>Drag the points. Double-click on the chart: add a point; double-click on a point: remove it.</p>
+        <div class="fd-params" id="fd-params"></div>
       </div>
 
       <div class="card" id="fd-dev-card">
         <h3 data-i>Settings stored in the cooler</h3>
-        <div class="row between"><span data-i>Gear light</span>
-          <div class="row"><button class="btn ghost sm" id="fd-light-on" data-i>On</button><button class="btn ghost sm" id="fd-light-off" data-i>Off</button></div></div>
-        <div class="row between"><span data-i>Start when powered</span>
-          <div class="row"><button class="btn ghost sm" id="fd-pos-on" data-i>On</button><button class="btn ghost sm" id="fd-pos-off" data-i>Off</button></div></div>
-        <div class="row between"><span data-i>Smart start/stop</span><select id="fd-smart"></select></div>
-        <p class="muted tiny" data-i>These settings are written to the cooler's own memory and stay there; change them only when needed.</p>
-        <dl class="kv" id="fd-info"></dl>
+        <p class="muted tiny" data-i>These settings are written to the cooler's own memory and stay there; change them only when needed. The cooler does not report the current value of the gear light and the start when powered — press to set them.</p>
+        <div class="fd-set" id="fd-set"></div>
+        <dl class="kv fd-info" id="fd-info"></dl>
       </div>
       <p class="muted tiny" data-i>Control and pairing logic: THRM by Tianli (MIT licence), github.com/TIANLI0/THRM</p>
     </section>
@@ -702,6 +700,17 @@
   </main>
 </div>
 <div id="svc-down" class="svc-down hidden"></div>
+<div id="fd-intro" class="cal-dlg hidden" role="dialog" aria-modal="true" aria-labelledby="fd-intro-title">
+  <div class="cal-box card">
+    <h3 id="fd-intro-title" data-i>Flydigi BS</h3>
+    <p data-i>This page controls Flydigi BS laptop coolers. It is a port of THRM by Tianli (MIT licence, github.com/TIANLI0/THRM): the protocol and the control and pairing logic are taken from it.</p>
+    <p data-i>If you have no Flydigi BS, you can turn this component off. You can always change your choice in Switches → Flydigi BS.</p>
+    <div class="row between wrap cal-btns">
+      <button class="btn ghost" id="fd-intro-off" data-i>Turn off Flydigi BS</button>
+      <button class="btn" id="fd-intro-keep" data-i>I have a Flydigi BS</button>
+    </div>
+  </div>
+</div>
 <div id="cal-dlg" class="cal-dlg hidden" role="dialog" aria-modal="true">
   <div class="cal-box card">
     <h3 id="cal-title"></h3>

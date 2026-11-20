@@ -251,6 +251,8 @@ class SettingsManager:
             "history_record": bool(self.st.get("history_record", True)),
             "profile_autoapply": bool(self.st.get("profile_autoapply", True)),     # Mode selection: write at once
             "lc_hwoc": bool(self.st.get("lc_hwoc", False)),
+            "flydigi_automation": bool(self.st.get("flydigi_automation", False)),   # 1.8.2.8: in the rules
+            "flydigi_intro_seen": bool(self.st.get("flydigi_intro_seen", False)),   # the page's first-visit note
             "eula_accepted": int(self.st.get("eula_accepted", 0) or 0), "eula_version": EULA_VERSION,
             "mem_oc_support": self.mem_oc_support, "mem_oc": self.mem_oc(), "mem_oc_pending": self.mem_oc_pending(),
             "lang": self.st.get("lang", "en"),

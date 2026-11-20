@@ -891,6 +891,8 @@ class Handler(BaseHTTPRequestHandler):
         elif key == "lc_hwoc":
             s.settings_store.set("lc_hwoc", bool(value))
             s.hwoc.wake.set()
+        elif key in ("flydigi_automation", "flydigi_intro_seen"):          # 1.8.2.8
+            s.settings_store.set(key, bool(value))
         elif key == "mem_oc":
             s.settings.set_mem_oc(bool(value))
         elif key == "super_performance":
@@ -1033,6 +1035,7 @@ class Handler(BaseHTTPRequestHandler):
                     sample = dict(s.sampler.snapshot())
                     engine = s.keyboard.engine()
                     sample["keyboard_fx"] = engine.info() if engine else None
+                    sample["flydigi"] = s.flydigi.brief() if s.modules.enabled("flydigi") else None   # 1.8.2.8
                     msg = json.dumps({"type": "monitor", "data": sample}, default=str)
                 self.wfile.write(f"data: {msg}\n\n".encode())
                 self.wfile.flush()

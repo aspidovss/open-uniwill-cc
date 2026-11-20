@@ -182,6 +182,7 @@ class HidCooler(BaseCooler):
 
     def _reset_light_state_cache(self):
         self.gear_light = None
+        self.rgb_enabled = None          # rgbEnabled / hasRGBEnabled
 
     def _reset_gear_rpm_cache(self):
         self.device_gear_rpm = [None] * GEAR_RPM_SLOT_COUNT
@@ -501,6 +502,23 @@ class HidCooler(BaseCooler):
             self.gear_light = bool(on)
         return True
 
+    def set_rgb_enabled(self, on):
+        """rgb.go setRGBEnableLocked: 0x46 turns the lights on / off. The firmware rewrites a flash page on every 0x46
+        without comparing, so a value the device is known to hold (0x45 readback, or the last write) is skipped."""
+        with self.mutex:
+            if self.rgb_enabled is not None and self.rgb_enabled == bool(on):
+                return True
+            self._await_flash_write_window()
+            try:
+                self._ack(P.CMD_RGB_ENABLE, bytes((1 if on else 0,)), 1)
+            except Exception:
+                self.rgb_enabled = None
+                raise
+            finally:
+                self._note_flash_write()
+            self.rgb_enabled = bool(on)
+        return True
+
     def set_power_on_start(self, on):
         with self.mutex:
             self._await_flash_write_window()
@@ -542,6 +560,9 @@ class HidCooler(BaseCooler):
                         errors.append(f"0x{cmd:02X}: {e}")
                     else:
                         time.sleep(FIRMWARE_VERSION_RETRY_DELAY)
+        if out.get("rgb") in ("on", "off"):                # NoteRGBEnabledFromDevice
+            with self.mutex:
+                self.rgb_enabled = out["rgb"] == "on"
         table = out.get("gear_table")
         if table:                                        # seeds the cache: 0x08 instead of a flash write later
             with self.mutex:
@@ -558,7 +579,9 @@ class HidCooler(BaseCooler):
 
 # =================================================================================================================
 class BS1Cooler(BaseCooler):
-    """BS1: the reduced command set, written without waiting for ACKs (ble.go). Transport: USB HID or Bluetooth LE."""
+    """BS1: the reduced command set (ble.go). Speed and gear are written without waiting for ACKs; the settings
+    queries and the lighting switch wait for theirs (response.go sendBLECommandAndWait). Transport: USB HID or
+    Bluetooth LE."""
     model = "BS1"
 
     def __init__(self, on_update=None, on_lost=None):
@@ -567,6 +590,18 @@ class BS1Cooler(BaseCooler):
         self.realtime_mode = False
         self.realtime_stopped = False
         self.stop_ev = threading.Event()
+        self.responses = ResponseBroker()
+        self.rgb_enabled = None
+        self.last_flash_write_at = 0.0
+
+    def _command_and_wait(self, cmd, payload=b"", timeout=DEVICE_RESPONSE_TIMEOUT):
+        w = self.responses.register(cmd)
+        try:
+            self._write(P.build_frame(cmd, *payload))
+        except Exception:
+            self.responses.cancel(w)
+            raise
+        return self.responses.wait(w, timeout)
 
     # transport hooks
     def _write(self, frame):
@@ -574,7 +609,10 @@ class BS1Cooler(BaseCooler):
 
     def _on_frame(self, raw, ascii_gear):
         f = P.parse_frame(raw)
-        if f is None or not f.checksum_ok or f.command != P.CMD_STATUS_NOTIFY:
+        if f is None or not f.checksum_ok:
+            return
+        self.responses.deliver(f)
+        if f.command != P.CMD_STATUS_NOTIFY:
             return
         st = P.decode_status(f.payload)
         if st is None:
@@ -641,7 +679,36 @@ class BS1Cooler(BaseCooler):
         raise DeviceError("BS1 has no smart start/stop setting")
 
     def query_settings(self):
-        return {"model": "BS1", "firmware_read": "unsupported"}
+        """QueryDeviceSettings (BLEManager): BS1 answers the basic queries only (0x27, 0x25, 0x45)."""
+        out, errors = {"model": "BS1", "firmware_read": "unsupported"}, []
+        for cmd in BASIC_DEVICE_SETTINGS_QUERY_COMMANDS:
+            try:
+                out.update(P.decode_frame(self._command_and_wait(cmd)))
+            except Exception as e:  # noqa: BLE001
+                errors.append(f"0x{cmd:02X}: {e}")
+        if out.get("rgb") in ("on", "off"):
+            self.rgb_enabled = out["rgb"] == "on"
+        if errors:
+            out["errors"] = errors
+        return out
+
+    def set_rgb_enabled(self, on):
+        """As HidCooler.set_rgb_enabled, over the BS1 transport (rgb.go: BS1 lighting goes through bleManager)."""
+        with self.control:
+            if self.rgb_enabled is not None and self.rgb_enabled == bool(on):
+                return True
+            wait = FLASH_WRITE_SPACING - (time.monotonic() - self.last_flash_write_at)
+            if self.last_flash_write_at and wait > 0:
+                time.sleep(wait)
+            try:
+                validate_ack(self._command_and_wait(P.CMD_RGB_ENABLE, bytes((1 if on else 0,))), 1)
+            except Exception:
+                self.rgb_enabled = None
+                raise
+            finally:
+                self.last_flash_write_at = time.monotonic()
+            self.rgb_enabled = bool(on)
+        return True
 
     def keepalive_command(self, index):
         """bs1KeepAliveCommand: 0x23 / 0x45 alternately in realtime mode, only 0x45 in gear mode."""

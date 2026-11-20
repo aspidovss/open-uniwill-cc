@@ -139,7 +139,7 @@ Control Center 3.0 / Clevo (экспериментально): `uwccctl clevo �
 
 | Ключи | Значения |
 |---|---|
-| `winkey_lock` `fn_lock` `usb_charger` `touchpad_toggle` `touchpad_enabled` `ac_recovery` `dgpu_direct` `bluetooth` `wifi` `webcam` `osd` `lc_hwoc` `kb_picture_modes` `tcc_extended` `history_record` `update_check` `debug` `mem_oc` `super_performance` | on / off |
+| `winkey_lock` `fn_lock` `usb_charger` `touchpad_toggle` `touchpad_enabled` `ac_recovery` `dgpu_direct` `bluetooth` `wifi` `webcam` `osd` `lc_hwoc` `flydigi_automation` `kb_picture_modes` `tcc_extended` `history_record` `update_check` `debug` `mem_oc` `super_performance` | on / off |
 | `kb_timeout` | секунды 0..3600, 0 = никогда |
 | `alerts` `overheat_boost` `kb_off_on_battery` `ppd_sync` `ppd_follow` | on / off |
 | `profile_autoapply` | on / off: настройки профиля в окне применяются сразу после изменения (по умолчанию on) |
@@ -201,8 +201,10 @@ Control Center 3.0 / Clevo (экспериментально): `uwccctl clevo �
 | `flydigi rpm N` / `flydigi gear 1-4 [low\|mid\|high]` | постоянные обороты 0..5000 / передача с оборотами THRM |
 | `flydigi curve [T:RPM ...\|reset]` | показать / задать кривую (2..20 точек) |
 | `flydigi set KEY VALUE` | `temp_source max\|cpu\|gpu`, `hysteresis` 0..8, `min_change` 20..400, `ramp_up` / `ramp_down` 50..1200 |
+| `flydigi rgb on\|off` | подсветка кулера (все модели; хранится в кулере) |
 | `flydigi light on\|off` / `power-on-start on\|off` / `smart-stop off\|immediate\|delayed` | настройки в памяти кулера (BS2 и новее) |
 | `flydigi search` / `flydigi forget` | BS1: найти по Bluetooth LE / забыть |
+| `flydigi automation on\|off` | кулер в правилах автоматизации (по умолчанию выкл.; то же, что `set flydigi_automation`) |
 
 ## Служба
 

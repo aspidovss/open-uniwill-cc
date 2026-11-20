@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.8.2.8
+
+- **Flydigi BS in Switches:** a group of its own — *Enable Flydigi BS* (the component: page, connection, control) and,
+  under it, *Flydigi BS — add to the automation rules*. The second one is **off by default** and can be turned on
+  only while Flydigi BS is on; while it is off the rules neither see the cooler (its conditions) nor change it (its
+  actions are kept in the rule but not applied). `uwccctl flydigi automation on|off`, setting `flydigi_automation`.
+- **First visit of the Flydigi BS page:** a note that the page is a port of THRM (Tianli, MIT) and that the component
+  can be turned off when there is no Flydigi BS — *I have a Flydigi BS* / *Turn off Flydigi BS*; shown once, the
+  choice can be changed in *Switches → Flydigi BS*.
+- **Flydigi BS on the Monitor page and in the sidebar:** while the component is on, *Monitor → Fans* has a bar with
+  the cooler's fan speed and target (a click opens its page), and the sidebar shows the model and the speed; the
+  monitor stream carries `flydigi {connected, model, mode, rpm, target, temp}`.
+- **Flydigi BS page layout:** the five modes in one row, the curve across the whole card and centred, its settings
+  (temperature, hysteresis, step, rise, fall, *Default*) in one row; the settings stored in the cooler in one even
+  grid with On/Off buttons, with a note that the cooler does not report their value. BS1 shows only what it has:
+  *Start when powered* (no gear light, no smart start/stop, no highest gear).
+- **Highest speed per model:** BS1 is cut to 3400 rpm (rated 3000 rpm on its top gear; the protocol and THRM take
+  0..5000 for every model, but the fan stops at its ceiling): the fixed speed, the curve (the default curve is fitted;
+  the limit is a dashed line) and the rules. When the fan stays below 90 % of the target for 15 s the page says so —
+  the model's limit or a weak charger (the top speeds need a PD charger: 18–20 W BS1 / BS2, 27 W BS2 Pro).
+- **Lighting on / off for every Flydigi BS model, BS1 too** (THRM rgb.go: `0x46`; its state is read with `0x45` and a
+  value the cooler already holds is not written again, as the firmware rewrites a flash page each time). BS1 now waits
+  for the ACKs of its settings commands and reads the basic settings (`0x27`, `0x25`, `0x45`), as THRM does.
+  `uwccctl flydigi rgb on|off`, `POST /api/flydigi/device {"rgb": bool}`.
+
 ## 1.8.2.7
 
 - **Flydigi BS coolers: BS1, BS2, BS2 Pro, BS3, BS3 Pro** — a new page *Performance → Flydigi BS*, a switchable

@@ -241,6 +241,7 @@ function onMonitor(m) {
     h("div", { class: "track" }, h("div", { class: "fill", style: `width:${Math.min(100, duty == null ? Math.round((rpm || 0) / 60) : duty)}%` })));
   fb.append(bar("cpu", t("Processor fan"), m.fans.cpu_duty, m.fans.cpu_rpm));
   if (m.fans.gpu_duty != null || m.fans.gpu_rpm != null) fb.append(bar("gpu", t("Graphics card fan"), m.fans.gpu_duty, m.fans.gpu_rpm));
+  fdMonitor(m.flydigi, fb, bar);                                                  // 1.8.2.8
   fb.append(h("p", { class: "muted tiny" }, S ? `${t("Active table:")} ${TABLE_LABEL[S.power.current_table] || "—"}${S.power.fan_boost ? " · " + t("Fan Boost") : ""}` : ""));
   $("#st-mem").innerHTML = ""; $("#st-mem").append(h("h3", {}, t("Memory")), h("div", { class: "big" }, `${m.memory.usage}%`), h("div", { class: "sub" }, t("{0} of {1} GB", (m.memory.used_mb / 1024).toFixed(1), (m.memory.total_mb / 1024).toFixed(1))));
   $("#st-net").innerHTML = ""; $("#st-net").append(h("h3", {}, t("Network")), h("div", { class: "big" }, `↓ ${fmtRate(m.net.down_kbs)}`), h("div", { class: "sub" }, `↑ ${fmtRate(m.net.up_kbs)}`));
@@ -254,6 +255,26 @@ function onMonitor(m) {
 let lastMonitor = null;
 function fmtRate(k) { return k > 1024 ? `${(k / 1024).toFixed(1)} ${t("MB/s")}` : `${k} ${t("KB/s")}`; }
 function batStatus(s) { return { Charging: t("Charging"), Discharging: t("Discharging"), Full: t("Fully charged"), "Not charging": t("Not charging") }[s] || s || ""; }
+// Flydigi BS on the Monitor page (a bar under the fans) and in the sidebar (1.8.2.8); null: the component is off
+function fdMonitor(f, fb, bar) {
+  const pill = $("#fd-pill");
+  pill.classList.toggle("hidden", !f || !f.connected);
+  if (!f) return;
+  const name = f.model ? `Flydigi ${f.model}` : "Flydigi BS";
+  if (f.connected) {
+    const rpm = f.rpm ?? 0, tgt = f.target != null && f.target !== rpm ? ` · ${t("target")} ${f.target}` : "";
+    const b = bar("fd", name, null, rpm);
+    b.querySelector(".top .muted").textContent = `${rpm} ${t("rpm")}${tgt}`;
+    b.querySelector(".fill").style.width = `${Math.min(100, Math.round(rpm / 50))}%`;      // 5000 rpm = full
+    b.style.cursor = "pointer"; b.title = t("Open"); b.addEventListener("click", () => $(`#nav a[data-page="flydigi"]`)?.click());
+    fb.append(b);
+    pill.textContent = `🌀 ${name.replace("Flydigi ", "")} · ${rpm} ${t("rpm")}`;
+    pill.className = "lc-pill ok";
+  } else {
+    fb.append(h("div", { class: "bar fd off" }, h("div", { class: "top" }, h("span", {}, name), h("span", { class: "muted" }, t("not connected")))));
+  }
+}
+$("#fd-pill").addEventListener("click", () => $(`#nav a[data-page="flydigi"]`)?.click());
 // liquid cooler summary on the Monitor page (the full controls are on the Liquid cooling page)
 function renderMonLc() {
   const box = $("#mon-lc-body"); if (!box || !S) return;
@@ -1334,8 +1355,24 @@ function renderSwitches() {
     L.append(h("div", { class: "item" }, h("div", {}, h("h4", {}, t("Per-key keyboard pictures")),
       h("p", {}, t("Single colour, User mode, Gaming and the software effects (Neon, Stack, Impact, Alphabet) are drawn key by key, as in the original Control Center. Turn off if the keyboard ignores them: single colour then uses the firmware effect and the others are hidden."))), h("label", { class: "sw" }, c, h("span"))));
   }
-  // 3. service modules (1.8.0.0): switchable parts of the service, uwccd/modules.py
-  const mods = (S.modules || []).filter(m => m.available);
+  // 4. service modules (1.8.0.0): switchable parts of the service, uwccd/modules.py
+  // 3. Flydigi BS (1.8.2.8): the component and, under it, its place in the automation rules
+  const fdm = (S.modules || []).find(m => m.name === "flydigi");
+  if (fdm) {
+    group("Flydigi BS");
+    const on = h("input", { type: "checkbox" }); on.checked = !!fdm.enabled;
+    on.addEventListener("change", () => act(() => api("module", { name: "flydigi", enabled: on.checked })));
+    L.append(h("div", { class: "item" }, h("div", {}, h("h4", {}, t("Enable Flydigi BS")),
+      h("p", {}, t("Flydigi BS1 / BS2 / BS2 Pro / BS3 / BS3 Pro laptop coolers: the Flydigi BS page, the connection and the control. Off: the page is hidden and the program leaves the cooler alone."))),
+      h("label", { class: "sw" }, on, h("span"))));
+    const au = h("input", { type: "checkbox", disabled: !fdm.enabled }); au.checked = !!s.flydigi_automation;
+    au.addEventListener("change", () => act(() => api("setting", { key: "flydigi_automation", value: au.checked })));
+    L.append(h("div", { class: "item sub" + (fdm.enabled ? "" : " off") }, h("div", {}, h("h4", {}, t("Flydigi BS — add to the automation rules")),
+      h("p", {}, t(fdm.enabled ? "Rules can switch the cooler's mode, and its fan speed and connection can be conditions. Off: the rules do not see or change the cooler."
+        : "Available when Flydigi BS is on."))),
+      h("label", { class: "sw" }, au, h("span"))));
+  }
+  const mods = (S.modules || []).filter(m => m.available && m.name !== "flydigi");
   if (mods.length) {
     group("Service modules");
     const MOD_DESC = {
@@ -1632,11 +1669,11 @@ function renderLiquid() {
 }
 // ---------------------------------------------------------------- Flydigi BS cooler (1.8.2.7; control logic from THRM)
 const FD_MODES = [
-  { id: "curve", name: "Temperature curve", desc: "The fan speed follows the temperature (curve below)." },
-  { id: "rpm", name: "Fixed speed", desc: "One fan speed of your choice." },
-  { id: "gear", name: "Gear", desc: "One of the cooler's four gears with a preset speed." },
-  { id: "stop", name: "Stop", desc: "The fan stands still (0 rpm)." },
-  { id: "device", name: "Cooler's buttons", desc: "The program sends nothing: the cooler's own buttons rule." },
+  { id: "curve", name: "Temperature curve", desc: "Follows the temperature." },
+  { id: "rpm", name: "Fixed speed", desc: "A speed of your choice." },
+  { id: "gear", name: "Gear", desc: "One of four gears." },
+  { id: "stop", name: "Stop", desc: "The fan stands still." },
+  { id: "device", name: "Cooler's buttons", desc: "The program sends nothing." },
 ];
 const FD_GEAR_NAME = { 1: "Quiet", 2: "Standard", 3: "Strong", 4: "Overclock" };     // THRM: 静音 / 标准 / 强劲 / 超频
 const FD_LEVELS = ["low", "mid", "high"], FD_LEVEL_NAME = { low: "Low", mid: "Medium", high: "High" };
@@ -1644,6 +1681,22 @@ const FD_SMART = { off: "Off", immediate: "Immediate", delayed: "Delayed" };
 const FDX0 = 20, FDX1 = 110;
 let fdDrag = null;
 function fdOn() { const m = (S && S.modules || []).find(x => x.name === "flydigi"); return !m || m.enabled; }
+// 1.8.2.8: the cooler takes part in the automation rules only when the user adds it (Switches → Flydigi BS)
+function fdAutoOn() { return fdOn() && !!(S && S.settings && S.settings.flydigi_automation); }
+function fdIntro() {
+  if (!S || !S.settings || S.settings.flydigi_intro_seen || !$("#fd-intro").classList.contains("hidden")) return;
+  $("#fd-intro").classList.remove("hidden");
+}
+function fdIntroClose(off) {
+  $("#fd-intro").classList.add("hidden");
+  S.settings.flydigi_intro_seen = true;
+  act(async () => {
+    await api("setting", { key: "flydigi_intro_seen", value: true });
+    if (off) { await api("module", { name: "flydigi", enabled: false }); $(`#nav a[data-page="monitor"]`)?.click(); }
+  }, off ? t("Flydigi BS is off — you can turn it on again in Switches") : null);
+}
+$("#fd-intro-keep").addEventListener("click", () => fdIntroClose(false));
+$("#fd-intro-off").addEventListener("click", () => fdIntroClose(true));
 function fdPost(op, body, ok) { return act(() => api("flydigi/" + op, body || {}), ok); }
 function renderFlydigi() {
   const F = S.flydigi, on = fdOn();
@@ -1652,6 +1705,7 @@ function renderFlydigi() {
     if ($("#page-flydigi").classList.contains("active")) $(`#nav a[data-page="monitor"]`)?.click();
     return;
   }
+  if ($("#page-flydigi").classList.contains("active")) fdIntro();
   const c = F.config, conn = F.connected;
   $("#fd-state").className = "lc-state" + (conn ? " on" : F.scanning ? " busy" : "");
   $("#fd-title").textContent = conn ? `Flydigi ${F.model}` : F.scanning ? t("Searching…") : t("Not connected");
@@ -1663,6 +1717,9 @@ function renderFlydigi() {
   $("#fd-search").disabled = !!F.scanning;
   $("#fd-forget").classList.toggle("hidden", !c.ble_address);
   $("#fd-hint").classList.toggle("hidden", conn);
+  const sf = F.shortfall;                                                         // 1.8.2.8
+  $("#fd-short").classList.toggle("hidden", !sf);
+  if (sf) $("#fd-short").textContent = t("The cooler does not reach the set speed ({0} of {1} rpm): the limit of this model, or a weak charger — the top speeds need a PD charger of 18–20 W (BS2 Pro: 27 W).", sf.rpm, sf.target);
   // live values
   const live = $("#fd-live"); live.innerHTML = "";
   const kpi = (k, v) => h("div", { class: "card kpi" }, h("div", { class: "k" }, k), h("div", { class: "v" }, v));
@@ -1676,7 +1733,11 @@ function renderFlydigi() {
   for (const m of FD_MODES) mb.append(h("div", { class: "choice" + (c.mode === m.id ? " on" : ""), onclick: () => fdPost("config", { mode: m.id }) },
     h("h4", {}, t(m.name)), h("p", {}, t(m.desc))));
   $("#fd-rpm-box").classList.toggle("hidden", c.mode !== "rpm");
+  $("#fd-rpm").max = F.rpm_max;
   if (document.activeElement !== $("#fd-rpm")) { $("#fd-rpm").value = c.rpm; $("#fd-rpm").nextElementSibling.textContent = `${c.rpm} ${t("rpm")}`; }
+  const lim = F.rpm_max < (F.rpm_axis || 5000);
+  $("#fd-rpm-max").classList.toggle("hidden", !lim);
+  if (lim) $("#fd-rpm-max").textContent = t("Highest speed of {0}: {1} rpm.", c.model || F.model, F.rpm_max);
   $("#fd-gear-box").classList.toggle("hidden", c.mode !== "gear");
   const gs = $("#fd-gears"); gs.innerHTML = "";
   for (const g of [1, 2, 3, 4]) gs.append(h("button", { class: c.gear === g ? "on" : "", onclick: () => fdPost("config", { mode: "gear", gear: g }) }, t(FD_GEAR_NAME[g])));
@@ -1690,38 +1751,54 @@ function renderFlydigi() {
   if (!fdDrag) fdDrawCurve(F);
   const pr = $("#fd-params");
   if (!pr.contains(document.activeElement)) {
-    const numIn = (key, label, lo, hi, unit) => {
+    const numIn = (key, label, lo, hi, unit, tip) => {
       const e = h("input", { type: "number", class: "num", min: lo, max: hi, value: c[key] });
       e.addEventListener("change", () => fdPost("config", { [key]: +e.value }));
-      return h("label", { class: "row" }, h("span", {}, t(label)), e, h("span", { class: "muted", style: "margin:0" }, unit));
+      return h("label", { title: t(tip) }, h("span", {}, t(label)), e, h("span", { class: "muted" }, unit));
     };
-    const src = h("select", {}, ...[["max", t("hotter of CPU and GPU")], ["cpu", t("CPU")], ["gpu", t("GPU")]].map(([v, n]) => {
+    const src = h("select", {}, ...[["max", t("CPU or GPU, hotter")], ["cpu", t("CPU")], ["gpu", t("GPU")]].map(([v, n]) => {
       const o = h("option", { value: v }, n); if (c.temp_source === v) o.selected = true; return o; }));
     src.addEventListener("change", () => fdPost("config", { temp_source: src.value }));
-    pr.replaceChildren(h("label", { class: "row" }, h("span", {}, t("Temperature")), src),
-      numIn("hysteresis", "Hysteresis", 0, 8, "°C"), numIn("min_change", "Smallest change", 20, 400, t("rpm")),
-      numIn("ramp_up", "Faster by at most", 50, 1200, t("rpm per second")), numIn("ramp_down", "Slower by at most", 50, 1200, t("rpm per second")));
+    const reset = h("button", { class: "btn ghost sm" }, t("Default"));
+    reset.addEventListener("click", () => fdPost("config", { curve: null, hysteresis: 2, min_change: 50, ramp_up: 220, ramp_down: 160 }));
+    pr.replaceChildren(h("label", {}, h("span", {}, t("Temperature")), src),
+      numIn("hysteresis", "Hysteresis", 0, 8, "°C", "A falling temperature counts only when it fell by this much."),
+      numIn("min_change", "Step", 20, 400, t("rpm"), "Smaller changes of the speed are not sent."),
+      numIn("ramp_up", "Rise", 50, 1200, t("rpm/s"), "The speed rises by at most this much per second."),
+      numIn("ramp_down", "Fall", 50, 1200, t("rpm/s"), "The speed falls by at most this much per second."), reset);
   }
-  // settings stored in the cooler
-  const hidCooler = conn && F.model !== "BS1";
+  // settings stored in the cooler: BS1 has only "start when powered" (THRM: no gear light, no smart start/stop)
+  const bs1 = F.model === "BS1";
   $("#fd-dev-card").classList.toggle("hidden", !conn);
-  for (const id of ["#fd-light-on", "#fd-light-off", "#fd-smart"]) $(id).disabled = !hidCooler;
-  const sm = $("#fd-smart");
-  if (document.activeElement !== sm) {
-    sm.innerHTML = ""; sm.append(h("option", { value: "" }, F.smart_start_stop ? t(FD_SMART[F.smart_start_stop]) + " ●" : "—"));
-    for (const [v, n] of Object.entries(FD_SMART)) sm.append(h("option", { value: v }, t(n)));
+  const set = $("#fd-set");
+  if (conn && !(set.contains(document.activeElement) && document.activeElement.tagName === "SELECT")) {
+    const onOff = (key, now) => h("div", { class: "seg sm" },                     // now: known state, or undefined
+      h("button", { class: now === true ? "on" : "", onclick: () => fdPost("device", { [key]: true }, t("Saved in the cooler")) }, t("On")),
+      h("button", { class: now === false ? "on" : "", onclick: () => fdPost("device", { [key]: false }, t("Saved in the cooler")) }, t("Off")));
+    const rows = [];
+    const rgb = st.rgb === "on" ? true : st.rgb === "off" ? false : undefined;
+    rows.push(h("span", {}, t("Lighting")), onOff("rgb", rgb));
+    if (!bs1) rows.push(h("span", {}, t("Gear light")), onOff("gear_light"));
+    rows.push(h("span", {}, t("Start when powered")), onOff("power_on_start"));
+    if (!bs1) {
+      const sm = h("select", {}, h("option", { value: "" }, F.smart_start_stop ? t("now: {0}", t(FD_SMART[F.smart_start_stop])) : "—"),
+        ...Object.entries(FD_SMART).map(([v, n]) => h("option", { value: v }, t(n))));
+      sm.addEventListener("change", () => { if (sm.value) fdPost("device", { smart_start_stop: sm.value }, t("Saved in the cooler")); });
+      rows.push(h("span", {}, t("Smart start/stop")), sm);
+    }
+    set.replaceChildren(...rows);
   }
   const kv = $("#fd-info"); kv.innerHTML = "";
   const row = (k, v) => { if (v != null && v !== "") kv.append(h("dt", {}, t(k)), h("dd", {}, String(v))); };
   row("Model", F.model); row("Firmware", st.firmware); row("Device ID", st.device_id);
   row("Capability tier", st.capability_tier);
   row("Gear speeds in the cooler", st.gear_table ? st.gear_table.map((v, i) => `${t(FD_GEAR_NAME[i + 1])} ${v}`).join(" · ") : null);
-  row("Highest gear", F.max_gear ? t({ standard: "Standard", performance: "Strong", extreme: "Overclock" }[F.max_gear] || F.max_gear) : null);
+  if (!bs1) row("Highest gear", F.max_gear ? t({ standard: "Standard", performance: "Strong", extreme: "Overclock" }[F.max_gear] || F.max_gear) : null);
 }
 function fdDrawCurve(F) {
   const c = F.config, pts = c.curve.map(p => [p[0], p[1]]);
-  const W = 640, H = 230, ymax = F.rpm_max || 5000;
-  const P = { left: 62, right: 606, top: 20, bot: H - 30 };
+  const W = 1100, H = 280, ymax = F.rpm_axis || 5000, top = F.rpm_max || ymax;
+  const P = { left: 64, right: W - 26, top: 18, bot: H - 30 };
   P.x = tc => P.left + (tc - FDX0) / (FDX1 - FDX0) * (P.right - P.left);
   P.y = v => P.bot - v / ymax * (P.bot - P.top);
   P.tx = px => Math.round(FDX0 + (px - P.left) / (P.right - P.left) * (FDX1 - FDX0));
@@ -1730,6 +1807,10 @@ function fdDrawCurve(F) {
   for (let x = FDX0; x <= FDX1; x += 10) { const px = P.x(x); g.append(lcEl("line", { x1: px, x2: px, y1: P.top, y2: P.bot }), lcEl("text", { x: px - 8, y: P.bot + 18 }, `${x}°`)); }
   for (let v = 0; v <= ymax; v += 1000) { const py = P.y(v); g.append(lcEl("line", { x1: P.left, x2: P.right, y1: py, y2: py }), lcEl("text", { x: 10, y: py + 4 }, String(v))); }
   svg.append(g);
+  if (top < ymax) {                                    // the model's ceiling (BS1: 3400 rpm)
+    svg.append(lcEl("line", { x1: P.left, x2: P.right, y1: P.y(top), y2: P.y(top), class: "limit" }),
+      lcEl("text", { x: P.left + 8, y: P.y(top) - 7, class: "limitlbl" }, t("limit of {0}: {1} rpm", F.model || c.model || "", top)));
+  }
   const path = lcEl("polyline", { class: "line" }); svg.append(path);
   const dots = lcEl("g", {}); svg.append(dots);
   const lbl = p => `${p[0]} °C · ${p[1]} ${t("rpm")}`;
@@ -1753,7 +1834,7 @@ function fdDrawCurve(F) {
     if (!fdDrag) return;
     const i = fdDrag.i, p = pts[i], [mx, my] = lcPointer(svg, ev);
     const lo = i ? pts[i - 1][0] + 1 : 0, hi = i < pts.length - 1 ? pts[i + 1][0] - 1 : 120;
-    const rlo = i ? pts[i - 1][1] : 0, rhi = i < pts.length - 1 ? pts[i + 1][1] : ymax;
+    const rlo = i ? pts[i - 1][1] : 0, rhi = Math.min(top, i < pts.length - 1 ? pts[i + 1][1] : top);
     p[0] = Math.max(lo, Math.min(hi, P.tx(mx))); p[1] = Math.max(rlo, Math.min(rhi, Math.round(P.vy(my) / 50) * 50));
     redraw();
   });
@@ -1773,20 +1854,13 @@ function fdDrawCurve(F) {
   });
   if (F.connected && F.temp != null && F.control_rpm != null)
     lcCross(svg, P, Math.max(FDX0, Math.min(FDX1, F.temp)), F.control_rpm, `${F.temp} °C · ${F.control_rpm} ${t("rpm")}`);
-  svg.style.maxWidth = "760px";
   $("#fd-curve").replaceChildren(svg);
 }
 $("#fd-rpm").addEventListener("input", e => { e.target.nextElementSibling.textContent = `${e.target.value} ${t("rpm")}`; });
 $("#fd-rpm").addEventListener("change", e => fdPost("config", { mode: "rpm", rpm: +e.target.value }));
-$("#fd-curve-reset").addEventListener("click", () => fdPost("config", { curve: null, hysteresis: 2, min_change: 50, ramp_up: 220, ramp_down: 160 }));
 $("#fd-search").addEventListener("click", () => { $("#fd-search").disabled = true; toast(t("Searching for a BS1 for up to 10 seconds…"));
   fdPost("search", {}, t("BS1 connected")).finally(() => refresh().catch(() => {})); });
 $("#fd-forget").addEventListener("click", () => fdPost("forget", {}));
-$("#fd-light-on").addEventListener("click", () => fdPost("device", { gear_light: true }, t("Saved in the cooler")));
-$("#fd-light-off").addEventListener("click", () => fdPost("device", { gear_light: false }, t("Saved in the cooler")));
-$("#fd-pos-on").addEventListener("click", () => fdPost("device", { power_on_start: true }, t("Saved in the cooler")));
-$("#fd-pos-off").addEventListener("click", () => fdPost("device", { power_on_start: false }, t("Saved in the cooler")));
-$("#fd-smart").addEventListener("change", e => { if (e.target.value) fdPost("device", { smart_start_stop: e.target.value }, t("Saved in the cooler")); });
 // ---- curve editors: fan curve (points, linear) and pump steps (7 / 8 / 11 V)
 let lcPick = null;                                   // a profile picked in the list and shown before Apply
 const LCX0 = 20, LCX1 = 100;                                   // temperature axis, °C
@@ -2750,9 +2824,9 @@ function renderLoadRules(force) {                 // force: our own change, redr
   const R = S.load_rules; if (!R) return;
   if (!auDirty || !auRules) auRules = JSON.parse(JSON.stringify(R.rules || []));
   $("#au-rules-mon").classList.toggle("hidden", (S.monitoring || "full") === "full");
-  const tpl = $("#au-rule-tpl"), tkey = LANG + (fdOn() ? "+fd" : ""); if (!tpl.options.length || tpl.dataset.lang !== tkey) {
+  const tpl = $("#au-rule-tpl"), tkey = LANG + (fdAutoOn() ? "+fd" : ""); if (!tpl.options.length || tpl.dataset.lang !== tkey) {
     tpl.innerHTML = ""; tpl.dataset.lang = tkey;
-    for (const [id, n] of AU_TEMPLATES) if (id !== "fdhot" || fdOn()) tpl.append(h("option", { value: id }, t(n)));
+    for (const [id, n] of AU_TEMPLATES) if (id !== "fdhot" || fdAutoOn()) tpl.append(h("option", { value: id }, t(n)));
   }
   renderRulesLog(R);
   const box = $("#au-rules"); if (!force && box.contains(document.activeElement) && document.activeElement.tagName !== "BUTTON") return;
@@ -2777,7 +2851,7 @@ function renderLoadRules(force) {                 // force: our own change, redr
       if (k) conds.append(sel([["and", t("and")], ["or", t("or")]], r.join || "and", v => { r.join = v; }));
       const metric = sel(Object.entries(AU_METRIC).filter(([v]) => (v !== "saver" || S.platform.os === "windows" || c.metric === "saver")
         && (v !== "lc_profile" || (S.liquid && S.liquid.profiles) || c.metric === "lc_profile") && (v !== "rule" || auRules.length > 1 || c.metric === "rule")
-        && (!v.startsWith("fd_") || fdOn() || c.metric === v))
+        && (!v.startsWith("fd_") || fdAutoOn() || c.metric === v))
         .map(([v, n]) => [v, t(n)]), c.metric, v => {
         if (AU_EQ.includes(v)) { c.op = "="; c.value = v === "saver" || v === "fd_connected" ? 1 : 0; }
         else if (AU_STATE.includes(v)) { c.op = "="; c.value = v === "lc_profile" ? (((S.liquid || {}).profiles || [])[0] || {}).id || "default" : v === "rule" ? 0 : (S.power.mode ?? 0); }
@@ -2828,7 +2902,7 @@ function renderLoadRules(force) {                 // force: our own change, redr
         sel([["", t("keep its mode")], ...LC_MODES.map(m => [m.id, t(m.name)])], r.lc_mode ?? "", v => { r.lc_mode = v || null; }),
         sel([["", t("keep its curves")], ...S.liquid.profiles.map(p => [p.id, p.builtin ? t(LC_PROFILE_NAME[p.id] || p.name) : p.name])],
           r.lc_profile ?? "", v => { r.lc_profile = v || null; })] : []),
-      ...(fdOn() || r.fd_mode ? [h("span", { class: "au-sep" }, t("Flydigi cooler")),           // 1.8.2.7
+      ...(fdAutoOn() || r.fd_mode ? [h("span", { class: "au-sep" }, t("Flydigi cooler")),       // 1.8.2.7
         sel([["", t("keep its mode")], ...FD_MODES.map(m => [m.id, t(m.name)])], r.fd_mode ?? "", v => { r.fd_mode = v || null; }),
         ...(r.fd_mode === "rpm" ? [num(r.fd_rpm ?? 2000, 0, 5000, v => { r.fd_rpm = Math.round(v); }), h("span", { class: "muted" }, t("rpm"))] : []),
         ...(r.fd_mode === "gear" ? [sel([1, 2, 3, 4].map(g => [g, t(FD_GEAR_NAME[g])]), r.fd_gear ?? 2, v => { r.fd_gear = +v; }),

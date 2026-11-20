@@ -51,7 +51,7 @@ FULL_POST_PREFIX = ("/api/lc/", "/api/flydigi/")
 SETTING_DENY = ("eula_accepted", "clevo_writes", "leishen_writes", "kb_unlock_effects", "kb_untested_no_ask",
                 "tcc_extended", "super_performance", "mem_oc", "lc_hwoc", "debug", "fan_manager", "monitoring",
                 "update_check", "update_minor", "detect_seen", "history_max_kb", "monitor_interval",
-                "monitor_off_oem", "monitor_off_wmi", "monitor_off_all", "webcam")
+                "monitor_off_oem", "monitor_off_wmi", "monitor_off_all", "webcam", "flydigi_intro_seen")
 
 
 def permitted(scope, method, path, body=None):

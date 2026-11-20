@@ -139,14 +139,14 @@ _uwccctl() {
             fi ;;
         flydigi)
             if ((n == 1)); then
-                COMPREPLY=($(compgen -W "status mode rpm gear curve set light power-on-start smart-stop search forget" -- "$cur"))
+                COMPREPLY=($(compgen -W "status mode rpm gear curve set rgb light power-on-start smart-stop search forget automation" -- "$cur"))
             elif ((n == 2)); then
                 case $sub in
                     mode) COMPREPLY=($(compgen -W "curve rpm gear stop device" -- "$cur")) ;;
                     gear) COMPREPLY=($(compgen -W "1 2 3 4" -- "$cur")) ;;
                     curve) COMPREPLY=($(compgen -W "reset" -- "$cur")) ;;
                     set) COMPREPLY=($(compgen -W "temp_source hysteresis min_change ramp_up ramp_down" -- "$cur")) ;;
-                    light|power-on-start) COMPREPLY=($(compgen -W "$onoff" -- "$cur")) ;;
+                    rgb|light|power-on-start|automation) COMPREPLY=($(compgen -W "$onoff" -- "$cur")) ;;
                     smart-stop) COMPREPLY=($(compgen -W "off immediate delayed" -- "$cur")) ;;
                 esac
             elif ((n == 3)) && [[ $sub == gear ]]; then COMPREPLY=($(compgen -W "low mid high" -- "$cur"))

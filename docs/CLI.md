@@ -138,7 +138,7 @@ Control Center 3.0 / Clevo (experimental): `uwccctl clevo …`, the custom curve
 
 | Keys | Values |
 |---|---|
-| `winkey_lock` `fn_lock` `usb_charger` `touchpad_toggle` `touchpad_enabled` `ac_recovery` `dgpu_direct` `bluetooth` `wifi` `webcam` `osd` `lc_hwoc` `kb_picture_modes` `tcc_extended` `history_record` `update_check` `debug` `mem_oc` `super_performance` | on / off |
+| `winkey_lock` `fn_lock` `usb_charger` `touchpad_toggle` `touchpad_enabled` `ac_recovery` `dgpu_direct` `bluetooth` `wifi` `webcam` `osd` `lc_hwoc` `flydigi_automation` `kb_picture_modes` `tcc_extended` `history_record` `update_check` `debug` `mem_oc` `super_performance` | on / off |
 | `kb_timeout` | seconds 0..3600, 0 = never |
 | `alerts` `overheat_boost` `kb_off_on_battery` `ppd_sync` `ppd_follow` | on / off |
 | `profile_autoapply` | on / off: profile settings in the window apply as soon as they change (default on) |
@@ -200,8 +200,10 @@ A rule must change at least one of mode, Fan Boost, cooler mode, cooler profile 
 | `flydigi rpm N` / `flydigi gear 1-4 [low\|mid\|high]` | fixed speed 0..5000 / a gear with THRM's preset speed |
 | `flydigi curve [T:RPM ...\|reset]` | show / set the curve (2..20 points) |
 | `flydigi set KEY VALUE` | `temp_source max\|cpu\|gpu`, `hysteresis` 0..8, `min_change` 20..400, `ramp_up` / `ramp_down` 50..1200 |
+| `flydigi rgb on\|off` | the cooler's lighting (all models; stored in the cooler) |
 | `flydigi light on\|off` / `power-on-start on\|off` / `smart-stop off\|immediate\|delayed` | settings stored in the cooler (BS2 and later) |
 | `flydigi search` / `flydigi forget` | BS1: find it by Bluetooth LE / forget it |
+| `flydigi automation on\|off` | use the cooler in the automation rules (off by default; same as `set flydigi_automation`) |
 
 ## Service
 

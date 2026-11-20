@@ -247,6 +247,16 @@ class Control(unittest.TestCase):
         self.assertGreaterEqual(time.monotonic() - t0, 0.29)   # 150 ms between flash writes
         self.assertEqual(self.fw.sent, [(0x48, b"\x01"), (0x0C, b"\x02"), (0x0D, b"\x02")])
 
+    def test_rgb_switch(self):
+        d = self.dev
+        d.query_settings()                                     # 0x45 says "on" (the fake answers 1)
+        self.assertTrue(d.rgb_enabled)
+        self.cmds()
+        d.set_rgb_enabled(True)                                # known: no flash write
+        self.assertEqual(self.cmds(), [])
+        d.set_rgb_enabled(False)
+        self.assertEqual(self.fw.sent[-1:], [(0x46, b"\x00")])
+
     def test_query_settings(self):
         s = self.dev.query_settings()
         self.assertEqual((s["firmware"], s["capability_tier"], s["gear_table"]), ("0.0.3.5", 3, [1700, 2400, 3000, 4000]))
@@ -285,6 +295,67 @@ class Curve(unittest.TestCase):
         with self.assertRaises(ValueError):
             C.check_curve([[40, 1000]])
         self.assertEqual(C.check_curve([[60, 1500], [40, 2000]]), [[40.0, 2000], [60.0, 2000]])
+
+
+class BS1Lighting(unittest.TestCase):
+    def test_bs1_waits_for_acks(self):
+        fw = FakeFirmware()
+
+        class Bs1(D.BS1Cooler):
+            def _write(s, frame):
+                fw.write(P.build_report(frame, 25))
+                while True:                                    # the transport hands the answers over
+                    r = fw.read(0)
+                    if r is None:
+                        break
+                    s._on_frame(r, ascii_gear=False)
+        d = Bs1()
+        s = d.query_settings()
+        self.assertEqual((s["rgb"], s["gear_table"][0]), ("on", 1700))
+        self.assertTrue(d.set_rgb_enabled(False))
+        self.assertEqual([c for c, _ in fw.sent][-1], 0x46)
+        fw.acks[0x46] = 0
+        d.rgb_enabled = None
+        with self.assertRaises(D.DeviceError):
+            d.set_rgb_enabled(True)
+
+
+class ModelLimit(unittest.TestCase):
+    """1.8.2.8: BS1 tops out at 3400 rpm (rated 3000); targets are cut to it, a lagging fan is reported."""
+
+    def make(self, model):
+        fc = C.FlydigiCooler.__new__(C.FlydigiCooler)
+        fc.cfg = {**C.DEFAULTS, "curve": [list(p) for p in P.DEFAULT_FAN_CURVE]}
+        fc.dev = type("Dev", (), {"model": model, "connected": True, "status": {"current_rpm": 2000}})()
+        fc.short_since = fc.shortfall = None
+        fc.path = os.devnull
+        fc._changed = lambda **kw: None
+        fc._save = lambda: None
+        return fc
+
+    def test_limit_and_curve(self):
+        bs1, bs2 = self.make("BS1"), self.make("BS2 Pro")
+        self.assertEqual((bs1.max_rpm(), bs2.max_rpm()), (3400, 5000))
+        bs1._on_model("BS1")
+        self.assertEqual(max(r for _, r in bs1.cfg["curve"]), 3400)       # the default curve is fitted
+        bs2._on_model("BS2 Pro")
+        self.assertEqual(max(r for _, r in bs2.cfg["curve"]), 4000)
+        custom = self.make("BS1")
+        custom.cfg["curve"] = [[40, 1000], [80, 4800]]
+        custom._on_model("BS1")
+        self.assertEqual(custom.cfg["curve"], [[40, 1000], [80, 4800]])      # an own curve is left alone…
+        self.assertEqual(C.clamp_curve(custom.cfg["curve"], 3400), [[40, 1000], [80, 3400]])  # …but cut on save
+
+    def test_shortfall(self):
+        fc = self.make("BS1")
+        fc._track_shortfall(3400, now=0)
+        fc._track_shortfall(3400, now=10)
+        self.assertIsNone(fc.shortfall)
+        fc._track_shortfall(3400, now=16)
+        self.assertEqual(fc.shortfall, {"target": 3400, "rpm": 2000})
+        fc.dev.status = {"current_rpm": 3300}                    # caught up (>= 90 %)
+        fc._track_shortfall(3400, now=17)
+        self.assertIsNone(fc.shortfall)
 
 
 class Automation(unittest.TestCase):
@@ -330,8 +401,9 @@ class Automation(unittest.TestCase):
         class Svc:
             fan_control, alt, liquid = True, None, None
 
-            def __init__(sv):
-                sv.settings_store, sv.power, sv.flydigi = Store(load_rules=[rules[0]]), Power(), Fd()
+            def __init__(sv, auto=True):
+                sv.settings_store = Store(load_rules=[rules[0]], flydigi_automation=auto)
+                sv.power, sv.flydigi = Power(), Fd()
 
             def emit(sv, *a):
                 pass
@@ -347,6 +419,12 @@ class Automation(unittest.TestCase):
         lr.tick({**m, "cpu": {"temp": 50, "power_w": 10, "usage": 5}}, now=3)
         self.assertEqual((svc.flydigi.cfg["mode"], svc.flydigi.cfg["rpm"]), ("curve", 2000))
         self.assertEqual(lr.log[-1]["what"], "back")
+        # 1.8.2.8: not added to the automation rules (the default) -> the rules neither change nor see the cooler
+        off = Svc(auto=False)
+        lr = A.LoadRules(off)
+        lr.tick(m, now=1)
+        self.assertEqual(off.flydigi.cfg["mode"], "curve")
+        self.assertEqual((lr._state(m)["fd_rpm"], lr._state(m)["fd_connected"]), (None, 0))
 
 
 if __name__ == "__main__":

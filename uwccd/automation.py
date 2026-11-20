@@ -738,10 +738,13 @@ class LoadRules:
         return out
 
     def _fd(self):
-        """The Flydigi BS cooler, None when its module is off (1.8.2.7)."""
+        """The Flydigi BS cooler, None when its module is off (1.8.2.7) or when it is not added to the automation
+        rules (setting flydigi_automation, off by default — 1.8.2.8): then rules neither see nor change it."""
         fd = getattr(self.svc, "flydigi", None)
         mods = getattr(self.svc, "modules", None)
         if fd is None or (mods is not None and not mods.enabled("flydigi")):
+            return None
+        if not self.svc.settings_store.get("flydigi_automation", False):
             return None
         return fd
 

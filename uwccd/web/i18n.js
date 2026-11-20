@@ -1280,3 +1280,46 @@ Object.assign(RU, {
   "Flydigi BS1 / BS2 / BS2 Pro / BS3 / BS3 Pro coolers: its own page, the curve and the automation rules. Off: the page is hidden and the program leaves the cooler alone.":
     "Кулеры Flydigi BS1 / BS2 / BS2 Pro / BS3 / BS3 Pro: отдельная вкладка, кривая и правила автоматизации. Выкл.: вкладка скрыта, программа не управляет кулером.",
 });
+
+// 1.8.2.8: Flydigi BS in Switches, first-visit note
+Object.assign(RU, {
+  "Enable Flydigi BS": "Включить Flydigi BS",
+  "Flydigi BS1 / BS2 / BS2 Pro / BS3 / BS3 Pro laptop coolers: the Flydigi BS page, the connection and the control. Off: the page is hidden and the program leaves the cooler alone.":
+    "Охлаждающие подставки Flydigi BS1 / BS2 / BS2 Pro / BS3 / BS3 Pro: вкладка Flydigi BS, подключение и управление. Выкл.: вкладка скрыта, программа не управляет кулером.",
+  "Flydigi BS — add to the automation rules": "Flydigi BS — добавить в правила автоматизации",
+  "Rules can switch the cooler's mode, and its fan speed and connection can be conditions. Off: the rules do not see or change the cooler.":
+    "Правила смогут переключать режим кулера, а его обороты и подключение можно использовать в условиях. Выкл.: правила не видят кулер и не меняют его.",
+  "Available when Flydigi BS is on.": "Доступно, когда Flydigi BS включён.",
+  "This page controls Flydigi BS laptop coolers. It is a port of THRM by Tianli (MIT licence, github.com/TIANLI0/THRM): the protocol and the control and pairing logic are taken from it.":
+    "Эта вкладка управляет охлаждающими подставками Flydigi BS. Это порт программы THRM, автор Tianli (лицензия MIT, github.com/TIANLI0/THRM): протокол, логика управления и сопряжения взяты из неё.",
+  "If you have no Flydigi BS, you can turn this component off. You can always change your choice in Switches → Flydigi BS.":
+    "Если у вас нет Flydigi BS, вы можете отключить этот компонент. Изменить свой выбор всегда можно в разделе «Переключатели → Flydigi BS».",
+  "Turn off Flydigi BS": "Отключить Flydigi BS", "I have a Flydigi BS": "У меня есть Flydigi BS",
+  "Flydigi BS is off — you can turn it on again in Switches": "Flydigi BS отключён — включить его снова можно в разделе «Переключатели»",
+});
+
+// 1.8.2.8: Flydigi BS page layout, Monitor
+Object.assign(RU, {
+  "Follows the temperature.": "Следует за температурой.", "A speed of your choice.": "Обороты на ваш выбор.",
+  "One of four gears.": "Одна из четырёх передач.", "The fan stands still.": "Вентилятор стоит.",
+  "The program sends nothing.": "Программа ничего не отправляет.",
+  "CPU or GPU, hotter": "ЦП/ГП, макс.", "Step": "Шаг", "Rise": "Рост", "Fall": "Спад", "rpm/s": "об/мин/с",
+  "A falling temperature counts only when it fell by this much.": "Снижение температуры учитывается, только когда она упала на столько.",
+  "Smaller changes of the speed are not sent.": "Меньшие изменения оборотов не отправляются.",
+  "The speed rises by at most this much per second.": "Обороты растут не быстрее, чем на столько в секунду.",
+  "The speed falls by at most this much per second.": "Обороты снижаются не быстрее, чем на столько в секунду.",
+  "These settings are written to the cooler's own memory and stay there; change them only when needed. The cooler does not report their current value — press to set it.":
+    "Эти настройки записываются в собственную память кулера и сохраняются в ней; меняйте их только при необходимости. Кулер не сообщает их текущее значение — нажмите, чтобы задать.",
+  "now: {0}": "сейчас: {0}", "target": "цель",
+});
+Object.assign(RU, {
+  "The cooler does not reach the set speed ({0} of {1} rpm): the limit of this model, or a weak charger — the top speeds need a PD charger of 18–20 W (BS2 Pro: 27 W).":
+    "Кулер не набирает заданные обороты ({0} из {1} об/мин): это предел модели или слабая зарядка — для старших оборотов нужна PD-зарядка 18–20 Вт (BS2 Pro: 27 Вт).",
+  "Highest speed of {0}: {1} rpm.": "Максимальные обороты {0}: {1} об/мин.",
+  "limit of {0}: {1} rpm": "предел {0}: {1} об/мин",
+});
+Object.assign(RU, {
+  "Lighting": "Подсветка",
+  "These settings are written to the cooler's own memory and stay there; change them only when needed. The cooler does not report the current value of the gear light and the start when powered — press to set them.":
+    "Эти настройки записываются в собственную память кулера и сохраняются в ней; меняйте их только при необходимости. Текущее значение индикатора передачи и запуска при подаче питания кулер не сообщает — нажмите, чтобы задать.",
+});

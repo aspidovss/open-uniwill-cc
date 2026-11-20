@@ -108,6 +108,7 @@ dl.kv dt{color:var(--muted)}dl.kv dd{margin:0;word-break:break-word}
 .sw input:checked+span::after{left:23px;background:var(--acc)}
 .sw input:disabled+span{opacity:.4;cursor:not-allowed}
 .list .item{display:flex;justify-content:space-between;align-items:center;gap:20px;padding:16px 18px;border:1px solid var(--line);border-radius:12px;background:rgba(21,27,32,.86);margin-bottom:10px}
+.list .item.sub{margin-left:28px;border-left:3px solid var(--acc)}.list .item.sub.off{opacity:.55}
 .list .item h4{margin:0 0 3px;font-size:14px}.list .item p{margin:0;color:var(--muted);font-size:13px}
 .btn{background:var(--acc);color:#00241f;border:0;border-radius:10px;padding:9px 16px;font-weight:650;cursor:pointer}
 .btn:hover{filter:brightness(1.08)}
@@ -170,12 +171,24 @@ table.bind td,table.bind th{padding:8px;border-bottom:1px solid var(--line);text
 .seg.lang{padding:2px;flex-wrap:nowrap;flex:none}
 .conn{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.conn .dot{flex:none}.seg.lang button{padding:3px 8px;font-size:11px}
 .lc-pill{padding:6px 10px;border-radius:10px;background:var(--bg2);border:1px solid var(--line);font-size:12px;color:var(--muted);text-align:center}
-.lc-pill.ok{color:var(--acc)}.lc-pill.bad{color:var(--bad);border-color:var(--bad)}
+.lc-pill.ok{color:var(--acc)}#fd-pill{cursor:pointer}.bar.fd.off{opacity:.6}.lc-pill.bad{color:var(--bad);border-color:var(--bad)}
 .lc-state .dot{display:block;width:14px;height:14px}
 .lc-state.on .dot{background:var(--acc);box-shadow:0 0 10px var(--acc)}
 .lc-state.busy .dot{background:var(--warn);animation:blink 1s infinite}
 @keyframes blink{50%{opacity:.3}}
 .lc-modes{grid-template-columns:repeat(4,1fr);margin-bottom:6px}
+/* Flydigi BS page (1.8.2.8): modes in one row, the curve centred, settings in one grid */
+.fd-modes{grid-template-columns:repeat(5,minmax(0,1fr));margin-bottom:6px}
+.fd-curve svg{display:block;width:100%;max-width:1100px;margin:6px auto 0}
+.fd-hint{text-align:center;margin:4px 0 12px}
+.fd-params{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:10px 14px;font-size:13px}
+.fd-params label{display:flex;align-items:center;gap:5px;white-space:nowrap;margin:0}
+.fd-params .muted{margin:0}.fd-params input.num{width:58px;padding:6px 8px}.fd-params select{width:auto;padding:6px 8px}
+.fd-set{display:grid;grid-template-columns:1fr auto;align-items:center;gap:10px 16px;margin:10px 0 14px}
+.fd-set > span{font-weight:500}.fd-set .seg{justify-self:end}.fd-set select{min-width:160px;justify-self:end}
+.fd-info{border-top:1px solid var(--line);padding-top:12px}
+svg.lc-curve .limit{stroke:#e0a040;stroke-width:1.5;stroke-dasharray:6 5}svg.lc-curve text.limitlbl{fill:#e0a040;font-size:13px}
+#fd-short{margin:8px 0 0}#fd-rpm-box output{white-space:nowrap;min-width:90px;text-align:right}
 .lc-dev{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg1);margin-top:10px}
 .flow-ok{color:var(--acc)}.flow-fault{color:var(--bad)}.flow-starting,.flow-priming{color:var(--warn)}
 .chk+.chk{margin-top:8px}
@@ -190,7 +203,7 @@ table.bind td,table.bind th{padding:8px;border-bottom:1px solid var(--line);text
 .pe-row output{color:var(--acc);font-weight:650;text-align:right}
 .gpu-proc{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);gap:12px}
 .gpu-proc code{color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-@media (max-width:1000px){.g4{grid-template-columns:repeat(2,1fr)}.g3,.modes,.choices{grid-template-columns:1fr}.lc-modes,.modes.four{grid-template-columns:repeat(2,1fr)}.pe-row{grid-template-columns:1fr}}
+@media (max-width:1000px){.g4{grid-template-columns:repeat(2,1fr)}.g3,.modes,.choices{grid-template-columns:1fr}.lc-modes,.modes.four,.fd-modes{grid-template-columns:repeat(2,1fr)}.pe-row{grid-template-columns:1fr}}
 @media (max-width:760px){#app{grid-template-columns:1fr}.nav{display:none}.g2,.g4{grid-template-columns:1fr}main{padding:16px}}
 #about-card a{color:var(--acc);text-decoration:none}#about-card a:hover{text-decoration:underline}
 #upd-text{margin:14px 0 0}
