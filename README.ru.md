@@ -8,7 +8,7 @@
 
 <p align="center"><b>Возможно, первый на 100&nbsp;% открытый Control Center для Windows и Linux, которому не нужны сторонние драйверы.</b></p>
 
-<p align="center"><a href="README.md">English</a> · <b>Русский</b> · <a href="docs/STRUCTURE.ru.md">Структура проекта</a> · <a href="docs/CLI.ru.md">Командная строка</a></p>
+<p align="center"><a href="README.md">English</a> · <b>Русский</b> · <a href="README.zh-CN.md">简体中文</a> · <a href="docs/STRUCTURE.ru.md">Структура проекта</a> · <a href="docs/CLI.ru.md">Командная строка</a></p>
 
 <p align="center">
   <a href="https://github.com/aspidovss/open-uniwill-cc/releases/latest"><img src="https://img.shields.io/badge/%D0%A1%D0%BA%D0%B0%D1%87%D0%B0%D1%82%D1%8C-%D0%BF%D0%BE%D1%81%D0%BB%D0%B5%D0%B4%D0%BD%D0%B8%D0%B9%20%D1%80%D0%B5%D0%BB%D0%B8%D0%B7-e8613c?logo=github&logoColor=white" alt="Скачать"></a>

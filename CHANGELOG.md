@@ -8,6 +8,9 @@
   **Cancel** drops the edits. The checkbox **Apply changes at once** brings back the old way (every edit is applied
   and saved at once); it is off by default and kept in the cooler settings (`instant_apply`). Switching to another
   curve with unsaved edits asks first. `POST /api/flydigi/config {curve, save: false}` applies without saving.
+- **README in Simplified Chinese** (`README.zh-CN.md`, linked from the English and Russian ones); the README
+  introduction lists the Flydigi BS coolers, the Clevo / Tongfang and Thunderobot modules, automation, BetterRGB and
+  the languages; new screenshots (Monitor, Flydigi BS, automation, BetterRGB, colour calibration).
 - **Flydigi BS — add to the automation rules** is **on by default** now: with the Flydigi BS component on, rules can
   use the cooler at once (a choice made before is kept; it still works only while *Enable Flydigi BS* is on).
 - **Automation without the cooler:** when the Flydigi BS cooler is not connected (not found by Bluetooth / USB), a rule

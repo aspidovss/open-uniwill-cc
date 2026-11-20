@@ -8,7 +8,7 @@
 
 <p align="center"><b>Possibly the first 100&nbsp;% open Control Center for Windows and Linux that needs no third-party drivers.</b></p>
 
-<p align="center"><b>English</b> · <a href="README.ru.md">Русский</a> · <a href="docs/STRUCTURE.md">Project structure</a> · <a href="docs/CLI.md">Command line</a></p>
+<p align="center"><b>English</b> · <a href="README.ru.md">Русский</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="docs/STRUCTURE.md">Project structure</a> · <a href="docs/CLI.md">Command line</a></p>
 
 <p align="center">
   <a href="https://github.com/aspidovss/open-uniwill-cc/releases/latest"><img src="https://img.shields.io/badge/Download-latest%20release-e8613c?logo=github&logoColor=white" alt="Download"></a>
