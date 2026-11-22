@@ -8,7 +8,16 @@
 :root{
   --bg0:#07090b; --bg1:#0e1215; --bg2:#151b20; --bg3:#1d252c; --line:#26313a;
   --fg:#e8eef2; --muted:#8c9aa6; --acc:#32dbbe; --acc2:#1fa58e; --warn:#ffb340; --bad:#ff5d6c;
-  --cpu:#32dbbe; --gpu:#7aa2ff; --r:12px;
+  --cpu:#32dbbe; --gpu:#7aa2ff; --ram:#f4b65f; --r:12px;
+  --chart-grid:#1f2830; --chart-label:#768692;
+}
+[data-theme="light"]{
+  color-scheme:light;
+  --bg0:#f2f3f5; --bg1:#f7f8fa; --bg2:#fff; --bg3:#e9edf1; --line:#c5ccd4;
+  --fg:#19212a; --muted:#414d5a; --acc:#087363; --acc2:#096253; --warn:#875000; --bad:#b92c44;
+  --chart-font-size:12px;
+  --cpu:#087d69; --gpu:#375cc4; --ram:#a6530b;
+  --chart-grid:#d9dfe6; --chart-label:var(--muted);
 }
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;background:radial-gradient(1200px 600px at 80% -10%,#10302b 0%,transparent 60%),linear-gradient(180deg,#000 0%,#2d2d2d 160%);background-color:var(--bg0);color:var(--fg);font:14px/1.45 "Inter","Segoe UI","Noto Sans",system-ui,sans-serif}
@@ -476,6 +485,52 @@ svg.lc-curve text.draglbl{font-size:16px}
 /* 1.8.2.2: a battery card this laptop does not have */
 .cap-off{opacity:.42;filter:grayscale(.7)}
 /* 1.8.2.5: colour calibration */
+[data-theme="light"],[data-theme="light"] body{background:var(--bg0)}
+[data-theme="light"] .nav{background:var(--bg1)}
+[data-theme="light"] .card,
+[data-theme="light"] .list .item,
+[data-theme="light"] .mode{background:var(--bg2)}
+[data-theme="light"] #nav a,
+[data-theme="light"] .chk,
+[data-theme="light"] .seg button.on,
+[data-theme="light"] .eff.on{color:var(--fg)}
+[data-theme="light"] #nav a.active{background:#dff2ee;border-color:#9bcfc3;font-weight:650}
+[data-theme="light"] :focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+[data-theme="light"] .nav-group{font-size:12px;letter-spacing:.5px}
+[data-theme="light"] .card h3{font-size:16px;font-weight:650}
+[data-theme="light"] .gauge svg{display:block;height:88px;margin:0 auto 8px}
+[data-theme="light"] .gauge .v{font-size:30px;line-height:1.15;font-variant-numeric:tabular-nums}
+[data-theme="light"] .gauge .l{margin-top:4px;font-size:14px;font-weight:600;color:var(--fg)}
+[data-theme="light"] .gauge .s{margin-top:2px;font-size:13px}
+[data-theme="light"] .hist-head #hist-seg button{font-size:13px}
+[data-theme="light"] .hist-head #hist-seg button.on{font-weight:650}
+[data-theme="light"] .chart.hist{display:block;height:220px}
+[data-theme="light"] .hist-summary{justify-content:flex-start;gap:6px;margin-top:8px}
+[data-theme="light"] .hist-summary > .row{flex-basis:100%;flex-wrap:wrap}
+[data-theme="light"] #hist-legend{margin-top:0;font-weight:600;flex-wrap:wrap}
+[data-theme="light"] #hist-stats,
+[data-theme="light"] .hist-hint,
+[data-theme="light"] .hist-detail dl.kv,
+[data-theme="light"] .hist-tip{font-size:13px}
+[data-theme="light"] .hist-detail-grid h4{font-size:14px}
+[data-theme="light"] .hist-tip{box-shadow:0 4px 12px #19212a26}
+[data-theme="light"] .modepill.m0{color:var(--gpu)}
+[data-theme="light"] .modepill.m2{color:var(--bad)}
+[data-theme="light"] .btn:not(.ghost):not(.danger),
+[data-theme="light"] .mode .badge,
+[data-theme="light"] .badge-on,
+[data-theme="light"] .clevo-exp{color:#fff}
+[data-theme="light"] .feat-slow::after{color:var(--warn)}
+[data-theme="light"] .hist-tip,
+[data-theme="light"] .hist-detail{background:var(--bg2);border-color:var(--line)}
+[data-theme="light"] .hist-dots span{box-shadow:0 0 0 2px var(--bg1)}
+[data-theme="light"] .curve .grid line{stroke:var(--chart-grid)}
+[data-theme="light"] .curve text{fill:var(--chart-label)}
+[data-theme="light"] .curve text.nowlbl{fill:var(--bad);stroke:var(--bg1)}
+[data-theme="light"] .curve text.draglbl{fill:var(--fg);stroke:var(--bg1)}
+[data-theme="light"] .temp-now{stroke:var(--fg);filter:none}
+[data-theme="light"] .temp-curve circle.selected{stroke:var(--fg)}
+
 .cal-dlg{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.55);padding:16px}
 .cal-dlg.hidden{display:none}
 .cal-box{max-width:560px;width:100%;margin:0}

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.9.2.2
+
+Optional interface update.
+
+- **Monitor → History → Load:** RAM used has an amber line, distinct from CPU and GPU, including in PNG exports.
+- **Switches → Interface theme:** choose Light or Dark. The choice is saved locally for this UI client.
+
 ## 1.9.2.1
 
 An intermediate (optional) update: the service no longer gets stuck "without connection"; battery protection on

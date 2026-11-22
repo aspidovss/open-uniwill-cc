@@ -13,6 +13,28 @@ const h = (tag, attrs = {}, ...kids) => {
   return e;
 };
 
+// The theme belongs to this UI client, independently of hardware profiles.
+const themeButtons = $$("#theme-set button");
+function setTheme(theme) {
+  const selected = theme === "light" ? "light" : "dark";
+  document.documentElement.dataset.theme = selected;
+  for (const button of themeButtons) {
+    const active = button.dataset.theme === selected;
+    button.classList.toggle("on", active);
+    button.setAttribute("aria-pressed", String(active));
+  }
+}
+
+let savedTheme;
+try { savedTheme = localStorage.getItem("uwcc-theme"); } catch (_) {}
+setTheme(savedTheme);
+for (const button of themeButtons) {
+  button.addEventListener("click", () => {
+    setTheme(button.dataset.theme);
+    try { localStorage.setItem("uwcc-theme", button.dataset.theme); } catch (_) {}
+  });
+}
+
 // ---------------------------------------------------------------- token / api
 (function initToken() {
   const m = location.hash.match(/token=([\w-]+)/);
@@ -231,7 +253,7 @@ function gauge(label, value, unit, max, sub, color) {
   const v = value == null ? 0 : value, frac = Math.max(0, Math.min(1, v / max));
   const R = 56, C = Math.PI * R, off = C * (1 - frac);
   return h("div", { class: "card gauge" },
-    svgEl(`<svg viewBox="0 0 150 90"><path d="M19 80 A56 56 0 0 1 131 80" fill="none" stroke="#1d252c" stroke-width="12" stroke-linecap="round"/>` +
+    svgEl(`<svg viewBox="0 0 150 90"><path d="M19 80 A56 56 0 0 1 131 80" fill="none" stroke="var(--bg3)" stroke-width="12" stroke-linecap="round"/>` +
       `<path d="M19 80 A56 56 0 0 1 131 80" fill="none" stroke="${color || "var(--acc)"}" stroke-width="12" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${off}" style="transition:stroke-dashoffset .6s"/></svg>`),
     h("div", { class: "v" }, value == null ? "—" : `${value}${unit}`), h("div", { class: "l" }, label), h("div", { class: "s" }, sub || ""));
 }
@@ -1361,7 +1383,7 @@ function renderSwitches() {
     const mi = h("input", { type: "checkbox" }); mi.checked = s.update_minor !== false;
     mi.addEventListener("change", () => setUpdateMinor(mi.checked));
     L.append(h("div", { class: "item sub" }, h("div", {}, h("h4", {}, t("Check intermediate updates")),
-      h("p", {}, t("Releases that change only the last number of the version (1.7.6.1, 1.7.6.2 …): settings for particular laptops. They are optional."))),
+      h("p", {}, t("Releases that change only the last number of the version are optional."))),
       h("label", { class: "sw" }, mi, h("span"))));
   }
   if (S.power && S.power.limits && S.power.limits.tjmax && !S.platform.amd)
@@ -2344,7 +2366,7 @@ for (const [id, key] of [["lc-guard", "flow_guard"], ["lc-notify", "notify_flow"
 // ---------------------------------------------------------------- history (last hour)
 const HIST = {
   temp: { name: "Temperature", unit: "°C", max: 100, lines: [["ct", "CPU", "var(--cpu)"], ["gt", "GPU", "var(--gpu)"]] },
-  load: { name: "Load", unit: "%", max: 100, lines: [["cl", "CPU", "var(--cpu)"], ["gl", "GPU", "var(--gpu)"], ["mu", "RAM used", "var(--acc)"]] },
+  load: { name: "Load", unit: "%", max: 100, lines: [["cl", "CPU", "var(--cpu)"], ["gl", "GPU", "var(--gpu)"], ["mu", "RAM used", "var(--ram)"]] },
   cpow: { name: "CPU power", unit: "W", max: 0, lines: [["cp", "CPU package", "var(--cpu)"]], nodata: "CPU package power is not available on this computer",
     marks: [["pl1", "PL1", "#f5a524"], ["pl2", "PL2", "#ff6b6b"], ["pl4", "PL4", "#c084fc"]] },
   gpow: { name: "GPU power", unit: "W", max: 0, lines: [["gp", "NVIDIA GPU", "var(--gpu)"]], nodata: "GPU power is not available (no NVIDIA GPU, or it is asleep)",
@@ -2422,14 +2444,19 @@ function drawHistory() {
     max = Math.ceil(max * 1.1 / 10) * 10;
   }
   histMax = max;
-  let g = "";
-  for (const f of [0.25, 0.5, 0.75]) { const y = H - f * H; g += `<line x1="0" x2="${W}" y1="${y}" y2="${y}" stroke="#1f2830"/><text x="4" y="${y - 3}" fill="#55636e" font-size="10">${Math.round(max * f)} ${t(d.unit)}</text>`; }
+  let g = "", labels = "";
+  const axisStyle = 'fill="var(--chart-label)" stroke="var(--bg1)" stroke-width="3" paint-order="stroke" style="font-size:var(--chart-font-size, 10px)"';
+  for (const f of [0.25, 0.5, 0.75]) {
+    const y = H - f * H;
+    g += `<line x1="0" x2="${W}" y1="${y}" y2="${y}" stroke="var(--chart-grid)"/>`;
+    labels += `<text x="5" y="${y - 4}" ${axisStyle}>${Math.round(max * f)} ${t(d.unit)}</text>`;
+  }
   const nt = histZoom ? 4 : { 60: 4, 300: 5, 900: 3, 3600: 4, 86400: 4 }[histRange] || 4;
   for (let i = 0; i <= nt; i++) {
     const x = i === nt ? W - 4 : (i / nt) * W + 2;
     const label = histZoom ? new Date((histV0() + histSpan() * i / nt) * 1000).toLocaleTimeString()
       : relLabel(Math.round(histRange * (1 - i / nt)));
-    g += `<text x="${x}" y="${H - 3}" fill="#55636e" font-size="10" text-anchor="${i === nt ? "end" : "start"}">${label}</text>`;
+    labels += `<text x="${x}" y="${H - 4}" ${axisStyle} text-anchor="${i === nt ? "end" : "start"}">${label}</text>`;
   }
   const gap = histStep() * 4;
   for (const [k, , color] of d.lines) {
@@ -2454,10 +2481,11 @@ function drawHistory() {
     if (path) g += `<path d="${path}" fill="none" stroke="${color}" stroke-width="1.2" stroke-dasharray="6 4" opacity=".9" vector-effect="non-scaling-stroke"/>` +
       `<text x="${Math.min(lastX, W - 4)}" y="${H - last / max * H - 4}" fill="${color}" font-size="10" text-anchor="end">${t(n)} ${last} ${t("W")}</text>`;
   }
+  g += labels;
   const recording = !S || !S.settings || S.settings.history_record !== false;
   const hasData = inView.some(p => d.lines.some(([k]) => p[k] != null));
   const msg = !all.length ? (recording ? t("collecting data…") : t("History recording is off (Settings → Switches)")) : !hasData ? t(d.nodata || "no data") : "";
-  histBase = msg ? g + `<text x="${W / 2}" y="${H / 2}" fill="#55636e" font-size="13" text-anchor="middle">${msg}</text>` : g;
+  histBase = msg ? g + `<text x="${W / 2}" y="${H / 2}" fill="var(--chart-label)" font-size="13" text-anchor="middle">${msg}</text>` : g;
   svg.innerHTML = histBase + histOverlay(histPin, true);
   histDots(histPin);
   const notes = [];
@@ -2500,7 +2528,7 @@ function histDots(...pts) {                     // HTML dots: the SVG is stretch
 function histOverlay(p, pinned) {
   if (!p) return "";
   const d = HIST[histKey], x = histX(p.t).toFixed(1);
-  let o = `<line x1="${x}" x2="${x}" y1="0" y2="${HIST_H}" stroke="${pinned ? "var(--acc)" : "#8c9aa6"}" stroke-width="1" ${pinned ? "" : 'stroke-dasharray="3 3"'} vector-effect="non-scaling-stroke"/>`;
+  let o = `<line x1="${x}" x2="${x}" y1="0" y2="${HIST_H}" stroke="${pinned ? "var(--acc)" : "var(--muted)"}" stroke-width="1" ${pinned ? "" : 'stroke-dasharray="3 3"'} vector-effect="non-scaling-stroke"/>`;
   return o;
 }
 const histTime = p => new Date(p.t * 1000).toLocaleTimeString() + (histRange === 86400 ? " · " + new Date(p.t * 1000).toLocaleDateString() : "");
@@ -2615,14 +2643,15 @@ function downloadHistory(fmt) {
 }
 function downloadChartPng() {
   const svg = $("#hist-chart"), W = 1600, H = 360, d = HIST[histKey];
-  const xml = new XMLSerializer().serializeToString(svg).replace(/var\(--cpu\)/g, getComputedStyle(document.body).getPropertyValue("--cpu").trim() || "#2fd3b5")
-    .replace(/var\(--gpu\)/g, getComputedStyle(document.body).getPropertyValue("--gpu").trim() || "#7aa2ff")
-    .replace(/var\(--acc\)/g, "#2fd3b5").replace(/var\(--warn\)/g, "#f5a524");
+  const style = getComputedStyle(svg);
+  const color = name => style.getPropertyValue(name).trim();
+  const xml = new XMLSerializer().serializeToString(svg)
+    .replace(/var\((--[\w-]+)(?:,\s*([^)]+))?\)/g, (_, name, fallback) => color(name) || fallback || "");
   const img = new Image();
   img.onload = () => {
     const c = document.createElement("canvas"); c.width = W; c.height = H + 40;
-    const x = c.getContext("2d"); x.fillStyle = "#0e1215"; x.fillRect(0, 0, c.width, c.height);
-    x.fillStyle = "#c9d3da"; x.font = "16px sans-serif";
+    const x = c.getContext("2d"); x.fillStyle = color("--bg1"); x.fillRect(0, 0, c.width, c.height);
+    x.fillStyle = color("--fg"); x.font = "16px sans-serif";
     x.fillText(`${t(d.name)} — ${t((HIST_RANGES.find(r => r[0] === histRange) || [0, "1 hour"])[1])} — ${new Date().toLocaleString()}`, 12, 26);
     x.drawImage(img, 0, 40, W, H);
     c.toBlob(b => {
@@ -2660,7 +2689,7 @@ function renderAbout() {
   for (const [k, v] of rows) dl.append(h("dt", {}, k), h("dd", {}, v));
   let txt;
   if (u.error) txt = t("Update check failed: {0}", u.error);
-  else if (u.newer && u.optional) txt = t("Intermediate update {0}: only settings for particular laptops, you can skip it.", u.latest);
+  else if (u.newer && u.optional) txt = t("Intermediate update {0}. You can skip it.", u.latest);
   else if (u.skipped && u.checked) txt = t("You have the latest version (checked {0}).", new Date(u.checked * 1000).toLocaleString()) + " " +
     t("Intermediate update {0} is not offered.", u.skipped);
   else if (u.newer) txt = t("Version {0} is available.", u.latest);
@@ -2701,7 +2730,7 @@ function setUpdateMinor(on) {
 $("#upd-check").addEventListener("click", () => act(async () => { S.update = await api("update/check", {}); renderAbout(); },
   null));
 $("#upd-install").addEventListener("click", () => act(async () => {
-  if (!confirm((S.update.optional ? t("This is an intermediate update: it only changes settings for particular laptops, you can skip it.") + "\n\n" : "") +
+  if (!confirm((S.update.optional ? t("This intermediate update is optional.") + "\n\n" : "") +
     t("Download version {0} to your Downloads folder, check its checksum and start the installer?", S.update.latest))) return;
   const r = await api("update/download", {});
   if (!r.tray) {                                     // the tray app downloads; without it open the release page
@@ -3143,7 +3172,7 @@ function connect() {
 (async () => {
   setLang((() => { try { return localStorage.getItem("uwcc-lang"); } catch (_) { return null; } })() || "en", false);
   if (!TOKEN) {
-    document.body.innerHTML = `<div style="padding:40px;font:16px system-ui;color:#eee">${t("Open Control Center from the application menu (command <b>uwcc</b>) — an access key for the service is required.")}</div>`;
+    document.body.innerHTML = `<div style="padding:40px;font:16px system-ui;color:var(--fg)">${t("Open Control Center from the application menu (command <b>uwcc</b>) — an access key for the service is required.")}</div>`;
     return;
   }
   try { await refresh(); } catch (e) { toast(t("Service unavailable: {0}", e.message), true); }

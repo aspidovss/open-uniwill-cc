@@ -8,7 +8,7 @@ Version numbers (1.7.5.0): MAJOR.FEATURE.FIX.PLATFORM —
   1st  major change of how the program works;
   2nd  new or changed functions;
   3rd  fixes;
-  4th  settings / data for particular laptops only (platform profiles, tables): an *optional* update. It is shown
+  4th  small changes (such as platform settings or interface tweaks): an *optional* update. It is shown
        (window, tray, one notification) but marked as not required. 1.7.5 is the same as 1.7.5.0; the 4th number
        goes back to 0 when one of the first three changes. Builds up to 1.7.4 compare only the first three numbers.
        1.7.6.0: switch "Check intermediate updates" (setting update_minor, on by default); when it is off, a release

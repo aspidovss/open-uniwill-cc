@@ -80,7 +80,7 @@
             </div></div></div>
         <div class="hist-wrap"><svg id="hist-chart" viewBox="0 0 800 180" preserveAspectRatio="none" class="chart hist"></svg>
           <div id="hist-dots" class="hist-dots"></div><div id="hist-tip" class="hist-tip hidden"></div></div>
-        <div class="row between wrap"><div class="legend" id="hist-legend"></div><div class="row" style="gap:10px"><div class="muted tiny" id="hist-stats" style="margin:0"></div><button class="btn ghost sm hidden" id="hist-zoom-reset" data-i>Reset zoom</button></div></div>
+        <div class="row between wrap hist-summary"><div class="legend" id="hist-legend"></div><div class="row" style="gap:10px"><div class="muted tiny" id="hist-stats" style="margin:0"></div><button class="btn ghost sm hidden" id="hist-zoom-reset" data-i>Reset zoom</button></div></div>
         <p class="muted tiny hist-hint" id="hist-hint" data-i>Drag across the chart to zoom in on a period; double-click, Esc or “Reset zoom” to go back. A click pins a point.</p>
         <div id="hist-detail" class="hist-detail hidden"></div>
       </div>
@@ -605,6 +605,13 @@
         <h3 data-i>Interface language</h3>
         <p class="muted" data-i>The window, the tray menu and the notifications. The user agreement and the help pages are in English or Russian.</p>
         <div class="seg" id="lang-set"></div>
+      </div>
+      <div class="card">
+        <h3 id="theme-title" data-i>Interface theme</h3>
+        <div class="seg" id="theme-set" role="group" aria-labelledby="theme-title">
+          <button type="button" data-theme="dark" data-i>Dark theme</button>
+          <button type="button" data-theme="light" data-i>Light theme</button>
+        </div>
       </div>
       <div class="alt-box" id="switches-alt"></div>
       <div class="list" id="switch-list"></div>

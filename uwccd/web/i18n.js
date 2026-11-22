@@ -396,12 +396,12 @@ const RU = {
   "GitHub issues": "Issues на GitHub",
   "Update check failed: {0}": "Не удалось проверить обновления: {0}",
   "Version {0} is available.": "Доступна версия {0}.",
-  "Intermediate update {0}: only settings for particular laptops, you can skip it.": "Промежуточное обновление {0}: только настройки для отдельных ноутбуков, его можно не устанавливать.",
-  "This is an intermediate update: it only changes settings for particular laptops, you can skip it.": "Это промежуточное обновление: оно меняет только настройки для отдельных ноутбуков, его можно не устанавливать.",
+  "Intermediate update {0}. You can skip it.": "Промежуточное обновление {0}. Его можно пропустить.",
+  "This intermediate update is optional.": "Это необязательное промежуточное обновление.",
   "Intermediate update {0} is not offered.": "Промежуточное обновление {0} не предлагается.",
   "Check intermediate updates": "Проверять промежуточные обновления",
   "Switch the cooler off and on again, wait until its light blinks, then press Search and connect it again.": "Выключите и снова включите систему водяного охлаждения, дождитесь, пока замигает индикатор, затем нажмите «Найти» и подключите её заново.",
-  "Releases that change only the last number of the version (1.7.6.1, 1.7.6.2 …): settings for particular laptops. They are optional.": "Релизы, в которых меняется только последнее число версии (1.7.6.1, 1.7.6.2 …): настройки для отдельных ноутбуков. Они необязательные.",
+  "Releases that change only the last number of the version are optional.": "Релизы, в которых меняется только последнее число версии, необязательны.",
   "You have the latest version (checked {0}).": "У вас последняя версия (проверено {0}).",
   "Updates are checked automatically once a day.": "Обновления проверяются автоматически раз в день.",
   "Automatic update check is off (Settings → Switches).": "Автоматическая проверка обновлений выключена (Настройки → Переключатели).",
@@ -1358,6 +1358,12 @@ Object.assign(RU, {
   "Changed — not applied yet": "Изменено — ещё не применено",
   "Applied — not saved": "Применено — не сохранено",
   "Discard the curve changes that are not saved?": "Отменить несохранённые изменения кривой?",
+});
+
+Object.assign(RU, {
+  "Interface theme": "Тема интерфейса",
+  "Dark theme": "Тёмная",
+  "Light theme": "Светлая",
 });
 
 // 1.9.2.1: battery — mode and limit exclude each other
