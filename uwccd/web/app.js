@@ -252,10 +252,11 @@ function render() {
 function gauge(label, value, unit, max, sub, color) {
   const v = value == null ? 0 : value, frac = Math.max(0, Math.min(1, v / max));
   const R = 56, C = Math.PI * R, off = C * (1 - frac);
+  const displayValue = unit === "°C" && value != null ? Math.round(value) : value;
   return h("div", { class: "card gauge" },
     svgEl(`<svg viewBox="0 0 150 90"><path d="M19 80 A56 56 0 0 1 131 80" fill="none" stroke="var(--bg3)" stroke-width="12" stroke-linecap="round"/>` +
       `<path d="M19 80 A56 56 0 0 1 131 80" fill="none" stroke="${color || "var(--acc)"}" stroke-width="12" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${off}" style="transition:stroke-dashoffset .6s"/></svg>`),
-    h("div", { class: "v" }, value == null ? "—" : `${value}${unit}`), h("div", { class: "l" }, label), h("div", { class: "s" }, sub || ""));
+    h("div", { class: "v" }, displayValue == null ? "—" : `${displayValue}${unit}`), h("div", { class: "l" }, label), h("div", { class: "s" }, sub || ""));
 }
 // slider fill: --p follows the value however it changes (typing, dragging, or set from the code)
 function rangeFill(el) {

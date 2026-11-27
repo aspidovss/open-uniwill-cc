@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.9.3.0
+
+- **Monitor:** CPU and GPU temperature cards display readings rounded to the nearest whole degree.
+
 ## 1.9.2.2
 
 Optional interface update.
